@@ -3,6 +3,9 @@ const STORAGE_KEYS = {
   history: "underground.history.v1"
 };
 
+let accountUser = null;
+let syncedAvatar = null;
+
 function getDefaultPlayer() {
   return {
     name: "Joueur",
@@ -65,11 +68,98 @@ function getPlayer() {
 }
 
 function savePlayer(player) {
+  if (accountUser) {
+    player.name = accountUser.username;
+  }
+
   try {
     localStorage.setItem(STORAGE_KEYS.player, JSON.stringify(player));
   } catch (error) {
     console.warn("Sauvegarde du profil impossible:", error);
   }
+
+  if (accountUser && player.avatar !== syncedAvatar) {
+    fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avatar: player.avatar })
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error("Mise à jour du profil impossible.");
+        syncedAvatar = player.avatar;
+      })
+      .catch((error) => console.error(error));
+  }
+}
+
+async function loadAccountData() {
+  const [accountResponse, historyResponse] = await Promise.all([
+    fetch("/api/me"),
+    fetch("/api/history")
+  ]);
+
+  if (accountResponse.status === 401 || historyResponse.status === 401) {
+    return false;
+  }
+  if (!accountResponse.ok || !historyResponse.ok) {
+    throw new Error("Chargement des données du compte impossible.");
+  }
+
+  const { user, stats } = await accountResponse.json();
+  const { history } = await historyResponse.json();
+  const player = {
+    ...getDefaultPlayer(),
+    ...parseStoredJson(STORAGE_KEYS.player, {}),
+    name: user.username,
+    avatar: user.avatar || "🎲",
+    chips: Number(user.chips),
+    createdAt: user.created_at,
+    stats: {
+      gamesPlayed: Number(stats.gamesPlayed || 0),
+      wins: Number(stats.wins || 0),
+      bestWin: Number(stats.bestWin || 0),
+      lastPlayed: stats.lastPlayed || null
+    }
+  };
+
+  accountUser = user;
+  syncedAvatar = player.avatar;
+  localStorage.setItem(STORAGE_KEYS.player, JSON.stringify(player));
+  saveHistory(history.map((entry) => ({
+    id: entry.id,
+    game: entry.game_name,
+    bet: Number(entry.bet),
+    result: entry.result,
+    payout: Number(entry.payout),
+    net: Number(entry.net),
+    date: entry.created_at
+  })));
+  return true;
+}
+
+async function syncGameResult(entry) {
+  const response = await fetch("/api/result", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(entry)
+  });
+
+  if (response.status === 401) {
+    window.location.replace("/");
+    return;
+  }
+  if (!response.ok) {
+    throw new Error("Résultat de partie non enregistré sur le compte.");
+  }
+
+  const { user } = await response.json();
+  const player = getPlayer();
+  player.chips = Number(user.chips);
+  localStorage.setItem(STORAGE_KEYS.player, JSON.stringify(player));
+  updateTopbar();
+  renderHomeView();
+  renderLeaderboard();
+  renderProfileView();
 }
 
 function getHistory() {

@@ -183,6 +183,12 @@ button {
   font-size: 1.2rem;
 }
 
+.logout-button {
+  padding: 10px 14px;
+  white-space: nowrap;
+  font-size: 0.72rem;
+}
+
 .main-nav {
   display: flex;
   flex-wrap: wrap;

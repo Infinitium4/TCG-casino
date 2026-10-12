@@ -1,5 +1,18 @@
-document.addEventListener("DOMContentLoaded", () => {
-  ensureInitialPlayer();
+document.addEventListener("DOMContentLoaded", initializeApp);
+
+async function initializeApp() {
+  try {
+    const loaded = await loadAccountData();
+    if (!loaded) {
+      window.location.replace("/");
+      return;
+    }
+  } catch (error) {
+    console.error(error);
+    window.location.replace("/");
+    return;
+  }
+
   bindNavigation();
   bindGlobalButtons();
   updateTopbar();
@@ -9,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
   rouletteModule.initialize();
   blackjackModule.initialize();
   slotsModule.initialize();
-});
+}
 
 function bindNavigation() {
   document.querySelectorAll(".nav-item").forEach((button) => {
@@ -24,6 +37,13 @@ function bindGlobalButtons() {
   document.getElementById("openSettingsBtn").addEventListener("click", () => {
     showView("profile");
     document.getElementById("profileNameInput")?.focus();
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    const response = await fetch("/api/logout", { method: "POST" });
+    if (response.ok) {
+      window.location.replace("/");
+    }
   });
 }
 
@@ -208,6 +228,7 @@ function renderProfileView() {
   const historyFilter = document.getElementById("historyFilter");
 
   nameInput.value = player.name;
+  nameInput.readOnly = true;
   soundToggle.checked = !!player.soundEnabled;
 
   avatarChoices.innerHTML = AVATAR_OPTIONS.map(
@@ -234,15 +255,6 @@ function renderProfileView() {
     });
   });
 
-  nameInput.oninput = () => {
-    const playerData = getPlayer();
-    playerData.name = sanitizeText(nameInput.value, 18);
-    savePlayer(playerData);
-    updateTopbar();
-    renderLeaderboard();
-    renderHomeView();
-  };
-
   soundToggle.onchange = () => {
     const playerData = getPlayer();
     playerData.soundEnabled = soundToggle.checked;
@@ -252,14 +264,17 @@ function renderProfileView() {
 
   historyFilter.onchange = () => renderFilteredHistory();
   document.getElementById("resetProfileBtn").onclick = () => {
-    const confirmed = window.confirm("Réinitialiser toutes les données locales ? Cette action est irréversible.");
+    const confirmed = window.confirm("Réinitialiser le solde et l'historique de ce compte ? Cette action est irréversible.");
     if (!confirmed) return;
-    resetPlayerData();
-    updateTopbar();
-    renderHomeView();
-    renderLeaderboard();
-    renderProfileView();
-    showToast("Données réinitialisées.");
+    fetch("/api/reset", { method: "POST" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Réinitialisation impossible.");
+        window.location.reload();
+      })
+      .catch((error) => {
+        console.error(error);
+        showToast("Réinitialisation impossible.");
+      });
   };
 
   renderFilteredHistory();

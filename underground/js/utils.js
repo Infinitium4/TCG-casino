@@ -132,6 +132,10 @@ function addHistoryEntry(entry) {
     ...entry
   });
   saveHistory(history.slice(0, 50));
+  syncGameResult(entry).catch((error) => {
+    console.error(error);
+    showToast("La partie n'a pas pu être enregistrée sur le compte.");
+  });
 }
 
 function renderChipValue(value) {
