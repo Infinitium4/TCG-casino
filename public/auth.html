@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UNDERGROUND — Connexion</title>
+    <style>
+      :root {
+        --bg: #10100f;
+        --panel: #1c1817;
+        --gold: #c5a15a;
+        --red: #b84035;
+        --text: #f7f2e8;
+        --muted: #91877b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at top, rgba(184,64,53,0.25), transparent 30%), #10100f;
+        color: var(--text);
+        font-family: Arial, sans-serif;
+      }
+      .auth-box {
+        width: min(440px, 92vw);
+        background: rgba(28,24,23,0.95);
+        border: 1px solid rgba(197,161,90,0.3);
+        border-radius: 24px;
+        padding: 28px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+      }
+      h1 {
+        margin: 0 0 12px;
+        letter-spacing: 0.15em;
+        color: var(--gold);
+        text-align: center;
+      }
+      .subtitle {
+        text-align: center;
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
+      .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+      .tab {
+        flex: 1;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(197,161,90,0.3);
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .tab.active {
+        background: linear-gradient(135deg, rgba(184,64,53,0.5), rgba(197,161,90,0.2));
+      }
+      form { display: none; }
+      form.active { display: block; }
+      label { display: block; margin-bottom: 12px; color: var(--muted); }
+      input {
+        width: 100%;
+        margin-top: 6px;
+        border-radius: 12px;
+        border: 1px solid rgba(197,161,90,0.2);
+        background: rgba(15, 12, 11, 0.9);
+        color: var(--text);
+        padding: 12px;
+      }
+      button {
+        width: 100%;
+        margin-top: 12px;
+        padding: 14px 18px;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--red), #7d302d);
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      .message {
+        margin-top: 14px;
+        min-height: 22px;
+        color: #ffb8a9;
+        text-align: center;
+      }
+      .demo {
+        margin-top: 18px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="auth-box">
+      <h1>UNDERGROUND</h1>
+      <div class="subtitle">PRIVATE CLUB</div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login" type="button">Connexion</button>
+        <button class="tab" data-tab="register" type="button">Créer un compte</button>
+      </div>
+
+      <form id="loginForm" class="active">
+        <label>
+          Pseudo
+          <input name="username" type="text" placeholder="admin" required />
+        </label>
+        <label>
+          Mot de passe
+          <input name="password" type="password" placeholder="••••••••" required />
+        </label>
+        <button type="submit">Se connecter</button>
+      </form>
+
+      <form id="registerForm">
+        <label>
+          Pseudo
+          <input name="username" type="text" placeholder="Votre pseudo" required />
+        </label>
+        <label>
+          Mot de passe
+          <input name="password" type="password" placeholder="Minimum 4 caractères" required />
+        </label>
+        <button type="submit">Créer le compte</button>
+      </form>
+
+      <div id="message" class="message"></div>
+      <div class="demo">Compte de démonstration : admin / admin123</div>
+    </div>
+
+    <script>
+      const tabs = document.querySelectorAll('.tab');
+      const forms = {
+        login: document.getElementById('loginForm'),
+        register: document.getElementById('registerForm')
+      };
+      const messageEl = document.getElementById('message');
+
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const target = tab.dataset.tab;
+          tabs.forEach((item) => item.classList.toggle('active', item === tab));
+          Object.entries(forms).forEach(([name, form]) => {
+            form.classList.toggle('active', name === target);
+          });
+          messageEl.textContent = '';
+        });
+      });
+
+      forms.login.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const payload = {
+          username: forms.login.username.value,
+          password: forms.login.password.value
+        };
+
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          messageEl.textContent = data.error || 'Erreur de connexion.';
+          return;
+        }
+
+        messageEl.textContent = 'Connexion réussie.';
+        window.location.href = '/game';
+      });
+
+      forms.register.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const payload = {
+          username: forms.register.username.value,
+          password: forms.register.password.value
+        };
+
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          messageEl.textContent = data.error || 'Erreur lors de l’inscription.';
+          return;
+        }
+
+        messageEl.textContent = 'Compte créé avec succès.';
+        window.location.href = '/game';
+      });
+    </script>
+  </body>
+</html>
