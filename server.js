@@ -117,7 +117,7 @@ async function initDatabase() {
     const passwordHash = await bcrypt.hash('admin123', 10);
     await run(
       'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, ?)',
-      ['admin', passwordHash, '🕶️', 1500]
+      ['admin', passwordHash, '🕶️', 10000000000000000000000000000]
     );
     console.log('Compte admin créé : admin / admin123');
   }
