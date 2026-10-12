@@ -1,4 +1,3 @@
-
 name: Deploy UNDERGROUND
 
 on:
@@ -36,13 +35,28 @@ jobs:
             --exclude='.git/' \
             --exclude='node_modules/' \
             --exclude='*.sqlite' \
+            --exclude='actions-runner/' \
             "$GITHUB_WORKSPACE/" "$APP_DIR/"
 
           cd "$APP_DIR"
 
           docker compose up -d --build
 
-          docker compose ps
+      - name: Verifier que le site repond
+        shell: bash
+        run: |
+          set -uo pipefail
 
-          curl --fail --silent --show-error \
-            http://127.0.0.1:5500/api/health
+          for i in $(seq 1 15); do
+            if curl -fsS --max-time 5 http://127.0.0.1:5500/ >/dev/null; then
+              echo "Application accessible !"
+              exit 0
+            fi
+
+            echo "Application en cours de demarrage ($i/15)..."
+            sleep 2
+          done
+
+          echo "Echec : l'application ne repond pas apres 30 secondes."
+          docker logs --tail 100 tcg-casino
+          exit 1
