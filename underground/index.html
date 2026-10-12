@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UNDERGROUND</title>
+    <meta
+      name="description"
+      content="Casino clandestin local avec roulette, blackjack et machine à sous."
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="page-noise"></div>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block" aria-label="Logo Underground">
+          <div class="brand-mark">U</div>
+          <div class="brand-copy">
+            <span class="brand-name">UNDERGROUND</span>
+            <span class="brand-tag">PRIVATE CLUB</span>
+          </div>
+        </div>
+
+        <div class="topbar-user">
+          <div class="balance-pill">
+            <span>Jetons</span>
+            <strong id="topbarBalance">0</strong>
+          </div>
+
+          <div class="player-pill" aria-label="Profil du joueur">
+            <span id="topbarAvatar" class="avatar-badge">🎲</span>
+            <span id="topbarName">Joueur</span>
+          </div>
+
+          <button id="openSettingsBtn" class="icon-button" type="button" aria-label="Réglages">
+            ⚙
+          </button>
+        </div>
+      </header>
+
+      <nav class="main-nav" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="home" type="button">Accueil</button>
+        <button class="nav-item" data-view="roulette" type="button">Roulette</button>
+        <button class="nav-item" data-view="blackjack" type="button">Blackjack</button>
+        <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
+        <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
+        <button class="nav-item" data-view="profile" type="button">Profil</button>
+      </nav>
+
+      <main class="main-panel">
+        <section id="homeView" class="view active" aria-label="Accueil">
+          <div class="hero-panel panel">
+            <div class="hero-copy">
+              <p class="eyebrow">REPÀIRE SECRET</p>
+              <h1>LA CHANCE N'ENTRE PAS ICI PAR HASARD.</h1>
+              <p class="subtitle">
+                Bienvenue dans le repaire. Choisis ta table et tente ta chance.
+              </p>
+            </div>
+          </div>
+
+          <div id="homeCards" class="game-cards"></div>
+
+          <div class="dashboard-grid">
+            <div class="panel home-panel">
+              <div class="section-heading">
+                <h2>Statistiques</h2>
+              </div>
+              <div id="homeStats" class="stats-grid"></div>
+            </div>
+
+            <div class="panel home-panel">
+              <div class="section-heading">
+                <h2>Dernières parties</h2>
+              </div>
+              <div id="homeRecent" class="history-list"></div>
+            </div>
+
+            <div class="panel home-panel">
+              <div class="section-heading">
+                <h2>Classement local</h2>
+              </div>
+              <div id="homeLeaderboard" class="leaderboard-mini"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="rouletteView" class="view" aria-label="Roulette">
+          <div class="panel table-panel roulette-layout">
+            <div class="roulette-stage">
+              <div id="rouletteWheel" class="roulette-wheel" aria-live="polite">
+                <div class="wheel-center"></div>
+                <div id="rouletteBall" class="roulette-ball"></div>
+              </div>
+            </div>
+
+            <div class="roulette-controls">
+              <div class="section-heading compact">
+                <h2>Table de roulette</h2>
+              </div>
+
+              <div id="rouletteBetTypes" class="bet-types" aria-label="Types de paris">
+                <button class="bet-choice active" type="button" data-bet="red">Rouge</button>
+                <button class="bet-choice" type="button" data-bet="black">Noir</button>
+                <button class="bet-choice" type="button" data-bet="even">Pair</button>
+                <button class="bet-choice" type="button" data-bet="odd">Impair</button>
+                <button class="bet-choice" type="button" data-bet="manque">Manque</button>
+                <button class="bet-choice" type="button" data-bet="passe">Passe</button>
+                <button class="bet-choice" type="button" data-bet="exact">Numéro exact</button>
+              </div>
+
+              <div class="stake-row">
+                <label for="rouletteExactNumber">Numéro exact</label>
+                <input id="rouletteExactNumber" type="number" min="0" max="36" value="7" />
+              </div>
+
+              <div class="stake-row">
+                <label for="rouletteCustomStake">Mise</label>
+                <input id="rouletteCustomStake" type="number" min="1" step="5" value="10" />
+              </div>
+
+              <div class="chip-row">
+                <button class="chip-option active" type="button" data-stake="10">10</button>
+                <button class="chip-option" type="button" data-stake="25">25</button>
+                <button class="chip-option" type="button" data-stake="50">50</button>
+                <button class="chip-option" type="button" data-stake="100">100</button>
+                <button class="chip-option" type="button" data-stake="250">250</button>
+              </div>
+
+              <div class="action-row">
+                <button id="roulettePlaceBet" class="primary-button" type="button">Confirmer le pari</button>
+                <button id="rouletteSpinBtn" class="gold-button" type="button">Lancer la roulette</button>
+              </div>
+
+              <div id="rouletteStatus" class="status-box">Aucun pari actif.</div>
+              <div id="roulettePayout" class="status-box subtle">Dernier résultat : aucun.</div>
+
+              <div class="history-panel">
+                <div class="section-heading compact">
+                  <h3>10 derniers résultats</h3>
+                </div>
+                <div id="rouletteHistory" class="mini-history"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="blackjackView" class="view" aria-label="Blackjack">
+          <div class="panel table-panel blackjack-layout">
+            <div class="blackjack-table">
+              <div class="hand-header">
+                <span>Croupier</span>
+                <strong id="dealerTotal">0</strong>
+              </div>
+              <div id="dealerCards" class="cards-row"></div>
+
+              <div class="hand-header">
+                <span>Joueur</span>
+                <strong id="playerTotal">0</strong>
+              </div>
+              <div id="playerCards" class="cards-row"></div>
+            </div>
+
+            <div class="blackjack-console">
+              <div class="section-heading compact">
+                <h2>Blackjack</h2>
+              </div>
+
+              <div class="hud-inline">
+                <div class="hud-item">
+                  <span>Solde</span>
+                  <strong id="blackjackBalance">0</strong>
+                </div>
+                <div class="hud-item">
+                  <span>Mise</span>
+                  <strong id="blackjackBet">0</strong>
+                </div>
+              </div>
+
+              <div class="stake-row">
+                <label for="blackjackStake">Mise</label>
+                <input id="blackjackStake" type="number" min="10" step="5" value="25" />
+              </div>
+
+              <div class="action-row stacked">
+                <button id="blackjackDealBtn" class="primary-button" type="button">Nouvelle partie</button>
+                <button id="blackjackHitBtn" class="secondary-button" type="button">Tirer</button>
+                <button id="blackjackStandBtn" class="secondary-button" type="button">Rester</button>
+              </div>
+
+              <div id="blackjackStatus" class="status-box">Choisis une mise et commence une manche.</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="slotsView" class="view" aria-label="Machine à sous">
+          <div class="panel table-panel slots-layout">
+            <div class="slots-machine">
+              <div class="machine-light"></div>
+              <div class="reel-strip">
+                <div class="reel" data-index="0"><span class="slot-symbol">🍒</span></div>
+                <div class="reel" data-index="1"><span class="slot-symbol">🍋</span></div>
+                <div class="reel" data-index="2"><span class="slot-symbol">🔔</span></div>
+              </div>
+            </div>
+
+            <div class="slots-console">
+              <div class="section-heading compact">
+                <h2>Machine à sous</h2>
+              </div>
+
+              <div class="stake-row">
+                <label for="slotsStake">Mise</label>
+                <input id="slotsStake" type="number" min="10" step="5" value="25" />
+              </div>
+
+              <div class="action-row">
+                <button id="slotsSpinBtn" class="gold-button" type="button">SPIN</button>
+              </div>
+
+              <div class="payout-panel">
+                <h3>Table des gains</h3>
+                <ul id="slotsPayoutTable" class="payout-list"></ul>
+              </div>
+
+              <div id="slotsStatus" class="status-box">Rien n'a encore tourné.</div>
+            </div>
+          </div>
+        </section>
+
+        <section id="leaderboardView" class="view" aria-label="Classement">
+          <div class="panel">
+            <div class="section-heading">
+              <h2>Classement local</h2>
+            </div>
+            <p class="leaderboard-note">
+              Ce classement est local au navigateur. Il ne représente pas un classement mondial ni des joueurs réels.
+            </p>
+            <div id="leaderboardBoard" class="leaderboard-board"></div>
+          </div>
+        </section>
+
+        <section id="profileView" class="view" aria-label="Profil et réglages">
+          <div class="panel profile-layout">
+            <div class="profile-block">
+              <div class="section-heading">
+                <h2>Profil</h2>
+              </div>
+
+              <label class="input-group">
+                <span>Pseudo</span>
+                <input id="profileNameInput" type="text" maxlength="18" placeholder="Ton nom" />
+              </label>
+
+              <div class="avatar-panel">
+                <span>Avatar</span>
+                <div id="avatarChoices" class="avatar-grid"></div>
+              </div>
+
+              <label class="toggle-row">
+                <span>Son</span>
+                <input id="soundToggle" type="checkbox" />
+              </label>
+
+              <button id="resetProfileBtn" class="danger-button" type="button">Réinitialiser les données</button>
+            </div>
+
+            <div class="profile-block">
+              <div class="section-heading">
+                <h2>Historique</h2>
+              </div>
+
+              <label class="input-group compact-select">
+                <span>Filtre</span>
+                <select id="historyFilter">
+                  <option value="all">Tout</option>
+                  <option value="roulette">Roulette</option>
+                  <option value="blackjack">Blackjack</option>
+                  <option value="slots">Machine à sous</option>
+                </select>
+              </label>
+
+              <div id="profileHistory" class="profile-history"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+
+    <script src="js/utils.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/roulette.js"></script>
+    <script src="js/blackjack.js"></script>
+    <script src="js/slots.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
