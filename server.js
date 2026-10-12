@@ -4,10 +4,26 @@ const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const SQLiteStore = require('connect-sqlite3')(session);
+const { rateLimit } = require('express-rate-limit');
 
 const app = express();
-const PORT = 5500;
-const DB_PATH = path.join(__dirname, 'database.sqlite');
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const PORT = Number(process.env.PORT || 5500);
+const HOST = process.env.HOST || (IS_PRODUCTION ? '127.0.0.1' : '0.0.0.0');
+const DATA_DIR = path.resolve(process.env.DATA_DIR || __dirname);
+const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
+const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? '' : 'underground-local-development-secret');
+
+if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
+  throw new Error('En production, SESSION_SECRET doit contenir au moins 32 caractères.');
+}
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+
+if (IS_PRODUCTION) {
+  app.set('trust proxy', 1);
+}
 
 function resolveExistingPath(...candidatePaths) {
   for (const candidate of candidatePaths) {
@@ -31,15 +47,29 @@ const AUTH_DIR = resolveExistingPath(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
-  secret: 'underground-secret-key',
+  store: new SQLiteStore({
+    db: 'sessions.sqlite',
+    dir: DATA_DIR,
+    table: 'sessions'
+  }),
+  secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 7,
-    sameSite: 'lax'
+    sameSite: 'lax',
+    secure: IS_PRODUCTION
   }
 }));
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de tentatives. Réessaie dans 15 minutes.' }
+});
 
 const db = new sqlite3.Database(DB_PATH, (error) => {
   if (error) {
@@ -114,12 +144,19 @@ async function initDatabase() {
 
   const count = await get('SELECT COUNT(*) AS total FROM users');
   if ((count?.total || 0) === 0) {
-    const passwordHash = await bcrypt.hash('admin123', 10);
+    const adminUsername = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
+    const adminPassword = process.env.ADMIN_PASSWORD || (IS_PRODUCTION ? '' : 'admin123');
+    if (!adminUsername || !adminPassword) {
+      console.log('Aucun administrateur initial défini; crée le premier compte depuis le site.');
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
     await run(
       'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, ?)',
-      ['admin', passwordHash, '🕶️', 10000000000000000000000000000]
+      [adminUsername, passwordHash, '🕶️', 1500]
     );
-    console.log('Compte admin créé : admin / admin123');
+    console.log(`Compte administrateur initial créé : ${adminUsername}`);
   }
 }
 
@@ -165,7 +202,7 @@ app.get('/api/session', async (req, res) => {
   res.json({ authenticated: true, user });
 });
 
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', authLimiter, async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
@@ -198,7 +235,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
@@ -331,6 +368,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Serveur démarré sur http://127.0.0.1:${PORT}`);
-  console.log('Compte admin : admin / admin123');
+  console.log(`Serveur démarré sur http://${HOST}:${PORT}`);
 });

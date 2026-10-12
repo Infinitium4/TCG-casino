@@ -1,48 +1,159 @@
-# UNDERGROUND — Version avec comptes et base SQLite
+# UNDERGROUND
 
-## Démarrage rapide
+Casino de démonstration avec comptes, historique SQLite et mini-jeux.
 
-1. Ouvrez un terminal dans le dossier racine du projet.
-2. Installez les dépendances :
+## Lancement local
 
-```bash
-npm install
-```
-
-3. Lancez le serveur :
+Prérequis : Node.js LTS et npm.
 
 ```bash
+npm ci
 npm start
 ```
 
-4. Ouvrez le site :
+Ouvre `http://127.0.0.1:5500/`. Sur une base neuve en développement, le compte de démonstration est `admin` / `admin123`. Ne réutilise pas ce mot de passe en production.
 
-```text
-http://127.0.0.1:5500/
+## Lancement avec Docker
+
+Prérequis : Docker Desktop sur Windows/macOS ou Docker Engine avec le plugin Compose sur Linux. Copie `.env.example` vers `.env`, puis remplace les valeurs par tes propres secrets. Génère `SESSION_SECRET` avec `openssl rand -hex 32`.
+
+Sur PowerShell :
+
+```powershell
+Copy-Item .env.example .env
 ```
 
-## Comptes de démonstration
+Construis et démarre le site :
 
-- Pseudo : `admin`
-- Mot de passe : `admin123`
+```bash
+docker compose up -d --build
+docker compose logs -f casino
+```
 
-## Fonctionnalités ajoutées
+Ouvre `http://127.0.0.1:5500/`. Le compte initial configuré dans `.env` n'est créé que si la base est vide. Les comptes, soldes, historiques et sessions sont conservés dans le volume Docker `casino-data`, même après `docker compose down`.
 
-- Inscription d’utilisateur
-- Connexion avec mot de passe hashé
-- Session utilisateur
-- Base SQLite locale
-- Sauvegarde du solde et de l’historique par compte
-- Classement local par compte
-- Réinitialisation des données du compte
+Pour arrêter le site sans supprimer les données, utilise `docker compose down`. **N'utilise pas `docker compose down -v`** sauf si tu veux effacer la base.
 
-## Fichiers importants
+La base locale existante n'est pas copiée dans l'image. Une nouvelle installation Docker crée une base vide; il faut transférer séparément `database.sqlite` si tu veux garder les comptes actuels.
 
-- `server.js` : serveur HTTP + API + base SQLite
-- `database.sqlite` : base de données locale créée automatiquement
-- `public/auth.html` : page de connexion / inscription
-- `underground/` : site de jeu HTML/CSS/JS existant
+## Déploiement public sur Ubuntu
+
+Cette configuration utilise Node.js derrière Nginx avec HTTPS. Il faut un domaine dont l'enregistrement DNS `A` pointe vers l'IP publique de la VM. Autorise les ports 22, 80 et 443 dans le pare-feu du fournisseur; le port 5500 reste privé.
+
+Pour Docker, installe Docker Engine et le plugin Compose sur la VM, clone le projet, crée le fichier `.env`, puis exécute `docker compose up -d --build`. La configuration Docker expose le port 5500 uniquement sur `127.0.0.1`; la configuration Nginx ci-dessous peut donc servir de reverse proxy HTTPS. Les commandes systemd ci-dessous sont une méthode alternative sans Docker.
+
+### Installer le projet
+
+```bash
+sudo apt update
+sudo apt install -y curl git nginx certbot python3-certbot-nginx build-essential python3
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version
+npm --version
+sudo useradd --system --create-home --home-dir /opt/tcg-casino --shell /usr/sbin/nologin tcgcasino
+sudo git clone https://github.com/Infinitium4/TCG-casino.git /opt/tcg-casino
+sudo chown -R tcgcasino:tcgcasino /opt/tcg-casino
+sudo install -d -o tcgcasino -g tcgcasino /var/lib/tcg-casino
+sudo -u tcgcasino npm --prefix /opt/tcg-casino ci --omit=dev
+```
+
+### Configurer les secrets et la base
+
+Crée un secret avec `openssl rand -hex 32`, puis crée `/etc/tcg-casino.env` :
+
+```ini
+NODE_ENV=production
+HOST=127.0.0.1
+PORT=5500
+DATA_DIR=/var/lib/tcg-casino
+SESSION_SECRET=REMPLACER_PAR_LE_SECRET_GENERE
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=CHOISIR_UN_MOT_DE_PASSE_LONG_ET_UNIQUE
+```
+
+Protège le fichier :
+
+```bash
+sudo chown root:root /etc/tcg-casino.env
+sudo chmod 600 /etc/tcg-casino.env
+```
+
+Les identifiants `ADMIN_USERNAME` et `ADMIN_PASSWORD` servent uniquement à créer le compte initial si la base est vide. Si tu copies ta base locale vers `/var/lib/tcg-casino/database.sqlite`, conserve le compte et les données déjà présents. Arrête le serveur avant de copier la base, puis donne-la à l'utilisateur `tcgcasino`.
+
+### Créer le service systemd
+
+Crée `/etc/systemd/system/tcg-casino.service` :
+
+```ini
+[Unit]
+Description=TCG Casino
+After=network.target
+
+[Service]
+Type=simple
+User=tcgcasino
+Group=tcgcasino
+WorkingDirectory=/opt/tcg-casino
+EnvironmentFile=/etc/tcg-casino.env
+ExecStart=/usr/bin/node /opt/tcg-casino/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tcg-casino
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Active-le et vérifie les journaux :
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now tcg-casino
+sudo systemctl status tcg-casino
+sudo journalctl -u tcg-casino -f
+```
+
+### Configurer Nginx et HTTPS
+
+Crée `/etc/nginx/sites-available/tcg-casino`, en remplaçant `casino.example.com` par ton domaine :
+
+```nginx
+server {
+    listen 80;
+    server_name casino.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:5500;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/tcg-casino /etc/nginx/sites-enabled/tcg-casino
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d casino.example.com
+```
+
+Le site sera disponible sur `https://casino.example.com/`. Les comptes, soldes, historiques et sessions restent dans `/var/lib/tcg-casino`; sauvegarde ce dossier régulièrement.
+
+### Mettre à jour après un push Git
+
+```bash
+sudo -u tcgcasino git -C /opt/tcg-casino pull
+sudo -u tcgcasino npm --prefix /opt/tcg-casino ci --omit=dev
+sudo systemctl restart tcg-casino
+```
 
 ## Limites
 
-Ce projet reste un prototype local. Les comptes sont stockés dans une base SQLite locale et la protection n’est pas comparable à un système de production complet.
+Les jetons sont virtuels. Les résultats des mini-jeux sont calculés côté navigateur; ce prototype n'est pas adapté aux paris ou paiements en argent réel.
