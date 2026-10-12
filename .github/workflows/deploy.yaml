@@ -1,0 +1,48 @@
+
+name: Deploy UNDERGROUND
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Verifier le projet
+        run: |
+          test -f Dockerfile
+          test -f compose.yaml
+          test -f server.js
+
+      - name: Deployer sur la VM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_DIR="/home/cgn/TCG-casino"
+
+          rsync -a --delete \
+            --exclude='.env' \
+            --exclude='.git/' \
+            --exclude='node_modules/' \
+            --exclude='*.sqlite' \
+            "$GITHUB_WORKSPACE/" "$APP_DIR/"
+
+          cd "$APP_DIR"
+
+          docker compose up -d --build
+
+          docker compose ps
+
+          curl --fail --silent --show-error \
+            http://127.0.0.1:5500/api/health
