@@ -13,7 +13,7 @@ services:
       ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}"
     ports:
-      - "127.0.0.1:5500:5500"
+      - "5500:5500"
     volumes:
       - casino-data:/data
     read_only: true
