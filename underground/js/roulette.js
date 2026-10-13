@@ -4,6 +4,7 @@ const rouletteModule = (() => {
   ];
   const state = {
     currentBet: null,
+    selectedBetType: "red",
     wheelLocked: false,
     rotation: 0,
     lastResults: []
@@ -53,7 +54,7 @@ const rouletteModule = (() => {
     rotor.style.transform = "rotate(0deg)";
     wheel.style.setProperty("--ball-radius", `${wheel.offsetWidth * 0.38}px`);
     renderHistory();
-    updateBetControls();
+    selectBetType(state.selectedBetType);
   }
 
   function renderWheelNumbers() {
@@ -95,6 +96,7 @@ const rouletteModule = (() => {
   }
 
   function selectBetType(type) {
+    state.selectedBetType = type;
     document.querySelectorAll(".bet-choice").forEach((button) => {
       button.classList.toggle("active", button.dataset.bet === type);
     });
@@ -124,8 +126,7 @@ const rouletteModule = (() => {
 
   function updateBetControls() {
     const exactInput = document.getElementById("rouletteExactNumber");
-    const activeType = document.querySelector(".bet-choice.active")?.dataset.bet || "red";
-    exactInput.disabled = activeType !== "exact";
+    exactInput.disabled = state.selectedBetType !== "exact";
   }
 
   function getBetLabel(type, exactNumber = null) {
@@ -144,7 +145,7 @@ const rouletteModule = (() => {
 
   function placeBet() {
     const player = getPlayer();
-    const betType = document.querySelector(".bet-choice.active")?.dataset.bet || "red";
+    const betType = state.selectedBetType;
     const stake = Number(document.getElementById("rouletteCustomStake").value);
     const exactValue = document.getElementById("rouletteExactNumber").value;
     const exactNumber = exactValue === "00" ? "00" : Number(exactValue);
@@ -187,12 +188,15 @@ const rouletteModule = (() => {
       return;
     }
 
+    const wheel = document.getElementById("rouletteWheel");
+    const scrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    wheel.closest(".roulette-stage").scrollIntoView({ behavior: scrollBehavior, block: "center" });
+
     if (!state.currentBet) {
       showToast("Aucun pari n'a été confirmé.");
       return;
     }
 
-    const wheel = document.getElementById("rouletteWheel");
     const spinButton = document.getElementById("rouletteSpinBtn");
     const placeBetButton = document.getElementById("roulettePlaceBet");
 
@@ -240,7 +244,7 @@ const rouletteModule = (() => {
       number: winningNumber,
       color: getRouletteColor(winningNumber),
       outcome: result.won ? "Gagné" : "Perdu",
-      labels: result.won ? `${result.payoutTotal} jetons` : "0"
+      labels: result.won ? `+${result.payoutTotal} jetons` : `-${bet.amount} jetons`
     });
     state.lastResults = state.lastResults.slice(0, 10);
 
