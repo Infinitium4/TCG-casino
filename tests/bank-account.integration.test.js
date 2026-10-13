@@ -34,7 +34,8 @@ test('internal bank settles solo game results and stays protected from account m
       ADMIN_PASSWORD: 'test-admin-password',
       SECOND_ADMIN_USERNAME: 'test-admin-2',
       SECOND_ADMIN_PASSWORD: 'test-admin-2-password',
-      BANK_USERNAME: 'casino-bank'
+      BANK_USERNAME: 'casino-bank',
+      CRASH_ENABLED: 'false'
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -110,6 +111,16 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal(registered.response.status, 201, registered.body.error);
   const playerCookie = registered.cookie;
   assert.ok(playerCookie);
+  const crashStatus = await request('/api/crash/status');
+  assert.equal(crashStatus.body.enabled, false);
+  const disabledCrashState = await request('/api/crash/state', { cookie: playerCookie });
+  assert.equal(disabledCrashState.response.status, 503);
+  const disabledCrashBet = await request('/api/crash/bets', {
+    cookie: playerCookie,
+    method: 'POST',
+    body: JSON.stringify({ stake: 10, roundId: 'disabled' })
+  });
+  assert.equal(disabledCrashBet.response.status, 503);
 
   const bankAccount = (await request('/api/admin/accounts?search=casino-bank', { cookie: adminCookie })).body.accounts[0];
   assert.equal(bankAccount.is_bank, 1);

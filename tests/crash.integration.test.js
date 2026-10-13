@@ -40,7 +40,8 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
         ADMIN_PASSWORD: 'crash-admin-password',
         SECOND_ADMIN_USERNAME: 'crash-admin-2',
         SECOND_ADMIN_PASSWORD: 'crash-admin-2-password',
-        BANK_USERNAME: 'casino-bank'
+        BANK_USERNAME: 'casino-bank',
+        CRASH_ENABLED: 'true'
       },
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -118,6 +119,8 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   });
 
   await startServer();
+  const crashStatus = await request('/api/crash/status');
+  assert.equal(crashStatus.body.enabled, true);
   const playerCookie = await register('crash-player');
   const observerCookie = await register('crash-observer');
 

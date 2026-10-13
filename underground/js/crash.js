@@ -7,13 +7,28 @@ const crashModule = (() => {
     history: [],
     balance: 0,
     serverOffset: 0,
+    enabled: false,
     active: false,
     animationFrame: null,
     requestPending: false,
     lastOutcome: null
   };
 
-  function initialize() {
+  async function initialize() {
+    try {
+      const response = await fetch('/api/crash/status');
+      const payload = await response.json();
+      state.enabled = response.ok && payload.enabled === true;
+    } catch (error) {
+      console.error('Impossible de vérifier la disponibilité du jeu Crash :', error);
+    }
+    if (!state.enabled) {
+      document.querySelector('[data-view="crash"]')?.remove();
+      document.getElementById('crashView')?.remove();
+      document.querySelector('#historyFilter option[value="crash"]')?.remove();
+      return false;
+    }
+
     document.getElementById('crashBetButton')?.addEventListener('click', submitAction);
     document.querySelectorAll('[data-crash-stake]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -41,6 +56,7 @@ const crashModule = (() => {
     }
 
     refreshState();
+    return true;
   }
 
   async function refreshState() {
@@ -319,5 +335,5 @@ const crashModule = (() => {
     updateAnimation();
   }
 
-  return { initialize, setActive };
+  return { initialize, isEnabled: () => state.enabled, setActive };
 })();

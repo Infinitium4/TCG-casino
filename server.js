@@ -18,6 +18,7 @@ const HOST = process.env.HOST || (IS_PRODUCTION ? '127.0.0.1' : '0.0.0.0');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || __dirname);
 const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
 const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? '' : 'underground-local-development-secret');
+const CRASH_ENABLED = process.env.CRASH_ENABLED === 'true';
 const CRASH_TEST_MODE = process.env.NODE_ENV === 'test';
 const CRASH_BETTING_WINDOW_MS = CRASH_TEST_MODE ? 1000 : 8000;
 const CRASH_ROUND_PAUSE_MS = CRASH_TEST_MODE ? 200 : 3500;
@@ -26,6 +27,13 @@ const CRASH_MAX_BET = 1_000_000;
 
 if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
   throw new Error('En production, SESSION_SECRET doit contenir au moins 32 caractères.');
+}
+
+function requireCrashEnabled(req, res, next) {
+  if (!CRASH_ENABLED) {
+    return res.status(503).json({ error: 'Le jeu Crash est temporairement désactivé.' });
+  }
+  next();
 }
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -1439,7 +1447,7 @@ async function getCrashState(userId) {
 }
 
 async function broadcastCrashState() {
-  if (io.engine.clientsCount === 0) return;
+  if (!CRASH_ENABLED || io.engine.clientsCount === 0) return;
   for (const socket of io.sockets.sockets.values()) {
     const userId = socket.data.user?.id;
     if (userId) {
@@ -1670,11 +1678,19 @@ io.on('connection', async (socket) => {
   socket.emit('session:ready', { user });
   try {
     await databaseReady;
-    socket.emit('crash:state', await getCrashState(user.id));
+    if (CRASH_ENABLED) {
+      socket.emit('crash:state', await getCrashState(user.id));
+    }
   } catch (error) {
     socket.emit('crash:error', { message: error.message || 'État Crash indisponible.' });
   }
   socket.on('crash:sync', async (acknowledge) => {
+    if (!CRASH_ENABLED) {
+      if (typeof acknowledge === 'function') {
+        acknowledge({ ok: false, error: 'Le jeu Crash est temporairement désactivé.' });
+      }
+      return;
+    }
     try {
       await databaseReady;
       const state = await getCrashState(user.id);
@@ -2583,12 +2599,16 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
   res.json({ ok: true, user: await getUserById(req.session.userId) });
 });
 
-app.get('/api/crash/state', requireAuth, handleAsync(async (req, res) => {
+app.get('/api/crash/status', (req, res) => {
+  res.json({ enabled: CRASH_ENABLED });
+});
+
+app.get('/api/crash/state', requireAuth, requireCrashEnabled, handleAsync(async (req, res) => {
   await crashReady;
   res.json(await getCrashState(req.session.userId));
 }));
 
-app.post('/api/crash/bets', requireAuth, handleAsync(async (req, res) => {
+app.post('/api/crash/bets', requireAuth, requireCrashEnabled, handleAsync(async (req, res) => {
   await crashReady;
   try {
     const stake = req.body?.stake;
@@ -2606,7 +2626,7 @@ app.post('/api/crash/bets', requireAuth, handleAsync(async (req, res) => {
   }
 }));
 
-app.post('/api/crash/bets/:betId/cashout', requireAuth, handleAsync(async (req, res) => {
+app.post('/api/crash/bets/:betId/cashout', requireAuth, requireCrashEnabled, handleAsync(async (req, res) => {
   await crashReady;
   try {
     const result = await cashoutCrashBet(req.session.userId, req.params.betId);

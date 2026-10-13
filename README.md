@@ -27,7 +27,7 @@ Un compte interne `casino-bank` (modifiable avec `BANK_USERNAME`) est provisionn
 
 ## Jeu Crash
 
-Le jeu **Jet Crash** est disponible dans la navigation. Les manches, mises, crashs et retraits sont pilotés par le serveur et enregistrés dans SQLite; la mise est débitée une seule fois et le retrait est protégé contre les répétitions. Les résultats crédités sont aussi ajoutés à l'historique de compte et au journal de la banque. Les tables `crash_rounds` et `crash_bets` sont créées automatiquement au démarrage, y compris pour une base déjà utilisée : aucune migration manuelle n'est requise.
+Le jeu **Jet Crash** peut être désactivé globalement avec `CRASH_ENABLED=false` (valeur par défaut) : il disparaît de la navigation et ses routes serveur refusent l'accès. Pour le réactiver quand il sera réparé, configure `CRASH_ENABLED=true` puis redémarre l'application. Les manches, mises, crashs et retraits sont pilotés par le serveur et enregistrés dans SQLite; la mise est débitée une seule fois et le retrait est protégé contre les répétitions. Les résultats crédités sont aussi ajoutés à l'historique de compte et au journal de la banque. Les tables `crash_rounds` et `crash_bets` sont créées automatiquement au démarrage, y compris pour une base déjà utilisée : aucune migration manuelle n'est requise.
 
 Le navigateur n'envoie jamais de multiplicateur de retrait au serveur. Le jeu utilise des jetons virtuels uniquement et ne prétend pas fournir un système provably fair.
 
@@ -37,11 +37,12 @@ Dans `.env` de production, définis un mot de passe long et unique pour le deuxi
 SECOND_ADMIN_USERNAME=admin2
 SECOND_ADMIN_PASSWORD=CHOISIR_UN_AUTRE_MOT_DE_PASSE_LONG_ET_UNIQUE
 BANK_USERNAME=casino-bank
+CRASH_ENABLED=false
 ```
 
 ## Lancement avec Docker
 
-Prérequis : Docker Desktop sur Windows/macOS ou Docker Engine avec le plugin Compose sur Linux. Copie `.env.example` vers `.env`, puis remplace les valeurs par tes propres secrets, notamment `SECOND_ADMIN_PASSWORD`. Génère `SESSION_SECRET` avec `openssl rand -hex 32`. Compose transmet les identifiants admin et banque du fichier `.env` au serveur.
+Prérequis : Docker Desktop sur Windows/macOS ou Docker Engine avec le plugin Compose sur Linux. Copie `.env.example` vers `.env`, puis remplace les valeurs par tes propres secrets, notamment `SECOND_ADMIN_PASSWORD`. Génère `SESSION_SECRET` avec `openssl rand -hex 32`. Compose transmet aussi `CRASH_ENABLED` au serveur.
 
 Sur PowerShell :
 
@@ -99,6 +100,7 @@ ADMIN_PASSWORD=CHOISIR_UN_MOT_DE_PASSE_LONG_ET_UNIQUE
 SECOND_ADMIN_USERNAME=admin2
 SECOND_ADMIN_PASSWORD=CHOISIR_UN_AUTRE_MOT_DE_PASSE_LONG_ET_UNIQUE
 BANK_USERNAME=casino-bank
+CRASH_ENABLED=false
 ```
 
 Protège le fichier :

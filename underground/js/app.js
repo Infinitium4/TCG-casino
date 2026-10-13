@@ -13,6 +13,7 @@ async function initializeApp() {
     return;
   }
 
+  await crashModule.initialize();
   bindNavigation();
   bindGlobalButtons();
   updateTopbar();
@@ -23,7 +24,6 @@ async function initializeApp() {
   blackjackModule.initialize();
   pokerModule.initialize();
   slotsModule.initialize();
-  crashModule.initialize();
   adminModule.initialize(accountUser.isAdmin, accountUser.supportMode, accountUser.username);
 }
 
@@ -51,6 +51,10 @@ function bindGlobalButtons() {
 }
 
 function showView(viewName) {
+  if (viewName === "crash" && !crashModule.isEnabled()) {
+    viewName = "home";
+  }
+
   document.querySelectorAll(".view").forEach((view) => {
     view.classList.toggle("active", view.id === `${viewName}View`);
   });
@@ -108,7 +112,7 @@ function renderHomeView() {
       action: "PRENDRE SON ENVOL",
       view: "crash"
     }
-  ];
+  ].filter((card) => card.view !== "crash" || crashModule.isEnabled());
 
   const homeCards = document.getElementById("homeCards");
   homeCards.innerHTML = cards
