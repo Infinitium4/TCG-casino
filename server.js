@@ -187,6 +187,34 @@ function getCardSuit(card) {
   return String(card).slice(-1);
 }
 
+function calculateBlackjackValue(cards = []) {
+  let total = 0;
+  let aces = 0;
+
+  for (const card of cards) {
+    const rank = String(card).slice(0, -1);
+    if (rank === 'A') {
+      total += 11;
+      aces += 1;
+    } else if (['J', 'Q', 'K'].includes(rank)) {
+      total += 10;
+    } else {
+      total += Number(rank);
+    }
+  }
+
+  while (total > 21 && aces > 0) {
+    total -= 10;
+    aces -= 1;
+  }
+
+  return total;
+}
+
+function isBlackjack(cards) {
+  return cards.length === 2 && calculateBlackjackValue(cards) === 21;
+}
+
 function compareValues(a, b) {
   return Number(b) - Number(a);
 }
@@ -348,8 +376,15 @@ function createBlackjackTable(id = `bj-${Date.now()}`) {
     hostId: null,
     deck: [],
     dealerCards: [],
-    round: null,
+    round: 'waiting',
+    roundNumber: 0,
+    betAmount: 0,
+    currentTurn: -1,
+    dealerRevealed: false,
+    lastAction: 'En attente de joueurs.',
+    recentHistory: [],
     addPlayer(player) {
+      if (this.status === 'in-progress') return false;
       if (this.players.length >= this.maxPlayers) return false;
       if (this.players.some((entry) => entry.id === player.id)) return false;
       const safePlayer = {
@@ -360,6 +395,8 @@ function createBlackjackTable(id = `bj-${Date.now()}`) {
         hand: [],
         bet: 0,
         finished: false,
+        outcome: null,
+        payout: 0,
         connected: true
       };
       this.players.push(safePlayer);
@@ -367,6 +404,7 @@ function createBlackjackTable(id = `bj-${Date.now()}`) {
       return true;
     },
     removePlayer(playerId) {
+      if (this.status === 'in-progress') return null;
       const index = this.players.findIndex((player) => player.id === Number(playerId));
       if (index >= 0) {
         const [removed] = this.players.splice(index, 1);
@@ -376,6 +414,104 @@ function createBlackjackTable(id = `bj-${Date.now()}`) {
         return removed;
       }
       return null;
+    },
+    startRound(betAmount) {
+      const stake = Number(betAmount);
+      if (this.status === 'in-progress' || !Number.isInteger(stake) || stake <= 0) return false;
+      if (this.players.length < this.minPlayers || this.players.some((player) => player.chips < stake)) return false;
+
+      this.deck = shuffleDeck(createDeck());
+      this.dealerCards = [this.deck.pop(), this.deck.pop()];
+      this.betAmount = stake;
+      this.roundNumber += 1;
+      this.round = 'player-turn';
+      this.status = 'in-progress';
+      this.dealerRevealed = false;
+
+      for (const player of this.players) {
+        player.chips -= stake;
+        player.bet = stake;
+        player.hand = [this.deck.pop(), this.deck.pop()];
+        player.finished = isBlackjack(player.hand);
+        player.outcome = null;
+        player.payout = 0;
+      }
+
+      this.lastAction = `Manche ${this.roundNumber} démarrée avec une mise de ${stake} jetons.`;
+      this.recentHistory.push(this.lastAction);
+      this.currentTurn = this.players.findIndex((player) => !player.finished);
+
+      if (isBlackjack(this.dealerCards) || this.currentTurn < 0) {
+        this.settleRound();
+      }
+      return true;
+    },
+    act(playerId, action) {
+      if (this.status !== 'in-progress' || !['hit', 'stand'].includes(action)) return false;
+      const player = this.players[this.currentTurn];
+      if (!player || player.id !== Number(playerId) || player.finished) return false;
+
+      if (action === 'hit') {
+        player.hand.push(this.deck.pop());
+        const total = calculateBlackjackValue(player.hand);
+        this.lastAction = total > 21
+          ? `${player.username} dépasse 21 et perd la manche.`
+          : `${player.username} tire une carte (${total}).`;
+        if (total >= 21) player.finished = true;
+      } else {
+        player.finished = true;
+        this.lastAction = `${player.username} reste à ${calculateBlackjackValue(player.hand)}.`;
+      }
+
+      this.recentHistory.push(this.lastAction);
+      this.currentTurn = this.players.findIndex((entry) => !entry.finished);
+      if (this.currentTurn < 0) this.settleRound();
+      return true;
+    },
+    settleRound() {
+      this.round = 'dealer-turn';
+      this.dealerRevealed = true;
+      if (!isBlackjack(this.dealerCards)) {
+        while (calculateBlackjackValue(this.dealerCards) < 17) {
+          this.dealerCards.push(this.deck.pop());
+        }
+      }
+
+      const dealerTotal = calculateBlackjackValue(this.dealerCards);
+      for (const player of this.players) {
+        const playerTotal = calculateBlackjackValue(player.hand);
+        const playerBlackjack = isBlackjack(player.hand);
+        const dealerBlackjack = isBlackjack(this.dealerCards);
+        let payout = 0;
+
+        if (playerBlackjack && dealerBlackjack) {
+          player.outcome = 'push';
+          payout = player.bet;
+        } else if (playerBlackjack) {
+          player.outcome = 'blackjack';
+          payout = Math.floor(player.bet * 2.5);
+        } else if (playerTotal > 21 || dealerBlackjack) {
+          player.outcome = 'loss';
+        } else if (dealerTotal > 21 || playerTotal > dealerTotal) {
+          player.outcome = 'win';
+          payout = player.bet * 2;
+        } else if (playerTotal === dealerTotal) {
+          player.outcome = 'push';
+          payout = player.bet;
+        } else {
+          player.outcome = 'loss';
+        }
+
+        player.payout = payout;
+        player.chips += payout;
+        player.finished = true;
+      }
+
+      this.status = 'waiting';
+      this.round = 'finished';
+      this.currentTurn = -1;
+      this.lastAction = `Manche ${this.roundNumber} terminée. Le croupier totalise ${dealerTotal}.`;
+      this.recentHistory.push(this.lastAction);
     }
   };
 }
@@ -968,6 +1104,35 @@ function updateUserChips(userId, delta) {
   });
 }
 
+async function persistBlackjackTable(table) {
+  for (const player of table.players) {
+    await run('UPDATE users SET chips = ? WHERE id = ?', [player.chips, player.id]);
+  }
+
+  if (table.round !== 'finished' || table.recordedRound === table.roundNumber) {
+    return;
+  }
+
+  const resultLabels = {
+    blackjack: 'Blackjack',
+    win: 'Victoire',
+    push: 'Égalité',
+    loss: 'Défaite'
+  };
+
+  for (const player of table.players) {
+    await addGameHistory(
+      player.id,
+      'blackjack',
+      player.bet,
+      resultLabels[player.outcome] || 'Défaite',
+      player.payout,
+      player.payout - player.bet
+    );
+  }
+  table.recordedRound = table.roundNumber;
+}
+
 function tableToPublicState(table, viewerId = null) {
   const viewer = viewerId ? Number(viewerId) : null;
 
@@ -987,8 +1152,16 @@ function tableToPublicState(table, viewerId = null) {
         chips: player.chips,
         connected: player.connected,
         bet: player.bet,
+<<<<<<< HEAD
         hand: isViewer || revealHand ? [...(player.hand || [])] : [],
         isWinner: (table.showdownWinnerIds || []).includes(Number(player.id)),
+=======
+        hand: isViewer || (table.type === 'blackjack' && table.round === 'finished') ? [...(player.hand || [])] : [],
+        handCount: (player.hand || []).length,
+        finished: !!player.finished,
+        outcome: player.outcome || null,
+        payout: Number(player.payout || 0),
+>>>>>>> f462058a1a806c22da24053a941b4767d1810fdd
         folded: !!player.folded,
         allIn: !!player.allIn,
         isDealer: !!player.isDealer,
@@ -1008,7 +1181,14 @@ function tableToPublicState(table, viewerId = null) {
     bigBlindIndex: table.bigBlindIndex ?? 0,
     currentTurn: table.currentTurn ?? 0,
     lastAction: table.lastAction || 'Aucune action',
-    recentHistory: table.recentHistory || []
+    recentHistory: table.recentHistory || [],
+    roundNumber: table.roundNumber || 0,
+    betAmount: table.betAmount || 0,
+    dealerCards: table.type === 'blackjack'
+      ? (table.dealerRevealed ? [...table.dealerCards] : table.dealerCards.map((card, index) => index === 1 ? null : card))
+      : [],
+    dealerRevealed: !!table.dealerRevealed,
+    dealerTotal: table.type === 'blackjack' && table.dealerRevealed ? calculateBlackjackValue(table.dealerCards) : null
   };
 }
 
@@ -1057,11 +1237,15 @@ io.on('connection', async (socket) => {
     if (!table) {
       return socket.emit('blackjack:table:error', { message: 'Table introuvable.' });
     }
-    if (!table.addPlayer(user)) {
+    const alreadyJoined = table.players.some((player) => player.id === Number(user.id));
+    if (!alreadyJoined && !table.addPlayer(user)) {
       return socket.emit('blackjack:table:error', { message: 'La table est pleine ou tu y es déjà inscrit.' });
     }
+    const joinedPlayer = table.players.find((player) => player.id === Number(user.id));
+    if (joinedPlayer) joinedPlayer.connected = true;
     socket.join(`blackjack:${table.id}`);
-    io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
+    socket.emit('blackjack:table:update', tableToPublicState(table, user.id));
+    socket.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
   });
 
   socket.on('poker:tables:list', () => {
@@ -1244,6 +1428,14 @@ app.get('/poker/game/:tableId', requireAuth, (req, res) => {
   res.sendFile(path.join(GAME_DIR, 'poker-game.html'));
 });
 
+app.get('/blackjack/game/:tableId', requireAuth, (req, res) => {
+  const table = blackjackTables.get(String(req.params.tableId));
+  if (!table || !table.players.some((player) => Number(player.id) === Number(req.session.userId))) {
+    return res.redirect('/game');
+  }
+  res.sendFile(path.join(GAME_DIR, 'blackjack-game.html'));
+});
+
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, message: 'API Underground en ligne.' });
 });
@@ -1384,7 +1576,18 @@ app.get('/api/leaderboard', async (req, res) => {
 });
 
 app.get('/api/blackjack/tables', requireAuth, (req, res) => {
-  res.json({ tables: [...blackjackTables.values()].map(tableToPublicState) });
+  res.json({ tables: [...blackjackTables.values()].map((table) => tableToPublicState(table, req.session.userId)) });
+});
+
+app.get('/api/blackjack/tables/:id', requireAuth, (req, res) => {
+  const table = blackjackTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  if (!table.players.some((player) => Number(player.id) === Number(req.session.userId))) {
+    return res.status(403).json({ error: 'Tu n’as pas accès à cette table.' });
+  }
+  res.json({ table: tableToPublicState(table, req.session.userId) });
 });
 
 app.get('/api/poker/tables', requireAuth, (req, res) => {
@@ -1439,7 +1642,70 @@ app.post('/api/blackjack/tables/:id/join', requireAuth, async (req, res) => {
   if (!table.addPlayer(user)) {
     return res.status(400).json({ error: 'Impossible de rejoindre cette table.' });
   }
-  res.json({ table: tableToPublicState(table) });
+  io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
+  res.json({ table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/blackjack/tables/:id/start', requireAuth, async (req, res) => {
+  const table = blackjackTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  if (Number(table.hostId) !== Number(req.session.userId)) {
+    return res.status(403).json({ error: 'Seul l’hôte peut lancer la manche.' });
+  }
+
+  for (const player of table.players) {
+    const user = await getUserById(player.id);
+    if (!user) {
+      return res.status(404).json({ error: 'Un joueur de la table est introuvable.' });
+    }
+    player.chips = Number(user.chips);
+  }
+
+  const betAmount = Number(req.body?.betAmount);
+  if (!table.startRound(betAmount)) {
+    return res.status(400).json({ error: 'Mise invalide, table en cours ou solde insuffisant pour tous les joueurs.' });
+  }
+
+  await persistBlackjackTable(table);
+  io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
+  res.json({ table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/blackjack/tables/:id/action', requireAuth, async (req, res) => {
+  const table = blackjackTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  if (!table.players.some((player) => Number(player.id) === Number(req.session.userId))) {
+    return res.status(403).json({ error: 'Tu n’es pas dans cette table.' });
+  }
+  const action = String(req.body?.action || '').toLowerCase();
+  if (!table.act(req.session.userId, action)) {
+    return res.status(400).json({ error: 'Action invalide ou ce n’est pas ton tour.' });
+  }
+
+  await persistBlackjackTable(table);
+  io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
+  res.json({ table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/blackjack/tables/:id/leave', requireAuth, (req, res) => {
+  const table = blackjackTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  const removed = table.removePlayer(req.session.userId);
+  if (!removed) {
+    return res.status(400).json({ error: 'Impossible de quitter une manche en cours ou cette table.' });
+  }
+  if (!table.players.length) {
+    blackjackTables.delete(table.id);
+  } else {
+    io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
+  }
+  res.json({ ok: true });
 });
 
 app.post('/api/poker/tables/:id/join', requireAuth, async (req, res) => {
@@ -1566,6 +1832,7 @@ module.exports = {
   io,
   createDeck,
   shuffleDeck,
+  calculateBlackjackValue,
   createBlackjackTable,
   createPokerTable,
   canStartPokerTable,

@@ -7,7 +7,8 @@ const {
   evaluatePokerHand,
   createDeck,
   canStartPokerTable,
-  tableToPublicState
+  tableToPublicState,
+  calculateBlackjackValue
 } = require('../server');
 
 test('a 2-player poker table cannot start', () => {
@@ -448,4 +449,53 @@ test('a last active player wins immediately after the others fold', () => {
   assert.equal(table.players[0].chips, 500);
   assert.equal(table.players[1].folded, true);
   assert.equal(table.players[2].folded, true);
+});
+
+test('blackjack hand values count aces as eleven or one as needed', () => {
+  assert.equal(calculateBlackjackValue(['A♠', 'A♦', '9♣']), 21);
+  assert.equal(calculateBlackjackValue(['A♠', 'K♣', '5♦']), 16);
+});
+
+test('blackjack tables debit each player and deal private hands', () => {
+  const table = createBlackjackTable('test-blackjack-multiplayer-start');
+  table.addPlayer({ id: 1, username: 'Alice', chips: 500 });
+  table.addPlayer({ id: 2, username: 'Bob', chips: 500 });
+
+  assert.equal(table.startRound(25), true);
+  assert.equal(table.players.every((player) => player.chips >= 475 && player.bet === 25 && player.hand.length === 2), true);
+  assert.equal(table.dealerCards.length, 2);
+  assert.equal(table.betAmount, 25);
+});
+
+test('blackjack turns progress in order and settle each player against the dealer', () => {
+  const table = createBlackjackTable('test-blackjack-turn-order');
+  table.addPlayer({ id: 1, username: 'Alice', chips: 100 });
+  table.addPlayer({ id: 2, username: 'Bob', chips: 100 });
+  table.status = 'in-progress';
+  table.round = 'player-turn';
+  table.roundNumber = 1;
+  table.betAmount = 10;
+  table.currentTurn = 0;
+  table.dealerCards = ['10♠', '6♠'];
+  table.deck = ['3♣'];
+  table.players[0].chips = 90;
+  table.players[0].bet = 10;
+  table.players[0].hand = ['10♣', '8♣'];
+  table.players[1].chips = 90;
+  table.players[1].bet = 10;
+  table.players[1].hand = ['K♦', 'Q♥'];
+
+  const aliceView = tableToPublicState(table, 1);
+  assert.equal(aliceView.players[0].hand.length, 2);
+  assert.equal(aliceView.players[1].hand.length, 0);
+  assert.equal(aliceView.dealerCards[1], null);
+  assert.equal(table.act(2, 'stand'), false);
+  assert.equal(table.act(1, 'stand'), true);
+  assert.equal(table.currentTurn, 1);
+  assert.equal(table.act(2, 'stand'), true);
+  assert.equal(table.status, 'waiting');
+  assert.equal(table.round, 'finished');
+  assert.equal(table.players[0].outcome, 'loss');
+  assert.equal(table.players[1].outcome, 'win');
+  assert.equal(table.players[1].chips, 110);
 });

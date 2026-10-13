@@ -149,49 +149,33 @@
         </section>
 
         <section id="blackjackView" class="view" aria-label="Blackjack">
-          <div class="panel table-panel blackjack-layout">
-            <div class="blackjack-table">
-              <div class="hand-header">
-                <span>Croupier</span>
-                <strong id="dealerTotal">0</strong>
-              </div>
-              <div id="dealerCards" class="cards-row"></div>
-
-              <div class="hand-header">
-                <span>Joueur</span>
-                <strong id="playerTotal">0</strong>
-              </div>
-              <div id="playerCards" class="cards-row"></div>
-            </div>
-
+          <div class="panel table-panel blackjack-lobby">
             <div class="blackjack-console">
               <div class="section-heading compact">
-                <h2>Blackjack</h2>
+                <h2>Tables de blackjack</h2>
               </div>
-
-              <div class="hud-inline">
-                <div class="hud-item">
-                  <span>Solde</span>
-                  <strong id="blackjackBalance">0</strong>
-                </div>
-                <div class="hud-item">
-                  <span>Mise</span>
-                  <strong id="blackjackBet">0</strong>
-                </div>
-              </div>
-
-              <div class="stake-row">
-                <label for="blackjackStake">Mise</label>
-                <input id="blackjackStake" type="number" min="10" step="5" value="25" />
-              </div>
-
               <div class="action-row stacked">
-                <button id="blackjackDealBtn" class="primary-button" type="button">Nouvelle partie</button>
-                <button id="blackjackHitBtn" class="secondary-button" type="button">Tirer</button>
-                <button id="blackjackStandBtn" class="secondary-button" type="button">Rester</button>
+                <button id="blackjackCreateTableBtn" class="primary-button" type="button">Créer une table</button>
               </div>
+              <div id="blackjackStatus" class="status-box">Joue contre le croupier avec d’autres joueurs à la table.</div>
+              <div id="blackjackTableList" class="history-list"></div>
+            </div>
 
-              <div id="blackjackStatus" class="status-box">Choisis une mise et commence une manche.</div>
+            <div id="blackjackWaitingRoom" class="panel" style="display:none; margin-top: 1rem;">
+              <div class="section-heading compact">
+                <h3>Salle d’attente</h3>
+              </div>
+              <div id="blackjackWaitingMeta" class="status-box"></div>
+              <div id="blackjackWaitingPlayers" class="history-list"></div>
+              <div id="blackjackWaitingBoard" class="status-box" style="margin-top: 0.75rem;"></div>
+              <div class="stake-row" style="margin-top: 1rem;">
+                <label for="blackjackTableStake">Mise commune</label>
+                <input id="blackjackTableStake" type="number" min="1" step="1" value="25" />
+              </div>
+              <div class="action-row stacked" style="margin-top: 1rem;">
+                <button id="blackjackLeaveTableBtn" class="secondary-button" type="button">Quitter la table</button>
+                <button id="blackjackHostStartBtn" class="gold-button" type="button">Lancer la manche</button>
+              </div>
             </div>
           </div>
         </section>
