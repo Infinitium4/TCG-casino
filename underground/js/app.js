@@ -28,6 +28,7 @@ async function initializeApp() {
 
   await crashModule.initialize();
   bindNavigation();
+  crsModule.initialize();
   bindGlobalButtons();
   updateTopbar();
   renderHomeView();
@@ -113,6 +114,7 @@ function showView(viewName) {
     button.classList.toggle("active", button.dataset.view === viewName);
   });
   crashModule.setActive(viewName === "crash");
+  crsModule.setActive(viewName === "crs");
 }
 
 function updateTopbar() {
@@ -236,6 +238,7 @@ function renderHomeView() {
   const summary = getPlayerSummary(player);
 
   const cards = [
+    { name: 'CRS VS Manifestants', icon: '⚑', description: 'Choisis ta faction et fonde une citadelle permanente.', action: 'FONDER MA FACTION', view: 'crs' },
     {
       name: "Roulette",
       icon: "🎰",

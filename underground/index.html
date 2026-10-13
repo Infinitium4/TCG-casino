@@ -9,6 +9,8 @@
       content="Casino clandestin avec roulette, blackjack, poker, machine à sous et Crash."
     />
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="/css/bunker.css" />
+    <link rel="stylesheet" href="/css/crs.css" />
   </head>
   <body>
     <div class="page-noise"></div>
@@ -47,6 +49,7 @@
         <button class="nav-item" data-view="poker" type="button">Poker</button>
         <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
         <button class="nav-item" data-view="crash" type="button">Crash</button>
+        <button class="nav-item" data-view="crs" type="button">CRS VS Manifestants</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
@@ -447,6 +450,33 @@
           </div>
         </section>
 
+        <section id="crsView" class="view" aria-label="CRS VS Manifestants">
+          <div class="panel crs-shell">
+            <div class="section-heading"><div><p class="eyebrow">STRATÉGIE / FACTIONS</p><h2>CRS VS MANIFESTANTS</h2></div><button id="crsRefresh" class="secondary-button" type="button">Actualiser</button></div>
+            <p class="crs-intro">Deux factions. Une citadelle permanente. Le début de ton histoire.</p>
+            <p class="crs-phase-note">Phase 1 · Choix de faction et sauvegarde disponibles. Construction et combat à venir.</p>
+            <p class="crs-balance">Solde du casino <strong id="crsCasinoBalance">—</strong><span>Le choix de faction est gratuit.</span></p>
+            <div id="crsContent" aria-busy="false">
+              <p id="crsLoading" role="status">Chargement de ta faction…</p>
+              <p id="crsError" role="alert"></p>
+              <div id="crsFactionChoice" hidden>
+                <h3>Choisis ton camp</h3><p>Ce choix est permanent : il restera enregistré sur ton compte.</p>
+                <div class="crs-faction-grid">
+                  <button class="crs-faction-card" type="button" data-crs-faction="crs" aria-pressed="false"><span class="crs-emblem" aria-hidden="true">⬡</span><span class="eyebrow">ORDRE / RÉSISTANCE</span><strong>CRS / Gouvernement</strong><span>Un poste de police municipale comme point de départ.</span><span>Défenses, véhicules et unités équipées.</span><span class="crs-faction-action">Choisir cette faction →</span></button>
+                  <button class="crs-faction-card" type="button" data-crs-faction="manifestants" aria-pressed="false"><span class="crs-emblem" aria-hidden="true">⚑</span><span class="eyebrow">MOBILITÉ / COORDINATION</span><strong>Manifestants / Insurgés</strong><span>Un lycée révolté comme point de départ.</span><span>Recrutement, nombre et organisation collective.</span><span class="crs-faction-action">Choisir cette faction →</span></button>
+                </div>
+                <div id="crsSelectionConfirm" class="crs-confirm" hidden><p>Tu vas rejoindre <strong id="crsSelectedFaction"></strong>. Tu ne pourras plus changer de faction.</p><button id="crsConfirmFaction" class="primary-button" type="button" disabled>Confirmer définitivement ma faction</button></div>
+              </div>
+              <div id="crsDashboard" hidden>
+                <div class="crs-identity"><p class="eyebrow" id="crsFactionName"></p><h3>Bienvenue, <span id="crsCommander"></span>.</h3><p id="crsSpecialty"></p><small>Faction fondée le <span id="crsCreatedAt"></span> · progression sauvegardée</small></div>
+                <div class="crs-stats"><div class="stat-tile"><span>Niveau du QG</span><strong id="crsHeadquartersLevel"></strong></div><div class="stat-tile"><span>Provisions gratuites</span><strong id="crsSupplies"></strong></div><div class="stat-tile"><span>Indice initial</span><strong id="crsRating"></strong></div></div>
+                <div class="crs-overview"><div class="crs-headquarters"><span class="crs-emblem" aria-hidden="true">▥</span><p class="eyebrow">TA CITADELLE</p><h3 id="crsHeadquartersName"></h3><p>Terrain <strong id="crsGridSize"></strong></p><small id="crsBuildingPosition"></small><p class="crs-phase-note">Carte interactive disponible à la phase 2.</p></div><div><h3>Parcours de ta faction</h3><ol id="crsProgression" class="crs-progression"></ol><small>Les niveaux suivants seront débloqués avec le système d’améliorations.</small></div></div>
+                <p class="crs-phase-note">Les provisions sont une ressource du jeu. Tes jetons restent ceux du casino ; aucun achat n’est disponible à cette phase.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="leaderboardView" class="view" aria-label="Classement">
           <div class="panel">
             <div class="section-heading">
@@ -638,5 +668,6 @@
     <script src="js/slots.js"></script>
     <script src="js/admin.js"></script>
     <script src="js/app.js"></script>
+    <script src="js/crs.js"></script>
   </body>
 </html>

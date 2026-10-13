@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "lib": ["ES2020", "DOM"],
+    "strict": true,
+    "rootDir": "src/crs",
+    "outDir": "build-crs",
+    "noEmitOnError": true
+  },
+  "include": ["src/crs/**/*.ts"]
+}

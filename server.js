@@ -9,6 +9,7 @@
   const { AsyncLocalStorage } = require('async_hooks');
   const { Server } = require('socket.io');
   const SQLiteStore = require('connect-sqlite3')(session);
+  const { initializeCrsSchema, registerCrsRoutes } = require('./build-crs/server');
 
   const app = express();
   const server = http.createServer(app);
@@ -1990,6 +1991,7 @@
     if (!userColumns.some((column) => column.name === 'profile_design')) {
       await run("ALTER TABLE users ADD COLUMN profile_design TEXT DEFAULT '{}'");
     }
+    await initializeCrsSchema(run);
     if (!userColumns.some((column) => column.name === 'infinite_money')) {
       await run('ALTER TABLE users ADD COLUMN infinite_money INTEGER NOT NULL DEFAULT 0');
     }
@@ -3155,6 +3157,8 @@
       }
     });
   });
+
+  registerCrsRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction });
 
   app.patch('/api/profile', requireAuth, async (req, res) => {
     const avatar = String(req.body.avatar || '');
