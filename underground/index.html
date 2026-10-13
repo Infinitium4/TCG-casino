@@ -296,12 +296,41 @@
         <section id="slotsView" class="view" aria-label="Machine à sous">
           <div class="panel table-panel slots-layout">
             <div class="slots-machine">
-              <div class="machine-light"></div>
-              <div class="reel-strip">
-                <div class="reel" data-index="0"><span class="slot-symbol">🍒</span></div>
-                <div class="reel" data-index="1"><span class="slot-symbol">🍋</span></div>
-                <div class="reel" data-index="2"><span class="slot-symbol">🔔</span></div>
+              <div class="machine-light" aria-hidden="true">
+                <span>UNDERGROUND</span>
+                <strong>777 JACKPOT</strong>
               </div>
+              <div class="reel-strip">
+                <div class="reel" data-index="0" aria-label="Rouleau 1">
+                  <div class="reel-track reel-track--idle">
+                    <span class="reel-tile"><span class="slot-symbol">🍋</span></span>
+                    <span class="reel-tile"><span class="slot-symbol">🍒</span></span>
+                    <span class="reel-tile"><span class="slot-symbol">🔔</span></span>
+                  </div>
+                </div>
+                <div class="reel" data-index="1" aria-label="Rouleau 2">
+                  <div class="reel-track reel-track--idle">
+                    <span class="reel-tile"><span class="slot-symbol">🔔</span></span>
+                    <span class="reel-tile"><span class="slot-symbol">🍋</span></span>
+                    <span class="reel-tile"><span class="slot-symbol">🍒</span></span>
+                  </div>
+                </div>
+                <div class="reel" data-index="2" aria-label="Rouleau 3">
+                  <div class="reel-track reel-track--idle">
+                    <span class="reel-tile"><span class="slot-symbol">🃏</span></span>
+                    <span class="reel-tile"><span class="slot-symbol">🔔</span></span>
+                    <span class="reel-tile"><span class="slot-symbol">💎</span></span>
+                  </div>
+                </div>
+              </div>
+              <button id="slotsLever" class="slot-lever" type="button" aria-label="Abaisser le levier pour lancer les rouleaux" title="Abaisser le levier">
+                <span class="lever-mechanism" aria-hidden="true">
+                  <span class="lever-guide"></span>
+                  <span class="lever-arm"><span class="lever-knob"></span></span>
+                  <span class="lever-pivot"></span>
+                </span>
+                <span class="lever-label">TIRER</span>
+              </button>
             </div>
 
             <div class="slots-console">
@@ -314,16 +343,16 @@
                 <input id="slotsStake" type="number" min="10" step="5" value="25" />
               </div>
 
-              <div class="action-row">
-                <button id="slotsSpinBtn" class="gold-button" type="button">SPIN</button>
+              <div id="slotsHud" class="status-box subtle"></div>
+              <div id="slotsStatus" class="status-box slots-result" data-result="ready" aria-live="polite">
+                <strong id="slotsResultTitle">Prêt à jouer</strong>
+                <span id="slotsResultMessage">Choisis ta mise puis lance les rouleaux.</span>
               </div>
 
               <div class="payout-panel">
                 <h3>Table des gains</h3>
                 <ul id="slotsPayoutTable" class="payout-list"></ul>
               </div>
-
-              <div id="slotsStatus" class="status-box">Rien n'a encore tourné.</div>
             </div>
           </div>
         </section>
