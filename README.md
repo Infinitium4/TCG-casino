@@ -35,7 +35,7 @@ BANK_USERNAME=casino-bank
 
 ## Lancement avec Docker
 
-Prérequis : Docker Desktop sur Windows/macOS ou Docker Engine avec le plugin Compose sur Linux. Copie `.env.example` vers `.env`, puis remplace les valeurs par tes propres secrets. Génère `SESSION_SECRET` avec `openssl rand -hex 32`.
+Prérequis : Docker Desktop sur Windows/macOS ou Docker Engine avec le plugin Compose sur Linux. Copie `.env.example` vers `.env`, puis remplace les valeurs par tes propres secrets, notamment `SECOND_ADMIN_PASSWORD`. Génère `SESSION_SECRET` avec `openssl rand -hex 32`. Compose transmet les identifiants admin et banque du fichier `.env` au serveur.
 
 Sur PowerShell :
 
