@@ -7,7 +7,6 @@ const path = require('path');
 const fs = require('fs');
 const { Server } = require('socket.io');
 const SQLiteStore = require('connect-sqlite3')(session);
-const { rateLimit } = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
@@ -67,14 +66,6 @@ const sessionMiddleware = session({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de tentatives. Réessaie dans 15 minutes.' }
-});
 
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
@@ -1445,7 +1436,7 @@ app.get('/api/session', async (req, res) => {
   res.json({ authenticated: true, user });
 });
 
-app.post('/api/register', authLimiter, async (req, res) => {
+app.post('/api/register', async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
@@ -1478,7 +1469,7 @@ app.post('/api/register', authLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/login', authLimiter, async (req, res) => {
+app.post('/api/login', async (req, res) => {
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
 
