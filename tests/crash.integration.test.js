@@ -130,6 +130,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   const initial = await request('/api/crash/state', { cookie: playerCookie });
   assert.equal(initial.response.status, 200, initial.body.error);
   assert.equal(initial.body.balance, 1000);
+  assert.equal(initial.body.round, null);
 
   for (const stake of [0, -1, 1.5, 1_000_001]) {
     const invalid = await request('/api/crash/bets', {
@@ -142,7 +143,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   const tooLarge = await request('/api/crash/bets', {
     cookie: observerCookie,
     method: 'POST',
-    body: JSON.stringify({ stake: 1001, roundId: initial.body.round.id })
+    body: JSON.stringify({ stake: 1001 })
   });
   assert.equal(tooLarge.response.status, 400);
 
@@ -150,12 +151,12 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
     request('/api/crash/bets', {
       cookie: playerCookie,
       method: 'POST',
-      body: JSON.stringify({ stake: 100, roundId: initial.body.round.id })
+      body: JSON.stringify({ stake: 100 })
     }),
     request('/api/crash/bets', {
       cookie: playerCookie,
       method: 'POST',
-      body: JSON.stringify({ stake: 100, roundId: initial.body.round.id })
+      body: JSON.stringify({ stake: 100 })
     })
   ]);
   const placed = firstBetRequest.body.duplicate ? secondBetRequest : firstBetRequest;
@@ -168,7 +169,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   const changedDuplicate = await request('/api/crash/bets', {
     cookie: playerCookie,
     method: 'POST',
-    body: JSON.stringify({ stake: 101, roundId: initial.body.round.id })
+    body: JSON.stringify({ stake: 101 })
   });
   assert.equal(changedDuplicate.response.status, 409);
 
@@ -189,26 +190,17 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   assert.equal(duplicateCashout.body.duplicate, true);
   assert.equal(duplicateCashout.body.balance, withdrawn.body.balance);
 
-  const nextBettingRound = await waitForState(
-    observerCookie,
-    (state) => state.round.status === 'betting' && state.round.id !== initial.body.round.id
-  );
-  const delayedRetry = await request('/api/crash/bets', {
-    cookie: playerCookie,
-    method: 'POST',
-    body: JSON.stringify({ stake: 100, roundId: initial.body.round.id })
-  });
-  assert.equal(delayedRetry.response.status, 200, delayedRetry.body.error);
-  assert.equal(delayedRetry.body.duplicate, true);
-  assert.equal(delayedRetry.body.bet.id, placed.body.bet.id);
+  const observerBeforeBet = await request('/api/crash/state', { cookie: observerCookie });
+  assert.equal(observerBeforeBet.body.round, null);
 
   const losingBet = await request('/api/crash/bets', {
     cookie: observerCookie,
     method: 'POST',
-    body: JSON.stringify({ stake: 80, roundId: nextBettingRound.round.id })
+    body: JSON.stringify({ stake: 80 })
   });
   assert.equal(losingBet.response.status, 200, losingBet.body.error);
   assert.equal(losingBet.body.balance, 920);
+  assert.notEqual(losingBet.body.round.id, placed.body.round.id);
   const blackjackTable = await request('/api/blackjack/tables', {
     cookie: observerCookie,
     method: 'POST',
@@ -222,7 +214,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   });
   assert.equal(blockedBlackjack.response.status, 409);
   const crashed = await waitForState(observerCookie, (state) =>
-    state.round.id === nextBettingRound.round.id && state.round.status === 'crashed'
+    state.round.id === losingBet.body.round.id && state.round.status === 'crashed'
   );
   assert.equal(crashed.round.crashMultiplier, 2);
   const lateCashout = await request(`/api/crash/bets/${losingBet.body.bet.id}/cashout`, {

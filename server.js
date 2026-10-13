@@ -18,22 +18,37 @@ const HOST = process.env.HOST || (IS_PRODUCTION ? '127.0.0.1' : '0.0.0.0');
 const DATA_DIR = path.resolve(process.env.DATA_DIR || __dirname);
 const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
 const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? '' : 'underground-local-development-secret');
-const CRASH_ENABLED = process.env.CRASH_ENABLED === 'true';
+const PRIMARY_ADMIN_USERNAME = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
+const CRASH_ENABLED = process.env.CRASH_ENABLED !== 'false';
 const CRASH_TEST_MODE = process.env.NODE_ENV === 'test';
 const CRASH_BETTING_WINDOW_MS = CRASH_TEST_MODE ? 1000 : 8000;
-const CRASH_ROUND_PAUSE_MS = CRASH_TEST_MODE ? 200 : 3500;
 const CRASH_TIME_SCALE_MS = CRASH_TEST_MODE ? 500 : 12000;
 const CRASH_MAX_BET = 1_000_000;
+const GAME_DEFAULTS = {
+  roulette: { enabled: true, minBet: 1, maxBet: 1_000_000 },
+  blackjack: { enabled: true, minBet: 1, maxBet: 1_000_000 },
+  poker: { enabled: true, minBet: 1, maxBet: 1_000_000 },
+  slots: { enabled: true, minBet: 1, maxBet: 1_000_000 },
+  crash: { enabled: CRASH_ENABLED, minBet: 1, maxBet: CRASH_MAX_BET }
+};
 
 if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
   throw new Error('En production, SESSION_SECRET doit contenir au moins 32 caractères.');
 }
 
-function requireCrashEnabled(req, res, next) {
-  if (!CRASH_ENABLED) {
-    return res.status(503).json({ error: 'Le jeu Crash est temporairement désactivé.' });
+async function requireCrashEnabled(req, res, next) {
+  try {
+    const settings = await getGameSettings('crash');
+    if (settings?.enabled && !settings.maintenance) return next();
+    const activeBet = req.session.userId ? await get(
+      "SELECT id FROM crash_bets WHERE user_id = ? AND status = 'active' LIMIT 1",
+      [req.session.userId]
+    ) : null;
+    if (activeBet) return next();
+    return res.status(503).json({ error: 'Le jeu Crash est temporairement indisponible.' });
+  } catch (error) {
+    return next(error);
   }
-  next();
 }
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -61,12 +76,13 @@ const AUTH_DIR = resolveExistingPath(
   path.join(__dirname, 'TCG-casino', 'public')
 );
 
+const sessionStore = new SQLiteStore({
+  db: 'sessions.sqlite',
+  dir: DATA_DIR,
+  table: 'sessions'
+});
 const sessionMiddleware = session({
-  store: new SQLiteStore({
-    db: 'sessions.sqlite',
-    dir: DATA_DIR,
-    table: 'sessions'
-  }),
+  store: sessionStore,
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -113,9 +129,9 @@ io.use((socket, next) => {
     }
 
     databaseReady
-      .then(() => get('SELECT is_banned, is_bank FROM users WHERE id = ?', [socket.request.session.userId]))
+      .then(() => get('SELECT is_banned, is_bank, suspended_until FROM users WHERE id = ?', [socket.request.session.userId]))
       .then((user) => {
-        if (!user || user.is_banned || user.is_bank) {
+        if (!user || user.is_banned || user.is_bank || Number(user.suspended_until || 0) > Date.now()) {
           return next(new Error('AUTH_REQUIRED'));
         }
         next();
@@ -1339,14 +1355,14 @@ function emitTables(namespace, tableMap) {
   namespace.emit('tables:update', payload);
 }
 
-let currentCrashRound = null;
+const activeCrashRounds = new Map();
 let crashEngineTimer = null;
 let crashEngineBusy = false;
 
 function generateCrashMultiplier() {
   if (CRASH_TEST_MODE) return 2;
   const random = (crypto.randomBytes(4).readUInt32BE(0) + 0.5) / 0x1_0000_0000;
-  const multiplier = Math.max(1, Math.floor((99 / (1 - random)) * 100) / 100);
+  const multiplier = Math.max(1, Math.floor((0.99 / (1 - random)) * 100) / 100);
   return Math.min(multiplier, 1000);
 }
 
@@ -1397,47 +1413,64 @@ async function createCrashRound() {
     INSERT INTO crash_rounds (id, status, betting_ends_at, started_at, crash_at, crash_multiplier)
     VALUES (?, ?, ?, ?, ?, ?)
   `, [round.id, round.status, round.bettingEndsAt, round.startedAt, round.crashAt, round.crashMultiplier]);
-  currentCrashRound = round;
   return round;
 }
 
+function crashRoundFromRow(row) {
+  return {
+    id: row.id,
+    status: row.status,
+    bettingEndsAt: Number(row.betting_ends_at),
+    startedAt: Number(row.started_at),
+    crashAt: Number(row.crash_at),
+    crashMultiplier: Number(row.crash_multiplier),
+    crashedAt: row.crashed_at === null ? null : Number(row.crashed_at)
+  };
+}
+
 async function getCrashState(userId) {
-  if (!currentCrashRound) {
-    throw new Error('Le jeu Crash est en cours de démarrage.');
-  }
-  const [bets, history, user] = await Promise.all([
+  const [latestBet, history, user] = await Promise.all([
+    userId === null ? Promise.resolve(null) : get(`
+      SELECT r.id, r.status, r.betting_ends_at, r.started_at, r.crash_at,
+        r.crash_multiplier, r.crashed_at,
+        b.id AS bet_id, b.username, b.stake, b.status AS bet_status,
+        b.cashout_multiplier, b.payout
+      FROM crash_bets b
+      JOIN crash_rounds r ON r.id = b.round_id
+      WHERE b.user_id = ?
+      ORDER BY b.created_at DESC, b.rowid DESC LIMIT 1
+    `, [userId]),
     all(`
-      SELECT id, user_id, username, stake, status, cashout_multiplier, payout
-      FROM crash_bets WHERE round_id = ? ORDER BY created_at, id
-    `, [currentCrashRound.id]),
-    all(`
-      SELECT id, crash_multiplier AS multiplier, crashed_at
-      FROM crash_rounds WHERE status = 'crashed'
-      ORDER BY crashed_at DESC LIMIT 12
-    `),
+      SELECT r.id, r.crash_multiplier AS multiplier, r.crashed_at
+      FROM crash_rounds r
+      JOIN crash_bets b ON b.round_id = r.id
+      WHERE r.status = 'crashed' AND b.user_id = ?
+      ORDER BY r.crashed_at DESC LIMIT 12
+    `, [userId]),
     userId === null ? Promise.resolve(null) : get('SELECT chips FROM users WHERE id = ?', [userId])
   ]);
   if (userId !== null && !user) {
     throw crashActionError(404, 'Compte introuvable.');
   }
-  const ownBet = userId === null ? null : bets.find((bet) => Number(bet.user_id) === Number(userId));
+  const round = latestBet ? crashRoundFromRow(latestBet) : null;
+  const ownBet = latestBet ? {
+    id: latestBet.bet_id,
+    stake: Number(latestBet.stake),
+    status: latestBet.bet_status,
+    cashoutMultiplier: latestBet.cashout_multiplier === null ? null : Number(latestBet.cashout_multiplier),
+    payout: Number(latestBet.payout || 0)
+  } : null;
   return {
-    round: publicCrashRound(currentCrashRound),
+    round: round ? publicCrashRound(round) : null,
     balance: user ? Number(user.chips) : null,
-    ownBet: ownBet ? {
-      id: ownBet.id,
-      stake: Number(ownBet.stake),
-      status: ownBet.status,
-      cashoutMultiplier: ownBet.cashout_multiplier === null ? null : Number(ownBet.cashout_multiplier),
-      payout: Number(ownBet.payout || 0)
-    } : null,
-    bets: bets.map((bet) => ({
-      username: bet.username,
-      stake: Number(bet.stake),
-      status: bet.status,
-      cashoutMultiplier: bet.cashout_multiplier === null ? null : Number(bet.cashout_multiplier),
-      payout: Number(bet.payout || 0)
-    })),
+    ownBet,
+    bets: latestBet ? [{
+      username: latestBet.username,
+      stake: Number(latestBet.stake),
+      status: latestBet.bet_status,
+      cashoutMultiplier: latestBet.cashout_multiplier === null ? null : Number(latestBet.cashout_multiplier),
+      payout: Number(latestBet.payout || 0)
+    }] : [],
     history: history.map((entry) => ({
       id: entry.id,
       multiplier: Number(entry.multiplier),
@@ -1456,38 +1489,43 @@ async function broadcastCrashState() {
   }
 }
 
-async function placeCrashBet(userId, stake, roundId) {
-  if (!Number.isSafeInteger(stake) || stake <= 0 || stake > CRASH_MAX_BET) {
-    throw crashActionError(400, `La mise doit être comprise entre 1 et ${CRASH_MAX_BET} jetons.`);
-  }
-  if (typeof roundId !== 'string' || roundId.length > 36) {
-    throw crashActionError(400, 'Identifiant de manche invalide.');
+async function placeCrashBet(userId, stake) {
+  const settings = await getGameSettings('crash');
+  if (!Number.isSafeInteger(stake) || stake < settings.minBet || stake > settings.maxBet) {
+    throw crashActionError(400, `La mise doit être comprise entre ${settings.minBet} et ${settings.maxBet} jetons.`);
   }
 
-  return withDatabaseTransaction(async () => {
+  const result = await withDatabaseTransaction(async () => {
     if (isUserInActiveTable(userId)) {
       throw crashActionError(409, 'Termine ta partie en cours avant de miser au Crash.');
     }
-    const round = await get('SELECT id, status, betting_ends_at FROM crash_rounds WHERE id = ?', [roundId]);
-    if (!round) throw crashActionError(409, 'Cette manche n’existe plus.');
-    const existing = await get(
-      'SELECT id, stake, status FROM crash_bets WHERE round_id = ? AND user_id = ?',
-      [round.id, userId]
-    );
+    const existing = await get(`
+      SELECT b.id, b.stake, b.status, r.id AS round_id, r.status AS round_status,
+        r.betting_ends_at, r.started_at, r.crash_at, r.crash_multiplier, r.crashed_at
+      FROM crash_bets b
+      JOIN crash_rounds r ON r.id = b.round_id
+      WHERE b.user_id = ? AND b.status = 'active'
+      LIMIT 1
+    `, [userId]);
     if (existing) {
       if (Number(existing.stake) !== stake) {
-        throw crashActionError(409, 'Tu as déjà placé ta mise pour cette manche.');
+        throw crashActionError(409, 'Termine ta partie Crash en cours avant d’en lancer une autre.');
       }
       const user = await get('SELECT chips FROM users WHERE id = ?', [userId]);
       return {
         bet: { id: existing.id, stake: Number(existing.stake), status: existing.status },
+        round: crashRoundFromRow({
+          id: existing.round_id,
+          status: existing.round_status,
+          betting_ends_at: existing.betting_ends_at,
+          started_at: existing.started_at,
+          crash_at: existing.crash_at,
+          crash_multiplier: existing.crash_multiplier,
+          crashed_at: existing.crashed_at
+        }),
         balance: Number(user.chips),
         duplicate: true
       };
-    }
-    if (!currentCrashRound || currentCrashRound.id !== round.id ||
-        round.status !== 'betting' || Date.now() >= Number(round.betting_ends_at)) {
-      throw crashActionError(409, 'Les mises pour cette manche sont fermées.');
     }
     const user = await get('SELECT username, chips FROM users WHERE id = ?', [userId]);
     if (!user) {
@@ -1500,6 +1538,7 @@ async function placeCrashBet(userId, stake, roundId) {
     if (debit.changes !== 1) {
       throw crashActionError(400, 'Solde insuffisant pour cette mise.');
     }
+    const round = await createCrashRound();
     const bet = {
       id: crypto.randomUUID(),
       stake,
@@ -1509,8 +1548,12 @@ async function placeCrashBet(userId, stake, roundId) {
       INSERT INTO crash_bets (id, round_id, user_id, username, stake, status)
       VALUES (?, ?, ?, ?, ?, 'active')
     `, [bet.id, round.id, userId, user.username, stake]);
-    return { bet, balance: Number(user.chips) - stake, duplicate: false };
+    return { bet, round, balance: Number(user.chips) - stake, duplicate: false };
   });
+  if (!result.duplicate) {
+    activeCrashRounds.set(result.round.id, result.round);
+  }
+  return { ...result, round: publicCrashRound(result.round) };
 }
 
 async function cashoutCrashBet(userId, betId) {
@@ -1613,28 +1656,22 @@ async function finishCrashRound(round) {
 }
 
 async function initializeCrashGame() {
-  const savedRound = await get('SELECT * FROM crash_rounds ORDER BY created_at DESC, rowid DESC LIMIT 1');
-  if (!savedRound) {
-    await createCrashRound();
-  } else {
-    currentCrashRound = {
-      id: savedRound.id,
-      status: savedRound.status,
-      bettingEndsAt: Number(savedRound.betting_ends_at),
-      startedAt: Number(savedRound.started_at),
-      crashAt: Number(savedRound.crash_at),
-      crashMultiplier: Number(savedRound.crash_multiplier),
-      crashedAt: savedRound.crashed_at === null ? null : Number(savedRound.crashed_at)
-    };
+  const savedRounds = await all(`
+    SELECT DISTINCT r.* FROM crash_rounds r
+    JOIN crash_bets b ON b.round_id = r.id
+    WHERE r.status IN ('betting', 'running')
+  `);
+  for (const savedRound of savedRounds) {
+    const round = crashRoundFromRow(savedRound);
     const now = Date.now();
-    if (currentCrashRound.status === 'crashed' &&
-        now >= Number(currentCrashRound.crashedAt) + CRASH_ROUND_PAUSE_MS) {
-      await createCrashRound();
-    } else if (currentCrashRound.status === 'betting' && now >= currentCrashRound.startedAt) {
-      await run("UPDATE crash_rounds SET status = 'running' WHERE id = ? AND status = 'betting'", [currentCrashRound.id]);
-      currentCrashRound.status = 'running';
-    } else if (currentCrashRound.status === 'running' && now >= currentCrashRound.crashAt) {
-      await finishCrashRound(currentCrashRound);
+    if (round.status === 'betting' && now >= round.startedAt) {
+      await run("UPDATE crash_rounds SET status = 'running' WHERE id = ? AND status = 'betting'", [round.id]);
+      round.status = 'running';
+    }
+    if (round.status === 'running' && now >= round.crashAt) {
+      await finishCrashRound(round);
+    } else {
+      activeCrashRounds.set(round.id, round);
     }
   }
 
@@ -1645,19 +1682,18 @@ async function initializeCrashGame() {
       (async () => {
         try {
           const now = Date.now();
-          if (currentCrashRound.status === 'betting' && now >= currentCrashRound.startedAt) {
-            const started = await run(
-              "UPDATE crash_rounds SET status = 'running' WHERE id = ? AND status = 'betting'",
-              [currentCrashRound.id]
-            );
-            if (started.changes) currentCrashRound.status = 'running';
-          }
-          if (currentCrashRound.status === 'running' && now >= currentCrashRound.crashAt) {
-            await finishCrashRound(currentCrashRound);
-          }
-          if (currentCrashRound.status === 'crashed' &&
-              now >= Number(currentCrashRound.crashedAt) + CRASH_ROUND_PAUSE_MS) {
-            await createCrashRound();
+          for (const round of activeCrashRounds.values()) {
+            if (round.status === 'betting' && now >= round.startedAt) {
+              const started = await run(
+                "UPDATE crash_rounds SET status = 'running' WHERE id = ? AND status = 'betting'",
+                [round.id]
+              );
+              if (started.changes) round.status = 'running';
+            }
+            if (round.status === 'running' && now >= round.crashAt) {
+              await finishCrashRound(round);
+              activeCrashRounds.delete(round.id);
+            }
           }
           await broadcastCrashState();
         } catch (error) {
@@ -1847,6 +1883,7 @@ async function initDatabase() {
       chips INTEGER DEFAULT 1000,
       is_admin INTEGER NOT NULL DEFAULT 0,
       is_banned INTEGER NOT NULL DEFAULT 0,
+      suspended_until INTEGER,
       is_bank INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
@@ -1858,6 +1895,9 @@ async function initDatabase() {
   }
   if (!userColumns.some((column) => column.name === 'is_banned')) {
     await run('ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!userColumns.some((column) => column.name === 'suspended_until')) {
+    await run('ALTER TABLE users ADD COLUMN suspended_until INTEGER');
   }
   if (!userColumns.some((column) => column.name === 'is_bank')) {
     await run('ALTER TABLE users ADD COLUMN is_bank INTEGER NOT NULL DEFAULT 0');
@@ -1924,6 +1964,34 @@ async function initDatabase() {
   `);
 
   await run(`
+    CREATE TABLE IF NOT EXISTS casino_game_settings (
+      game TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      maintenance INTEGER NOT NULL DEFAULT 0,
+      min_bet INTEGER NOT NULL DEFAULT 1,
+      max_bet INTEGER NOT NULL DEFAULT 1000000,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await run(`
+    CREATE TABLE IF NOT EXISTS casino_platform_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  for (const [game, defaults] of Object.entries(GAME_DEFAULTS)) {
+    await run(`
+      INSERT OR IGNORE INTO casino_game_settings (game, enabled, min_bet, max_bet)
+      VALUES (?, ?, ?, ?)
+    `, [game, defaults.enabled ? 1 : 0, defaults.minBet, defaults.maxBet]);
+  }
+  await run(`
+    INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
+    VALUES ('betting_paused', '0')
+  `);
+
+  await run(`
     CREATE TABLE IF NOT EXISTS bank_ledger (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       player_user_id INTEGER,
@@ -1975,7 +2043,7 @@ async function initDatabase() {
     });
   }
 
-  const adminUsername = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
+  const adminUsername = PRIMARY_ADMIN_USERNAME;
   const secondAdminUsername = process.env.SECOND_ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin2');
   const bankUsername = process.env.BANK_USERNAME || 'casino-bank';
   if (adminUsername && secondAdminUsername && adminUsername.toLowerCase() === secondAdminUsername.toLowerCase()) {
@@ -2060,7 +2128,7 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Connexion requise.' });
   }
   try {
-    const user = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
+    const user = await get('SELECT is_banned, is_bank, suspended_until FROM users WHERE id = ?', [req.session.userId]);
     if (!user) {
       return res.status(401).json({ error: 'Compte introuvable.' });
     }
@@ -2069,6 +2137,9 @@ async function requireAuth(req, res, next) {
     }
     if (user.is_banned) {
       return res.status(403).json({ error: 'Ce compte est banni.' });
+    }
+    if (Number(user.suspended_until || 0) > Date.now()) {
+      return res.status(403).json({ error: 'Ce compte est temporairement suspendu.' });
     }
     next();
   } catch (error) {
@@ -2082,16 +2153,90 @@ async function requireAdmin(req, res, next) {
     return res.status(403).json({ error: 'Quitte la vue support avant de gérer les comptes.' });
   }
   try {
-    const admin = await get('SELECT is_admin FROM users WHERE id = ?', [req.session.userId]);
+    const admin = await get('SELECT is_admin, username FROM users WHERE id = ?', [req.session.userId]);
     if (!admin?.is_admin) {
       return res.status(403).json({ error: 'Accès administrateur requis.' });
     }
     req.adminUserId = Number(req.session.userId);
+    req.isPrimaryAdmin = admin.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase();
     next();
   } catch (error) {
     console.error('Erreur de vérification des droits administrateur :', error);
     return res.status(500).json({ error: 'Vérification des droits impossible.' });
   }
+}
+
+function requirePrimaryAdmin(req, res, next) {
+  if (!req.isPrimaryAdmin) {
+    return res.status(403).json({ error: 'Cette action est réservée à l’administrateur principal.' });
+  }
+  next();
+}
+
+async function getGameSettings(game) {
+  const row = await get('SELECT * FROM casino_game_settings WHERE game = ?', [game]);
+  return row ? {
+    game: row.game,
+    enabled: Boolean(row.enabled),
+    maintenance: Boolean(row.maintenance),
+    minBet: Number(row.min_bet),
+    maxBet: Number(row.max_bet),
+    updatedAt: row.updated_at
+  } : null;
+}
+
+function requireBettingAvailable(game) {
+  return async (req, res, next) => {
+    try {
+      const settings = await getGameSettings(game);
+      if (!settings?.enabled || settings.maintenance) {
+        return res.status(503).json({ error: `Le jeu ${game} est désactivé ou en maintenance.` });
+      }
+      if (await isBettingPaused()) {
+        return res.status(503).json({ error: 'Les mises sont temporairement suspendues.' });
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+async function isBettingPaused() {
+  const row = await get(
+    "SELECT setting_value FROM casino_platform_settings WHERE setting_key = 'betting_paused'"
+  );
+  return row?.setting_value === '1';
+}
+
+async function recordAdminAction(adminId, action, reason, target = {}) {
+  await run(`
+    INSERT INTO admin_audit (admin_user_id, target_user_id, target_username, action, amount, reason)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [adminId, target.userId || null, target.username || '', action, target.amount ?? null, reason]);
+}
+
+async function invalidateUserSessions(userId) {
+  const sessions = await new Promise((resolve, reject) => {
+    sessionStore.db.all('SELECT sid, sess FROM sessions WHERE expired > ?', [Date.now()], (error, rows) => {
+      if (error) return reject(error);
+      resolve(rows);
+    });
+  });
+  const sessionIds = sessions.flatMap((row) => {
+    try {
+      const data = JSON.parse(row.sess);
+      return Number(data.userId) === Number(userId) || Number(data.adminUserId) === Number(userId)
+        ? [row.sid]
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  await Promise.all(sessionIds.map((sessionId) => new Promise((resolve, reject) => {
+    sessionStore.destroy(sessionId, (error) => error ? reject(error) : resolve());
+  })));
+  return sessionIds.length;
 }
 
 async function requireSupportAdmin(req, res, next) {
@@ -2125,8 +2270,8 @@ app.use('/auth-assets', express.static(AUTH_DIR));
 
 app.get('/', handleAsync(async (req, res) => {
   if (req.session.userId) {
-    const user = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
-    if (user && !user.is_banned && !user.is_bank) {
+    const user = await get('SELECT is_banned, is_bank, suspended_until FROM users WHERE id = ?', [req.session.userId]);
+    if (user && !user.is_banned && !user.is_bank && Number(user.suspended_until || 0) <= Date.now()) {
       return res.sendFile(path.join(GAME_DIR, 'index.html'));
     }
   }
@@ -2137,8 +2282,8 @@ app.get('/game', handleAsync(async (req, res) => {
   if (!req.session.userId) {
     return res.redirect('/');
   }
-  const user = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
-  if (!user || user.is_banned || user.is_bank) {
+  const user = await get('SELECT is_banned, is_bank, suspended_until FROM users WHERE id = ?', [req.session.userId]);
+  if (!user || user.is_banned || user.is_bank || Number(user.suspended_until || 0) > Date.now()) {
     return res.redirect('/');
   }
   return res.sendFile(path.join(GAME_DIR, 'index.html'));
@@ -2173,8 +2318,8 @@ app.get('/api/session', async (req, res) => {
     return res.json({ authenticated: false });
   }
 
-  const account = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
-  if (!account || account.is_banned || account.is_bank) {
+  const account = await get('SELECT is_banned, is_bank, suspended_until FROM users WHERE id = ?', [req.session.userId]);
+  if (!account || account.is_banned || account.is_bank || Number(account.suspended_until || 0) > Date.now()) {
     return res.json({ authenticated: false });
   }
   const user = await getUserById(req.session.userId);
@@ -2237,6 +2382,9 @@ app.post('/api/login', async (req, res) => {
     if (user.is_banned) {
       return res.status(403).json({ error: 'Ce compte est banni.' });
     }
+    if (Number(user.suspended_until || 0) > Date.now()) {
+      return res.status(403).json({ error: 'Ce compte est temporairement suspendu.' });
+    }
     if (user.is_bank) {
       return res.status(403).json({ error: 'Le compte banque est interne et ne peut pas se connecter.' });
     }
@@ -2271,6 +2419,212 @@ app.post('/api/logout', (req, res) => {
   });
 });
 
+app.get('/api/game-settings', handleAsync(async (req, res) => {
+  const rows = await all('SELECT game, enabled, maintenance, min_bet, max_bet FROM casino_game_settings');
+  res.json({
+    games: Object.fromEntries(rows.map((row) => [row.game, {
+      enabled: Boolean(row.enabled),
+      maintenance: Boolean(row.maintenance),
+      minBet: Number(row.min_bet),
+      maxBet: Number(row.max_bet)
+    }])),
+    bettingPaused: await isBettingPaused()
+  });
+}));
+
+app.get('/api/admin/overview', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const connected = new Map();
+  for (const socket of io.sockets.sockets.values()) {
+    const user = socket.data.user;
+    if (!user?.id || user.is_bank) continue;
+    connected.set(Number(user.id), { id: Number(user.id), username: user.username, game: null });
+  }
+
+  const activeGames = [];
+  for (const table of blackjackTables.values()) {
+    if (table.status !== 'in-progress') continue;
+    const players = table.players.map((player) => ({ id: Number(player.id), username: player.username, stake: Number(table.betAmount || 0) }));
+    activeGames.push({ game: 'blackjack', id: table.id, name: table.name, players, wagered: players.reduce((sum, player) => sum + player.stake, 0) });
+    for (const player of players) if (connected.has(player.id)) connected.get(player.id).game = 'blackjack';
+  }
+  for (const table of pokerTables.values()) {
+    if (table.status !== 'in-progress') continue;
+    const players = table.players.map((player) => ({ id: Number(player.id), username: player.username, stake: Number(player.totalContribution || 0) }));
+    activeGames.push({ game: 'poker', id: table.id, name: table.name, players, wagered: Number(table.pot || 0) });
+    for (const player of players) if (connected.has(player.id)) connected.get(player.id).game = 'poker';
+  }
+  const crashBets = await all(`
+    SELECT b.user_id AS id, b.username, b.stake, r.id AS round_id, r.status, r.started_at
+    FROM crash_bets b JOIN crash_rounds r ON r.id = b.round_id
+    WHERE b.status = 'active'
+  `);
+  for (const bet of crashBets) {
+    const roundId = String(bet.round_id);
+    let game = activeGames.find((entry) => entry.game === 'crash' && entry.id === roundId);
+    if (!game) {
+      game = { game: 'crash', id: roundId, name: 'Crash', status: bet.status, players: [], wagered: 0 };
+      activeGames.push(game);
+    }
+    game.players.push({ id: Number(bet.id), username: bet.username, stake: Number(bet.stake) });
+    game.wagered += Number(bet.stake);
+    if (connected.has(Number(bet.id))) connected.get(Number(bet.id)).game = 'crash';
+  }
+
+  const stats = await get(`
+    SELECT
+      (SELECT COUNT(*) FROM users WHERE is_admin = 0 AND is_bank = 0) AS players,
+      (SELECT COALESCE(SUM(chips), 0) FROM users WHERE is_admin = 0 AND is_bank = 0) AS chips,
+      (SELECT COUNT(*) FROM game_history) AS games,
+      (SELECT COALESCE(SUM(bet), 0) FROM game_history) AS wagered,
+      (SELECT COALESCE(SUM(payout), 0) FROM game_history) AS payouts,
+      (SELECT COALESCE(SUM(net), 0) FROM game_history) AS net
+  `);
+  res.json({
+    onlinePlayers: [...connected.values()],
+    activeGames,
+    stats: {
+      players: Number(stats.players),
+      online: connected.size,
+      chips: Number(stats.chips),
+      games: Number(stats.games),
+      wagered: Number(stats.wagered),
+      payouts: Number(stats.payouts),
+      net: Number(stats.net)
+    }
+  });
+}));
+
+app.get('/api/admin/audit', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 50, 1), 100);
+  const entries = await all(`
+    SELECT a.id, a.action, a.amount, a.reason, a.created_at,
+      admin.username AS admin_username,
+      COALESCE(target.username, a.target_username) AS target_username
+    FROM admin_audit a
+    JOIN users admin ON admin.id = a.admin_user_id
+    LEFT JOIN users target ON target.id = a.target_user_id
+    ORDER BY a.id DESC LIMIT ?
+  `, [limit]);
+  res.json({ entries });
+}));
+
+app.get('/api/admin/settings', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const rows = await all('SELECT game, enabled, maintenance, min_bet, max_bet, updated_at FROM casino_game_settings ORDER BY game');
+  res.json({
+    games: rows.map((row) => ({
+      game: row.game,
+      enabled: Boolean(row.enabled),
+      maintenance: Boolean(row.maintenance),
+      minBet: Number(row.min_bet),
+      maxBet: Number(row.max_bet),
+      updatedAt: row.updated_at
+    })),
+    bettingPaused: await isBettingPaused(),
+    canManage: req.isPrimaryAdmin
+  });
+}));
+
+app.post('/api/admin/accounts/:id/disconnect', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const targetId = Number(req.params.id);
+  const target = await get('SELECT id, username, is_admin, is_bank FROM users WHERE id = ?', [targetId]);
+  if (!target) return res.status(404).json({ error: 'Compte introuvable.' });
+  if (target.is_bank || (target.is_admin && !req.isPrimaryAdmin)) {
+    return res.status(403).json({ error: 'Seul l’administrateur principal peut déconnecter un autre admin.' });
+  }
+  if (target.id === req.adminUserId) return res.status(400).json({ error: 'Tu ne peux pas déconnecter ta propre session.' });
+  const sockets = [...io.sockets.sockets.values()].filter((socket) => Number(socket.data.user?.id) === targetId);
+  const sessions = await invalidateUserSessions(targetId);
+  for (const socket of sockets) socket.disconnect(true);
+  await recordAdminAction(req.adminUserId, 'disconnect', 'Déconnexion forcée par le panneau admin', { userId: targetId, username: target.username });
+  res.json({ ok: true, disconnected: sockets.length, sessions });
+}));
+
+app.post('/api/admin/accounts/:id/permissions', requireAuth, requireAdmin, requirePrimaryAdmin, handleAsync(async (req, res) => {
+  const targetId = Number(req.params.id);
+  const isAdmin = req.body?.isAdmin;
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0 || typeof isAdmin !== 'boolean' || !reason) {
+    return res.status(400).json({ error: 'Compte, permission ou motif invalide.' });
+  }
+  if (targetId === req.adminUserId) return res.status(400).json({ error: 'Le rôle de l’administrateur principal ne peut pas être modifié ici.' });
+  const target = await get('SELECT id, username, is_admin, is_bank FROM users WHERE id = ?', [targetId]);
+  if (!target) return res.status(404).json({ error: 'Compte introuvable.' });
+  if (target.is_bank || target.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
+    return res.status(400).json({ error: 'Ce compte ne peut pas être modifié.' });
+  }
+  if (Boolean(target.is_admin) === isAdmin) return res.status(400).json({ error: 'Ce rôle est déjà configuré ainsi.' });
+  await run('UPDATE users SET is_admin = ? WHERE id = ?', [isAdmin ? 1 : 0, targetId]);
+  await recordAdminAction(req.adminUserId, isAdmin ? 'admin_promoted' : 'admin_demoted', reason, { userId: targetId, username: target.username });
+  if (!isAdmin) {
+    await invalidateUserSessions(targetId);
+    for (const socket of io.sockets.sockets.values()) {
+      if (Number(socket.data.user?.id) === targetId) socket.disconnect(true);
+    }
+  }
+  res.json({ ok: true, isAdmin });
+}));
+
+app.post('/api/admin/chips/distribute', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const amount = Number(req.body?.amount);
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000 || !reason) {
+    return res.status(400).json({ error: 'Montant ou motif invalide.' });
+  }
+  const outcome = await withDatabaseTransaction(async () => {
+    const players = await all('SELECT id, username, chips FROM users WHERE is_admin = 0 AND is_bank = 0');
+    if (players.some((player) => Number(player.chips) + amount > 2_147_483_647)) {
+      return { error: 'La distribution dépasserait le solde maximal d’un joueur.' };
+    }
+    for (const player of players) {
+      await run('UPDATE users SET chips = chips + ? WHERE id = ?', [amount, player.id]);
+      await recordAdminAction(req.adminUserId, 'token_distribution', reason, {
+        userId: player.id,
+        username: player.username,
+        amount
+      });
+    }
+    return { recipients: players.length };
+  });
+  if (outcome.error) return res.status(400).json({ error: outcome.error });
+  res.json({ ok: true, amount, recipients: outcome.recipients });
+}));
+
+app.patch('/api/admin/games/:game', requireAuth, requireAdmin, requirePrimaryAdmin, handleAsync(async (req, res) => {
+  const game = String(req.params.game);
+  if (!Object.hasOwn(GAME_DEFAULTS, game)) return res.status(404).json({ error: 'Jeu inconnu.' });
+  const current = await getGameSettings(game);
+  const enabled = req.body?.enabled ?? current.enabled;
+  const maintenance = req.body?.maintenance ?? current.maintenance;
+  const minBet = req.body?.minBet ?? current.minBet;
+  const maxBet = req.body?.maxBet ?? current.maxBet;
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (typeof enabled !== 'boolean' || typeof maintenance !== 'boolean' ||
+      !Number.isSafeInteger(minBet) || !Number.isSafeInteger(maxBet) ||
+      minBet < 1 || maxBet < minBet || maxBet > 2_147_483_647 || !reason) {
+    return res.status(400).json({ error: 'Réglages ou motif invalides.' });
+  }
+  await run(`
+    UPDATE casino_game_settings
+    SET enabled = ?, maintenance = ?, min_bet = ?, max_bet = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE game = ?
+  `, [enabled ? 1 : 0, maintenance ? 1 : 0, minBet, maxBet, game]);
+  await recordAdminAction(req.adminUserId, 'game_settings', `${game}: ${reason}`);
+  res.json({ ok: true, settings: await getGameSettings(game) });
+}));
+
+app.post('/api/admin/security/pause-bets', requireAuth, requireAdmin, requirePrimaryAdmin, handleAsync(async (req, res) => {
+  const paused = req.body?.paused;
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (typeof paused !== 'boolean' || !reason) return res.status(400).json({ error: 'Statut ou motif invalide.' });
+  await run(`
+    INSERT INTO casino_platform_settings (setting_key, setting_value, updated_at)
+    VALUES ('betting_paused', ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP
+  `, [paused ? '1' : '0']);
+  await recordAdminAction(req.adminUserId, paused ? 'emergency_pause' : 'emergency_resume', reason);
+  res.json({ ok: true, bettingPaused: paused });
+}));
+
 app.get('/api/admin/accounts', requireAuth, requireAdmin, handleAsync(async (req, res) => {
   const search = String(req.query.search || '').trim().slice(0, 40);
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 25, 1), 50);
@@ -2278,7 +2632,7 @@ app.get('/api/admin/accounts', requireAuth, requireAdmin, handleAsync(async (req
   const searchPattern = `%${search}%`;
   const accounts = await all(`
     SELECT u.id, u.username, u.avatar, u.chips, u.created_at,
-      u.is_admin, u.is_banned, u.is_bank, COUNT(h.id) AS games_played,
+      u.is_admin, u.is_banned, u.suspended_until, u.is_bank, COUNT(h.id) AS games_played,
       COALESCE(SUM(h.net), 0) AS net_total
     FROM users u
     LEFT JOIN game_history h ON h.user_id = u.id
@@ -2288,7 +2642,20 @@ app.get('/api/admin/accounts', requireAuth, requireAdmin, handleAsync(async (req
     LIMIT ? OFFSET ?
   `, [searchPattern, limit, offset]);
   const count = await get('SELECT COUNT(*) AS total FROM users WHERE username LIKE ?', [searchPattern]);
-  res.json({ accounts, total: Number(count.total), limit, offset });
+  const onlineIds = new Set([...io.sockets.sockets.values()]
+    .map((socket) => Number(socket.data.user?.id))
+    .filter(Number.isFinite));
+  res.json({
+    accounts: accounts.map((account) => ({
+      ...account,
+      is_online: onlineIds.has(Number(account.id)),
+      is_suspended: Number(account.suspended_until || 0) > Date.now(),
+      is_primary_admin: account.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()
+    })),
+    total: Number(count.total),
+    limit,
+    offset
+  });
 }));
 
 app.get('/api/admin/bank', requireAuth, requireAdmin, handleAsync(async (req, res) => {
@@ -2320,7 +2687,7 @@ app.get('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(async 
     return res.status(400).json({ error: 'Identifiant de compte invalide.' });
   }
   const user = await get(`
-    SELECT id, username, avatar, chips, is_admin, is_banned, is_bank, created_at
+    SELECT id, username, avatar, chips, is_admin, is_banned, suspended_until, is_bank, created_at
     FROM users WHERE id = ?
   `, [targetId]);
   if (!user) {
@@ -2357,8 +2724,9 @@ app.post('/api/admin/accounts/:id/chips', requireAuth, requireAdmin, async (req,
     const outcome = await withDatabaseTransaction(async () => {
       const target = await get('SELECT id, username, chips, is_admin, is_bank FROM users WHERE id = ?', [targetId]);
       if (!target) return { status: 404, error: 'Compte introuvable.' };
-      if (target.is_admin || target.is_bank) {
-        return { status: 400, error: 'Le solde d’un compte protégé ne peut pas être modifié ici.' };
+      if (target.is_bank || (target.is_admin && !req.isPrimaryAdmin) ||
+          target.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
+        return { status: 400, error: 'Le solde de ce compte protégé ne peut pas être modifié ici.' };
       }
       const newBalance = Number(target.chips) + delta;
       if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > 2_147_483_647) {
@@ -2397,8 +2765,9 @@ app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, r
     const outcome = await withDatabaseTransaction(async () => {
       const target = await get('SELECT id, username, is_admin, is_bank, is_banned FROM users WHERE id = ?', [targetId]);
       if (!target) return { status: 404, error: 'Compte introuvable.' };
-      if (target.is_admin || target.is_bank) {
-        return { status: 400, error: 'Un compte administrateur ou le compte banque ne peut pas être banni ici.' };
+      if (target.is_bank || (target.is_admin && !req.isPrimaryAdmin) ||
+          target.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
+        return { status: 400, error: 'Ce compte protégé ne peut pas être banni ici.' };
       }
       if (Boolean(target.is_banned) === banned) {
         return { status: 400, error: banned ? 'Ce compte est déjà banni.' : 'Ce compte n’est pas banni.' };
@@ -2419,6 +2788,7 @@ app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, r
   }
 
   if (banned) {
+    await invalidateUserSessions(targetId);
     for (const socket of io.sockets.sockets.values()) {
       if (Number(socket.data.user?.id) === targetId) {
         socket.disconnect(true);
@@ -2427,6 +2797,37 @@ app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, r
   }
   return res.json({ ok: true, banned });
 });
+
+app.post('/api/admin/accounts/:id/suspend', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const targetId = Number(req.params.id);
+  const minutes = Number(req.body?.minutes);
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0 || !Number.isSafeInteger(minutes) ||
+      minutes < 0 || minutes > 10_080 || !reason) {
+    return res.status(400).json({ error: 'Durée ou motif de suspension invalide.' });
+  }
+  if (targetId === req.adminUserId) return res.status(400).json({ error: 'Tu ne peux pas suspendre ta propre session.' });
+  const target = await get('SELECT id, username, is_admin, is_bank FROM users WHERE id = ?', [targetId]);
+  if (!target) return res.status(404).json({ error: 'Compte introuvable.' });
+  if (target.is_bank || (target.is_admin && !req.isPrimaryAdmin) ||
+      target.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
+    return res.status(403).json({ error: 'Tu ne peux pas suspendre ce compte.' });
+  }
+  const suspendedUntil = minutes === 0 ? null : Date.now() + minutes * 60_000;
+  await run('UPDATE users SET suspended_until = ? WHERE id = ?', [suspendedUntil, targetId]);
+  await recordAdminAction(req.adminUserId, minutes === 0 ? 'suspension_lifted' : 'suspension', reason, {
+    userId: targetId,
+    username: target.username,
+    amount: minutes
+  });
+  if (minutes > 0) {
+    await invalidateUserSessions(targetId);
+    for (const socket of io.sockets.sockets.values()) {
+      if (Number(socket.data.user?.id) === targetId) socket.disconnect(true);
+    }
+  }
+  res.json({ ok: true, suspendedUntil });
+}));
 
 app.delete('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(async (req, res) => {
   const targetId = Number(req.params.id);
@@ -2442,8 +2843,9 @@ app.delete('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(asy
   if (!target) {
     return res.status(404).json({ error: 'Compte introuvable.' });
   }
-  if (target.is_admin || target.is_bank) {
-    return res.status(400).json({ error: 'Un compte administrateur ou le compte banque ne peut pas être supprimé ici.' });
+  if (target.is_bank || (target.is_admin && !req.isPrimaryAdmin) ||
+      target.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
+    return res.status(400).json({ error: 'Ce compte protégé ne peut pas être supprimé ici.' });
   }
   const activeBlackjack = [...blackjackTables.values()].some((table) =>
     table.status === 'in-progress' && table.players.some((player) => player.id === targetId)
@@ -2467,8 +2869,9 @@ app.delete('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(asy
         [targetId]
       );
       if (!currentTarget) return { status: 404, error: 'Compte introuvable.' };
-      if (currentTarget.is_admin || currentTarget.is_bank) {
-        return { status: 400, error: 'Un compte administrateur ou le compte banque ne peut pas être supprimé ici.' };
+      if (currentTarget.is_bank || (currentTarget.is_admin && !req.isPrimaryAdmin) ||
+          currentTarget.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
+        return { status: 400, error: 'Ce compte protégé ne peut pas être supprimé ici.' };
       }
       const activeCrashBetInTransaction = await get(
         "SELECT id FROM crash_bets WHERE user_id = ? AND status = 'active' LIMIT 1",
@@ -2515,6 +2918,7 @@ app.delete('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(asy
       io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table));
     }
   }
+  await invalidateUserSessions(targetId);
   for (const socket of io.sockets.sockets.values()) {
     if (Number(socket.data.user?.id) === targetId) {
       socket.disconnect(true);
@@ -2532,7 +2936,8 @@ app.post('/api/admin/support/:id/start', requireAuth, requireAdmin, handleAsync(
   if (!target) {
     return res.status(404).json({ error: 'Compte introuvable.' });
   }
-  if (target.is_admin || target.is_bank || target.is_banned) {
+  if ((target.is_admin && !req.isPrimaryAdmin) || target.is_bank || target.is_banned ||
+      target.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
     return res.status(400).json({ error: 'La vue support est indisponible pour ce compte.' });
   }
   await run(`
@@ -2568,7 +2973,7 @@ app.post('/api/admin/support/end', requireSupportAdmin, handleAsync(async (req, 
 app.get('/api/me', requireAuth, async (req, res) => {
   const user = await getUserById(req.session.userId);
   const adminUserId = req.session.adminUserId || req.session.userId;
-  const admin = await get('SELECT is_admin FROM users WHERE id = ?', [adminUserId]);
+  const admin = await get('SELECT is_admin, username FROM users WHERE id = ?', [adminUserId]);
   const stats = await get(`
     SELECT COUNT(*) AS gamesPlayed,
       SUM(CASE WHEN net > 0 THEN 1 ELSE 0 END) AS wins,
@@ -2579,6 +2984,7 @@ app.get('/api/me', requireAuth, async (req, res) => {
   res.json({
     user,
     isAdmin: Boolean(admin?.is_admin),
+    isPrimaryAdmin: Boolean(admin?.is_admin && admin.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()),
     supportMode: Boolean(req.session.supportOriginalUserId),
     stats: {
       gamesPlayed: Number(stats.gamesPlayed || 0),
@@ -2599,23 +3005,28 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
   res.json({ ok: true, user: await getUserById(req.session.userId) });
 });
 
-app.get('/api/crash/status', (req, res) => {
-  res.json({ enabled: CRASH_ENABLED });
-});
+app.get('/api/crash/status', handleAsync(async (req, res) => {
+  const settings = await getGameSettings('crash');
+  const activeBet = req.session.userId ? await get(
+    "SELECT id FROM crash_bets WHERE user_id = ? AND status = 'active' LIMIT 1",
+    [req.session.userId]
+  ) : null;
+  res.json({ enabled: Boolean((settings?.enabled && !settings.maintenance) || activeBet) });
+}));
 
 app.get('/api/crash/state', requireAuth, requireCrashEnabled, handleAsync(async (req, res) => {
   await crashReady;
   res.json(await getCrashState(req.session.userId));
 }));
 
-app.post('/api/crash/bets', requireAuth, requireCrashEnabled, handleAsync(async (req, res) => {
+app.post('/api/crash/bets', requireAuth, requireCrashEnabled, requireBettingAvailable('crash'), handleAsync(async (req, res) => {
   await crashReady;
   try {
     const stake = req.body?.stake;
     if (typeof stake !== 'number') {
       throw crashActionError(400, 'La mise doit être un nombre entier.');
     }
-    const result = await placeCrashBet(req.session.userId, stake, req.body?.roundId);
+    const result = await placeCrashBet(req.session.userId, stake);
     await broadcastCrashState();
     return res.json({ ok: true, ...result });
   } catch (error) {
@@ -2655,7 +3066,8 @@ app.get('/api/leaderboard', async (req, res) => {
       (SELECT COUNT(*) FROM game_history gh WHERE gh.user_id = u.id) AS games_played,
       (SELECT MAX(payout) FROM game_history gh WHERE gh.user_id = u.id) AS best_win
     FROM users u
-    ORDER BY u.chips DESC, wins DESC
+    WHERE u.is_admin = 0 AND u.is_bank = 0
+    ORDER BY u.chips DESC, u.id ASC
     LIMIT 10
   `);
   res.json({ leaderboard: rows });
@@ -2692,7 +3104,7 @@ app.get('/api/poker/tables/:id', requireAuth, (req, res) => {
   res.json({ table: tableToPublicState(table, req.session.userId) });
 });
 
-app.post('/api/blackjack/tables', requireAuth, async (req, res) => {
+app.post('/api/blackjack/tables', requireAuth, requireBettingAvailable('blackjack'), async (req, res) => {
   const { tableName } = req.body || {};
   const table = createBlackjackTable();
   table.name = tableName || `Table ${table.id}`;
@@ -2704,7 +3116,7 @@ app.post('/api/blackjack/tables', requireAuth, async (req, res) => {
   res.status(201).json({ table: tableToPublicState(table, req.session.userId) });
 });
 
-app.post('/api/poker/tables', requireAuth, async (req, res) => {
+app.post('/api/poker/tables', requireAuth, requireBettingAvailable('poker'), async (req, res) => {
   const { tableName } = req.body || {};
   const table = createPokerTable();
   table.name = tableName || `Table ${table.id}`;
@@ -2716,7 +3128,7 @@ app.post('/api/poker/tables', requireAuth, async (req, res) => {
   res.status(201).json({ table: tableToPublicState(table, req.session.userId) });
 });
 
-app.post('/api/blackjack/tables/:id/join', requireAuth, async (req, res) => {
+app.post('/api/blackjack/tables/:id/join', requireAuth, requireBettingAvailable('blackjack'), async (req, res) => {
   const table = blackjackTables.get(String(req.params.id));
   if (!table) {
     return res.status(404).json({ error: 'Table introuvable.' });
@@ -2732,7 +3144,7 @@ app.post('/api/blackjack/tables/:id/join', requireAuth, async (req, res) => {
   res.json({ table: tableToPublicState(table, req.session.userId, true) });
 });
 
-app.post('/api/blackjack/tables/:id/start', requireAuth, async (req, res) => {
+app.post('/api/blackjack/tables/:id/start', requireAuth, requireBettingAvailable('blackjack'), async (req, res) => {
   const table = blackjackTables.get(String(req.params.id));
   if (!table) {
     return res.status(404).json({ error: 'Table introuvable.' });
@@ -2742,6 +3154,10 @@ app.post('/api/blackjack/tables/:id/start', requireAuth, async (req, res) => {
   }
 
   const betAmount = Number(req.body?.betAmount);
+  const settings = await getGameSettings('blackjack');
+  if (!Number.isSafeInteger(betAmount) || betAmount < settings.minBet || betAmount > settings.maxBet) {
+    return res.status(400).json({ error: `La mise doit être comprise entre ${settings.minBet} et ${settings.maxBet} jetons.` });
+  }
   let start;
   try {
     start = await withDatabaseTransaction(async () => {
@@ -2806,7 +3222,7 @@ app.post('/api/blackjack/tables/:id/leave', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/poker/tables/:id/join', requireAuth, async (req, res) => {
+app.post('/api/poker/tables/:id/join', requireAuth, requireBettingAvailable('poker'), async (req, res) => {
   const table = pokerTables.get(String(req.params.id));
   if (!table) {
     return res.status(404).json({ error: 'Table introuvable.' });
@@ -2824,7 +3240,7 @@ app.post('/api/poker/tables/:id/join', requireAuth, async (req, res) => {
   res.json({ table: tableToPublicState(table, req.session.userId) });
 });
 
-app.post('/api/poker/tables/:id/start', requireAuth, async (req, res) => {
+app.post('/api/poker/tables/:id/start', requireAuth, requireBettingAvailable('poker'), async (req, res) => {
   const table = pokerTables.get(String(req.params.id));
   if (!table) {
     return res.status(404).json({ error: 'Table introuvable.' });
@@ -2838,6 +3254,8 @@ app.post('/api/poker/tables/:id/start', requireAuth, async (req, res) => {
   if (!canStartPokerTable(table)) {
     return res.status(400).json({ error: 'Une table doit contenir au moins 3 joueurs.' });
   }
+  const settings = await getGameSettings('poker');
+  table.blinds = { small: Math.max(1, Math.floor(settings.minBet / 2)), big: settings.minBet };
   try {
     if (!await startPokerRound(table)) {
       return res.status(409).json({
@@ -2859,6 +3277,10 @@ app.post('/api/poker/tables/:id/action', requireAuth, async (req, res) => {
 
   const action = String(req.body.action || '').toLowerCase();
   const amount = Number(req.body.amount || 0);
+  const settings = await getGameSettings('poker');
+  if (['bet', 'raise'].includes(action) && (!Number.isSafeInteger(amount) || amount > settings.maxBet)) {
+    return res.status(400).json({ error: `La mise maximale est de ${settings.maxBet} jetons.` });
+  }
   const result = table.applyAction(req.session.userId, action, amount);
   if (!result.ok) {
     return res.status(400).json({ error: result.message });
@@ -2902,6 +3324,17 @@ app.post('/api/result', requireAuth, async (req, res) => {
       !Number.isSafeInteger(normalizedNet) || normalizedNet !== normalizedPayout - normalizedBet ||
       typeof result !== 'string' || result.length > 80) {
     return res.status(400).json({ error: 'Payload invalide.' });
+  }
+
+  const gameSettings = await getGameSettings(normalizedGame);
+  if (!gameSettings?.enabled || gameSettings.maintenance) {
+    return res.status(503).json({ error: `Le jeu ${normalizedGame} est désactivé ou en maintenance.` });
+  }
+  if (await isBettingPaused()) {
+    return res.status(503).json({ error: 'Les mises sont temporairement suspendues.' });
+  }
+  if (normalizedBet < gameSettings.minBet || normalizedBet > gameSettings.maxBet) {
+    return res.status(400).json({ error: `La mise doit être comprise entre ${gameSettings.minBet} et ${gameSettings.maxBet} jetons.` });
   }
 
   try {

@@ -126,6 +126,7 @@ async function loadAccountData() {
   accountUser = {
     ...user,
     isAdmin: Boolean(accountResponseData.isAdmin),
+    isPrimaryAdmin: Boolean(accountResponseData.isPrimaryAdmin),
     supportMode: Boolean(accountResponseData.supportMode)
   };
   syncedAvatar = player.avatar;

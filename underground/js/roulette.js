@@ -147,11 +147,12 @@ const rouletteModule = (() => {
     const player = getPlayer();
     const betType = state.selectedBetType;
     const stake = Number(document.getElementById("rouletteCustomStake").value);
+    const limits = window.casinoGameSettings?.roulette || { minBet: 1, maxBet: 1_000_000 };
     const exactValue = document.getElementById("rouletteExactNumber").value;
     const exactNumber = exactValue === "00" ? "00" : Number(exactValue);
 
-    if (!Number.isFinite(stake) || stake <= 0 || !Number.isInteger(stake)) {
-      showToast("La mise doit être un nombre entier positif.");
+    if (!Number.isFinite(stake) || stake < limits.minBet || stake > limits.maxBet || !Number.isInteger(stake)) {
+      showToast(`La mise doit être comprise entre ${limits.minBet} et ${limits.maxBet} jetons.`);
       return;
     }
 

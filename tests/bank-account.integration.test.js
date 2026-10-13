@@ -97,6 +97,10 @@ test('internal bank settles solo game results and stays protected from account m
 
   const adminCookie = await login('test-admin', 'test-admin-password');
   const admin2Cookie = await login('test-admin-2', 'test-admin-2-password');
+  const primaryAdminProfile = await request('/api/me', { cookie: adminCookie });
+  const secondaryAdminProfile = await request('/api/me', { cookie: admin2Cookie });
+  assert.equal(primaryAdminProfile.body.isPrimaryAdmin, true);
+  assert.equal(secondaryAdminProfile.body.isPrimaryAdmin, false);
   const adminBank = await request('/api/admin/bank', { cookie: adminCookie });
   const admin2Bank = await request('/api/admin/bank', { cookie: admin2Cookie });
   assert.equal(adminBank.response.status, 200, adminBank.body.error);
@@ -109,7 +113,7 @@ test('internal bank settles solo game results and stays protected from account m
     body: JSON.stringify({ username: 'bank-test-player', password: 'player-pass' })
   });
   assert.equal(registered.response.status, 201, registered.body.error);
-  const playerCookie = registered.cookie;
+  let playerCookie = registered.cookie;
   assert.ok(playerCookie);
   const crashStatus = await request('/api/crash/status');
   assert.equal(crashStatus.body.enabled, false);
@@ -179,4 +183,143 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal(settled.body.totals.collected, 100);
   assert.equal(settled.body.totals.paid, -200);
   assert.equal(settled.body.recent.length, 2);
+
+  const leaderboard = await request('/api/leaderboard');
+  assert.equal(leaderboard.response.status, 200);
+  assert.deepEqual(leaderboard.body.leaderboard.map((entry) => entry.username), ['bank-test-player']);
+  assert.equal(leaderboard.body.leaderboard[0].chips, 1100);
+
+  const primarySettings = await request('/api/admin/settings', { cookie: adminCookie });
+  const secondarySettings = await request('/api/admin/settings', { cookie: admin2Cookie });
+  assert.equal(primarySettings.body.canManage, true);
+  assert.equal(secondarySettings.body.canManage, false);
+  const overview = await request('/api/admin/overview', { cookie: adminCookie });
+  assert.equal(overview.response.status, 200, overview.body.error);
+  assert.equal(overview.body.stats.players, 1);
+  assert.equal(overview.body.stats.online, 0);
+  const deniedGameChange = await request('/api/admin/games/roulette', {
+    cookie: admin2Cookie,
+    method: 'PATCH',
+    body: JSON.stringify({ enabled: false, maintenance: false, minBet: 1, maxBet: 100, reason: 'test' })
+  });
+  assert.equal(deniedGameChange.response.status, 403);
+
+  const configuredGame = await request('/api/admin/games/roulette', {
+    cookie: adminCookie,
+    method: 'PATCH',
+    body: JSON.stringify({ enabled: true, maintenance: false, minBet: 50, maxBet: 200, reason: 'test limits' })
+  });
+  assert.equal(configuredGame.response.status, 200, configuredGame.body.error);
+  const belowMinimum = await request('/api/result', {
+    cookie: playerCookie,
+    method: 'POST',
+    body: JSON.stringify({ game: 'roulette', bet: 10, result: 'Défaite', payout: 0, net: -10 })
+  });
+  assert.equal(belowMinimum.response.status, 400);
+
+  const disabledSlots = await request('/api/admin/games/slots', {
+    cookie: adminCookie,
+    method: 'PATCH',
+    body: JSON.stringify({ enabled: false, maintenance: false, minBet: 1, maxBet: 1_000_000, reason: 'test disable' })
+  });
+  assert.equal(disabledSlots.response.status, 200, disabledSlots.body.error);
+  const blockedSlots = await request('/api/result', {
+    cookie: playerCookie,
+    method: 'POST',
+    body: JSON.stringify({ game: 'slots', bet: 100, result: 'Défaite', payout: 0, net: -100 })
+  });
+  assert.equal(blockedSlots.response.status, 503);
+  const enabledSlots = await request('/api/admin/games/slots', {
+    cookie: adminCookie,
+    method: 'PATCH',
+    body: JSON.stringify({ enabled: true, maintenance: false, minBet: 1, maxBet: 1_000_000, reason: 'test enable' })
+  });
+  assert.equal(enabledSlots.response.status, 200, enabledSlots.body.error);
+
+  const distribution = await request('/api/admin/chips/distribute', {
+    cookie: adminCookie,
+    method: 'POST',
+    body: JSON.stringify({ amount: 25, reason: 'test distribution' })
+  });
+  assert.equal(distribution.response.status, 200, distribution.body.error);
+  assert.equal(distribution.body.recipients, 1);
+
+  const paused = await request('/api/admin/security/pause-bets', {
+    cookie: adminCookie,
+    method: 'POST',
+    body: JSON.stringify({ paused: true, reason: 'test pause' })
+  });
+  assert.equal(paused.response.status, 200, paused.body.error);
+  const blockedBet = await request('/api/result', {
+    cookie: playerCookie,
+    method: 'POST',
+    body: JSON.stringify({ game: 'roulette', bet: 100, result: 'Défaite', payout: 0, net: -100 })
+  });
+  assert.equal(blockedBet.response.status, 503);
+  const resumed = await request('/api/admin/security/pause-bets', {
+    cookie: adminCookie,
+    method: 'POST',
+    body: JSON.stringify({ paused: false, reason: 'test resume' })
+  });
+  assert.equal(resumed.response.status, 200, resumed.body.error);
+
+  const accounts = await request('/api/admin/accounts?search=bank-test-player', { cookie: adminCookie });
+  const playerId = accounts.body.accounts[0].id;
+  const deniedPromotion = await request(`/api/admin/accounts/${playerId}/permissions`, {
+    cookie: admin2Cookie,
+    method: 'POST',
+    body: JSON.stringify({ isAdmin: true, reason: 'should be denied' })
+  });
+  assert.equal(deniedPromotion.response.status, 403);
+  const disconnected = await request(`/api/admin/accounts/${playerId}/disconnect`, {
+    cookie: adminCookie,
+    method: 'POST',
+    body: '{}'
+  });
+  assert.equal(disconnected.response.status, 200, disconnected.body.error);
+  assert.equal(disconnected.body.disconnected, 0);
+  const revokedSession = await request('/api/me', { cookie: playerCookie });
+  assert.equal(revokedSession.response.status, 401);
+  const suspension = await request(`/api/admin/accounts/${playerId}/suspend`, {
+    cookie: adminCookie,
+    method: 'POST',
+    body: JSON.stringify({ minutes: 30, reason: 'test suspension' })
+  });
+  assert.equal(suspension.response.status, 200, suspension.body.error);
+  const suspendedLogin = await request('/api/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'bank-test-player', password: 'player-pass' })
+  });
+  assert.equal(suspendedLogin.response.status, 403);
+  const suspensionLifted = await request(`/api/admin/accounts/${playerId}/suspend`, {
+    cookie: adminCookie,
+    method: 'POST',
+    body: JSON.stringify({ minutes: 0, reason: 'test suspension lifted' })
+  });
+  assert.equal(suspensionLifted.response.status, 200, suspensionLifted.body.error);
+  playerCookie = await login('bank-test-player', 'player-pass');
+  const promoted = await request(`/api/admin/accounts/${playerId}/permissions`, {
+    cookie: adminCookie,
+    method: 'POST',
+    body: JSON.stringify({ isAdmin: true, reason: 'test promotion' })
+  });
+  assert.equal(promoted.response.status, 200, promoted.body.error);
+  const promotedAccess = await request('/api/admin/bank', { cookie: playerCookie });
+  assert.equal(promotedAccess.response.status, 200, promotedAccess.body.error);
+  const demoted = await request(`/api/admin/accounts/${playerId}/permissions`, {
+    cookie: adminCookie,
+    method: 'POST',
+    body: JSON.stringify({ isAdmin: false, reason: 'test demotion' })
+  });
+  assert.equal(demoted.response.status, 200, demoted.body.error);
+  const demotedAccess = await request('/api/admin/bank', { cookie: playerCookie });
+  assert.equal(demotedAccess.response.status, 401);
+  const audit = await request('/api/admin/audit?limit=100', { cookie: adminCookie });
+  assert.equal(audit.response.status, 200, audit.body.error);
+  const actions = audit.body.entries.map((entry) => entry.action);
+  assert.ok(actions.includes('token_distribution'));
+  assert.ok(actions.includes('emergency_pause'));
+  assert.ok(actions.includes('suspension'));
+  assert.ok(actions.includes('admin_promoted'));
+  assert.ok(actions.includes('admin_demoted'));
 });

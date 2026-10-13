@@ -384,9 +384,9 @@
                   </g>
                 </svg>
                 <div class="crash-center-readout" aria-live="polite">
-                  <span id="crashPhaseLabel">Prochaine manche</span>
+                  <span id="crashPhaseLabel">Au sol</span>
                   <strong id="crashMultiplier">1.00x</strong>
-                  <span id="crashStatusMessage">Prépare ta mise avant le décollage.</span>
+                  <span id="crashStatusMessage">Choisis ta mise pour lancer ta partie.</span>
                 </div>
                 <div class="crash-scanline"></div>
               </div>
@@ -397,7 +397,7 @@
                   <strong><span id="crashBalance">0</span> jetons</strong>
                 </div>
                 <div class="crash-stake-row">
-                  <label for="crashStake">Mise de la manche</label>
+                  <label for="crashStake">Mise de ta partie</label>
                   <div class="crash-stake-input">
                     <input id="crashStake" type="number" min="1" max="1000000" step="1" value="25" inputmode="numeric" />
                     <span>jetons</span>
@@ -414,7 +414,7 @@
                     <span>Retour estimé</span>
                     <strong id="crashPotential">25 jetons</strong>
                   </div>
-                  <button id="crashBetButton" class="gold-button" type="button" disabled>Placer la mise</button>
+                  <button id="crashBetButton" class="gold-button" type="button" disabled>Lancer ma partie</button>
                 </div>
                 <p id="crashFeedback" class="crash-feedback" role="status" aria-live="polite">Connexion au serveur de jeu...</p>
               </div>
@@ -422,13 +422,13 @@
 
             <aside class="crash-sidebar">
               <section class="panel crash-side-panel">
-                <div class="section-heading compact"><h3>Mises de la manche</h3></div>
+                <div class="section-heading compact"><h3>Ta mise</h3></div>
                 <div id="crashBetsList" class="crash-bets-list">
                   <div class="status-box subtle">En attente des mises réelles des joueurs.</div>
                 </div>
               </section>
               <section class="panel crash-side-panel">
-                <div class="section-heading compact"><h3>Derniers crashs</h3></div>
+                <div class="section-heading compact"><h3>Tes derniers crashs</h3></div>
                 <div id="crashHistory" class="crash-history">
                   <div class="status-box subtle">L’historique sera chargé depuis le serveur.</div>
                 </div>
@@ -443,9 +443,7 @@
             <div class="section-heading">
               <h2>Classement local</h2>
             </div>
-            <p class="leaderboard-note">
-              Ce classement est local au navigateur. Il ne représente pas un classement mondial ni des joueurs réels.
-            </p>
+            <p class="leaderboard-note">Les joueurs sont classés selon leur solde de jetons.</p>
             <div id="leaderboardBoard" class="leaderboard-board"></div>
           </div>
         </section>
@@ -463,6 +461,37 @@
               Consulte les soldes et historiques, ajuste les jetons et gère les bannissements.
               Chaque action administrative est journalisée.
             </p>
+            <section class="admin-detail-panel">
+              <h3>Supervision en direct</h3>
+              <div id="adminOverviewStats" class="admin-overview-stats"></div>
+              <h4>Joueurs connectés</h4>
+              <div id="adminOnlinePlayers" class="admin-live-list"></div>
+              <h4>Parties et mises en cours</h4>
+              <div id="adminActiveGames" class="admin-live-list"></div>
+            </section>
+            <section class="admin-detail-panel">
+              <h3>Commandes rapides</h3>
+              <form id="adminDistributionForm" class="admin-search">
+                <label class="input-group" for="adminDistributionAmount">
+                  <span>Jetons à distribuer par joueur</span>
+                  <input id="adminDistributionAmount" type="number" min="1" max="1000000" step="1" value="100" required />
+                </label>
+                <label class="input-group" for="adminDistributionReason">
+                  <span>Motif</span>
+                  <input id="adminDistributionReason" type="text" maxlength="240" required />
+                </label>
+                <button class="primary-button" type="submit">Distribuer</button>
+              </form>
+              <button id="adminEmergencyPauseBtn" class="danger-button" type="button">Arrêter temporairement les mises</button>
+              <p id="adminEmergencyStatus" class="admin-note" role="status"></p>
+            </section>
+            <section id="adminRootPanel" class="admin-detail-panel" hidden>
+              <h3>Contrôles de l’admin principal</h3>
+              <h4>Jeux, limites et maintenance</h4>
+              <div id="adminGameSettings" class="admin-game-settings"></div>
+              <h4>Journal de sécurité</h4>
+              <ul id="adminGlobalAudit" class="admin-detail-list"></ul>
+            </section>
             <section class="admin-detail-panel">
               <h3>Banque du casino</h3>
               <p id="adminBankSummary" class="admin-note">Chargement du compte banque...</p>
@@ -487,6 +516,7 @@
                     <th>Solde</th>
                     <th>Parties</th>
                     <th>État</th>
+                    <th>Connexion</th>
                     <th>Actions</th>
                   </tr>
                 </thead>

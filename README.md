@@ -15,19 +15,21 @@ Ouvre `http://127.0.0.1:5500/`. Sur une base neuve en développement, le compte 
 
 ## Administration des comptes
 
-Connecte-toi avec un compte administrateur pour afficher l’onglet **Administration**. Il permet de rechercher les comptes, consulter leur solde et leur historique, ajouter ou retirer des jetons, bannir ou débannir un compte, supprimer définitivement un compte et consulter le journal des actions. Un compte banni qui est débanni retrouve l’accès avec sa session existante ou après reconnexion.
+Connecte-toi avec un compte administrateur pour afficher l’onglet **Administration**. Le panneau permet de rechercher les comptes, voir les joueurs connectés et leurs parties en cours, consulter les historiques, ajuster ou distribuer des jetons, déconnecter, suspendre temporairement, bannir/débannir et supprimer les comptes. Les suspensions expirent automatiquement; déconnexion, bannissement et retrait de rôle invalident aussi les sessions concernées.
+
+`ADMIN_USERNAME` est l’administrateur principal; lui seul peut gérer les rôles des autres admins, modifier les réglages des jeux et déclencher/reprendre l’arrêt d’urgence des mises. Il peut aussi régler pour chaque jeu l’activation, la maintenance et les mises minimale/maximale. Les changements sensibles sont inscrits dans le journal de sécurité. Le classement public montre les joueurs triés par solde réel et exclut les comptes admin et banque.
 
 La **vue support** ouvre temporairement l’application comme le compte sélectionné, sans révéler ni modifier son mot de passe. Un bandeau reste visible pendant cette vue et son ouverture comme sa fermeture sont journalisées.
 
-La suppression d’un compte retire son historique de parties, l’invalide sur le serveur et conserve son pseudo dans le journal administratif. Elle est refusée pour les comptes admin ou ceux engagés dans une manche en cours.
+La suppression d’un compte retire son historique de parties, invalide ses sessions et conserve son pseudo dans le journal administratif. Elle est refusée pour le compte principal, la banque et les comptes engagés dans une manche en cours; l’administrateur principal peut gérer les autres comptes admin.
 
-Au démarrage, le serveur ajoute automatiquement les colonnes de rôle et de bannissement aux bases existantes. Sur une base locale, `admin` et `admin2` reçoivent le rôle administrateur (mot de passe de démonstration `admin123`). En production, configure `ADMIN_USERNAME` / `ADMIN_PASSWORD` et `SECOND_ADMIN_USERNAME` / `SECOND_ADMIN_PASSWORD` avec deux identifiants distincts. Pour donner le rôle à un compte déjà présent, configure le nom correspondant et redémarre le serveur; le mot de passe d'un compte existant n'est jamais réinitialisé.
+Au démarrage, le serveur ajoute automatiquement les colonnes de rôle, bannissement et suspension aux bases existantes. Sur une base locale, `admin` est l’administrateur principal et `admin2` un admin secondaire (mot de passe de démonstration `admin123`). En production, configure `ADMIN_USERNAME` / `ADMIN_PASSWORD` et `SECOND_ADMIN_USERNAME` / `SECOND_ADMIN_PASSWORD` avec deux identifiants distincts. Pour donner le rôle à un compte déjà présent, configure le nom correspondant et redémarre le serveur; le mot de passe d'un compte existant n'est jamais réinitialisé.
 
 Un compte interne `casino-bank` (modifiable avec `BANK_USERNAME`) est provisionné automatiquement. Il n'a pas de mot de passe utilisable, ne peut pas se connecter ni jouer, et apparaît dans l'administration avec le solde de la banque ainsi que ses derniers règlements. Les pertes des joueurs aux jeux contre la maison augmentent ce solde; les gains le diminuent, sans plancher à zéro. Le journal conserve aussi les égalités. Le poker est joueur contre joueur et sans commission (« rake ») : ses mises ne constituent donc pas un revenu de la banque.
 
 ## Jeu Crash
 
-Le jeu **Jet Crash** peut être désactivé globalement avec `CRASH_ENABLED=false` (valeur par défaut) : il disparaît de la navigation et ses routes serveur refusent l'accès. Pour le réactiver quand il sera réparé, configure `CRASH_ENABLED=true` puis redémarre l'application. Les manches, mises, crashs et retraits sont pilotés par le serveur et enregistrés dans SQLite; la mise est débitée une seule fois et le retrait est protégé contre les répétitions. Les résultats crédités sont aussi ajoutés à l'historique de compte et au journal de la banque. Les tables `crash_rounds` et `crash_bets` sont créées automatiquement au démarrage, y compris pour une base déjà utilisée : aucune migration manuelle n'est requise.
+Le jeu **Jet Crash** est activé par défaut. Chaque joueur lance sa propre partie en misant; aucune manche ne démarre à vide. Pour désactiver le jeu globalement, configure `CRASH_ENABLED=false` : il disparaît de la navigation et ses routes serveur refusent l'accès. Les parties, mises, crashs et retraits sont pilotés par le serveur et enregistrés dans SQLite; la mise est débitée une seule fois et le retrait est protégé contre les répétitions. Les résultats crédités sont aussi ajoutés à l'historique de compte et au journal de la banque. Les tables `crash_rounds` et `crash_bets` sont créées automatiquement au démarrage, y compris pour une base déjà utilisée : aucune migration manuelle n'est requise.
 
 Le navigateur n'envoie jamais de multiplicateur de retrait au serveur. Le jeu utilise des jetons virtuels uniquement et ne prétend pas fournir un système provably fair.
 
@@ -37,7 +39,7 @@ Dans `.env` de production, définis un mot de passe long et unique pour le deuxi
 SECOND_ADMIN_USERNAME=admin2
 SECOND_ADMIN_PASSWORD=CHOISIR_UN_AUTRE_MOT_DE_PASSE_LONG_ET_UNIQUE
 BANK_USERNAME=casino-bank
-CRASH_ENABLED=false
+CRASH_ENABLED=true
 ```
 
 ## Lancement avec Docker
@@ -100,7 +102,7 @@ ADMIN_PASSWORD=CHOISIR_UN_MOT_DE_PASSE_LONG_ET_UNIQUE
 SECOND_ADMIN_USERNAME=admin2
 SECOND_ADMIN_PASSWORD=CHOISIR_UN_AUTRE_MOT_DE_PASSE_LONG_ET_UNIQUE
 BANK_USERNAME=casino-bank
-CRASH_ENABLED=false
+CRASH_ENABLED=true
 ```
 
 Protège le fichier :

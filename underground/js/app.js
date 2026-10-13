@@ -1,5 +1,7 @@
 document.addEventListener("DOMContentLoaded", initializeApp);
 
+let publicGameSettings = {};
+
 async function initializeApp() {
   try {
     const loaded = await loadAccountData();
@@ -13,6 +15,17 @@ async function initializeApp() {
     return;
   }
 
+  try {
+    const response = await fetch("/api/game-settings");
+    if (response.ok) {
+      const payload = await response.json();
+      publicGameSettings = payload.games || {};
+      applyGameAvailability();
+    }
+  } catch (error) {
+    console.error("Impossible de charger les paramètres des jeux:", error);
+  }
+
   await crashModule.initialize();
   bindNavigation();
   bindGlobalButtons();
@@ -24,7 +37,32 @@ async function initializeApp() {
   blackjackModule.initialize();
   pokerModule.initialize();
   slotsModule.initialize();
-  adminModule.initialize(accountUser.isAdmin, accountUser.supportMode, accountUser.username);
+  adminModule.initialize(accountUser.isAdmin, accountUser.supportMode, accountUser.username, accountUser.isPrimaryAdmin);
+}
+
+function applyGameAvailability() {
+  window.casinoGameSettings = publicGameSettings;
+  for (const [game, settings] of Object.entries(publicGameSettings)) {
+    const available = settings.enabled && !settings.maintenance;
+    document.querySelector(`.nav-item[data-view="${game}"]`)?.toggleAttribute("hidden", !available);
+    for (const inputId of game === "roulette" ? ["rouletteCustomStake"]
+      : game === "blackjack" ? ["blackjackTableStake"]
+        : game === "slots" ? ["slotsStake"]
+          : game === "crash" ? ["crashStake"] : []) {
+      const input = document.getElementById(inputId);
+      if (!input) continue;
+      input.min = String(settings.minBet);
+      input.max = String(settings.maxBet);
+      if (Number(input.value) < settings.minBet) input.value = String(settings.minBet);
+      if (Number(input.value) > settings.maxBet) input.value = String(settings.maxBet);
+    }
+    if (game === "roulette") {
+      document.querySelectorAll(".chip-option").forEach((button) => {
+        const amount = Number(button.dataset.stake);
+        button.hidden = amount < settings.minBet || amount > settings.maxBet;
+      });
+    }
+  }
 }
 
 function bindNavigation() {
@@ -51,7 +89,9 @@ function bindGlobalButtons() {
 }
 
 function showView(viewName) {
-  if (viewName === "crash" && !crashModule.isEnabled()) {
+  const settings = publicGameSettings[viewName];
+  if ((settings && (!settings.enabled || settings.maintenance)) ||
+      (viewName === "crash" && !crashModule.isEnabled())) {
     viewName = "home";
   }
 
@@ -112,7 +152,11 @@ function renderHomeView() {
       action: "PRENDRE SON ENVOL",
       view: "crash"
     }
-  ].filter((card) => card.view !== "crash" || crashModule.isEnabled());
+  ].filter((card) => {
+    const settings = publicGameSettings[card.view];
+    return (card.view !== "crash" || crashModule.isEnabled()) &&
+      (!settings || (settings.enabled && !settings.maintenance));
+  });
 
   const homeCards = document.getElementById("homeCards");
   homeCards.innerHTML = cards
@@ -191,55 +235,49 @@ function renderHistoryList(container, historyList, compact = false) {
 }
 
 function renderLeaderboardMini() {
-  const player = getPlayer();
-  const summary = getPlayerSummary(player);
-  const rankList = [
-    { name: player.name, wins: summary.wins, winRate: summary.winRate, chips: player.chips }
-  ];
-
   const container = document.getElementById("homeLeaderboard");
-  container.innerHTML = rankList
-    .map(
-      (row, index) => `
-        <div class="leaderboard-row">
-          <span class="rank">${index + 1}</span>
-          <div>
-            <strong>${sanitizeText(row.name, 12)}</strong><br />
-            <small>${row.wins} victoires</small>
-          </div>
-          <div>
-            <small>Taux</small><br />
-            <strong>${row.winRate}%</strong>
-          </div>
-          <strong>${formatChips(row.chips)}</strong>
-        </div>
-      `
-    )
-    .join("");
+  fetch("/api/leaderboard")
+    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Classement indisponible")))
+    .then(({ leaderboard }) => {
+      container.replaceChildren(...leaderboard.slice(0, 5).map((row, index) => {
+        const entry = document.createElement("div");
+        entry.className = "leaderboard-row";
+        const rank = document.createElement("span");
+        rank.className = "rank";
+        rank.textContent = String(index + 1);
+        const identity = document.createElement("div");
+        identity.innerHTML = `<strong>${sanitizeText(row.avatar || "🎲", 16)} ${sanitizeText(row.username, 18)}</strong><br /><small>${Number(row.wins)} victoires</small>`;
+        const balance = document.createElement("strong");
+        balance.textContent = formatChips(row.chips);
+        entry.append(rank, identity, balance);
+        return entry;
+      }));
+    })
+    .catch(() => { container.textContent = "Classement indisponible."; });
 }
 
 function renderLeaderboard() {
-  const player = getPlayer();
-  const summary = getPlayerSummary(player);
   const container = document.getElementById("leaderboardBoard");
-
-  container.innerHTML = `
-    <div class="leaderboard-row">
-      <span class="rank">1</span>
-      <div>
-        <strong>${sanitizeText(player.name, 18)}</strong><br />
-        <small>Classement local</small>
-      </div>
-      <div>
-        <small>Victoires</small><br />
-        <strong>${summary.wins}</strong>
-      </div>
-      <div>
-        <small>Solde</small><br />
-        <strong>${formatChips(player.chips)}</strong>
-      </div>
-    </div>
-  `;
+  fetch("/api/leaderboard")
+    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Classement indisponible")))
+    .then(({ leaderboard }) => {
+      container.replaceChildren(...leaderboard.map((row, index) => {
+        const entry = document.createElement("div");
+        entry.className = "leaderboard-row";
+        const rank = document.createElement("span");
+        rank.className = "rank";
+        rank.textContent = String(index + 1);
+        const identity = document.createElement("div");
+        identity.innerHTML = `<strong>${sanitizeText(row.avatar || "🎲", 16)} ${sanitizeText(row.username, 18)}</strong><br /><small>${Number(row.games_played)} parties · ${Number(row.wins)} victoires</small>`;
+        const wins = document.createElement("div");
+        wins.innerHTML = `<small>Meilleur gain</small><br /><strong>${formatChips(row.best_win || 0)}</strong>`;
+        const balance = document.createElement("div");
+        balance.innerHTML = `<small>Solde</small><br /><strong>${formatChips(row.chips)}</strong>`;
+        entry.append(rank, identity, wins, balance);
+        return entry;
+      }));
+    })
+    .catch(() => { container.textContent = "Classement indisponible."; });
 }
 
 function renderProfileView() {

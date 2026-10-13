@@ -72,24 +72,22 @@ const crashModule = (() => {
   }
 
   function updateState(payload) {
-    if (payload.round) {
-      if (state.ownBet?.status === 'active' || state.ownBet?.status === 'cashed_out' || state.ownBet?.status === 'lost') {
-        if (!payload.ownBet && state.ownBet.status !== 'active') {
-          state.lastOutcome = { ...state.ownBet, roundId: state.round?.id };
-        }
-      }
-      state.round = payload.round;
-      state.ownBet = payload.ownBet || null;
-      state.bets = payload.bets || [];
-      state.history = payload.history || [];
-      state.serverOffset = Number(payload.round.serverNow || Date.now()) - Date.now();
-      if (Number.isFinite(Number(payload.balance))) {
-        state.balance = Number(payload.balance);
-        syncBalance(state.balance);
-      }
-      if (state.ownBet) state.lastOutcome = null;
-      render();
+    if (!Object.prototype.hasOwnProperty.call(payload, 'round')) return;
+    if (state.ownBet && state.ownBet.status !== 'active' &&
+        (!payload.ownBet || payload.ownBet.id !== state.ownBet.id)) {
+      state.lastOutcome = { ...state.ownBet, roundId: state.round?.id };
     }
+    state.round = payload.round || null;
+    state.ownBet = payload.ownBet || null;
+    state.bets = payload.bets || [];
+    state.history = payload.history || [];
+    state.serverOffset = Number(payload.round?.serverNow || Date.now()) - Date.now();
+    if (Number.isFinite(Number(payload.balance))) {
+      state.balance = Number(payload.balance);
+      syncBalance(state.balance);
+    }
+    if (state.ownBet) state.lastOutcome = null;
+    render();
   }
 
   function syncBalance(balance) {
@@ -121,29 +119,36 @@ const crashModule = (() => {
 
   function renderRound() {
     const round = state.round;
-    if (!round) return;
     const label = document.getElementById('crashRoundLabel');
     const phaseLabel = document.getElementById('crashPhaseLabel');
     const message = document.getElementById('crashStatusMessage');
     const stage = document.getElementById('crashSky');
+    if (!round) {
+      label.textContent = 'Prêt à jouer';
+      phaseLabel.textContent = 'Au sol';
+      document.getElementById('crashMultiplier').textContent = '1.00x';
+      message.textContent = 'Choisis ta mise pour lancer ta partie.';
+      stage.classList.remove('is-flying', 'is-crashed');
+      return;
+    }
     const multiplier = round.status === 'running' ? currentMultiplier() : Number(round.multiplier || 1);
     document.getElementById('crashMultiplier').textContent = `${multiplier.toFixed(2)}x`;
-    label.textContent = `Manche ${round.id.slice(0, 8)}`;
+    label.textContent = `Partie ${round.id.slice(0, 8)}`;
     stage.classList.toggle('is-flying', round.status === 'running');
     stage.classList.toggle('is-crashed', round.status === 'crashed');
 
     if (round.status === 'betting') {
       const seconds = Math.max(0, Math.ceil((Number(round.bettingEndsAt) - (Date.now() + state.serverOffset)) / 1000));
-      phaseLabel.textContent = 'Mises ouvertes';
+      phaseLabel.textContent = 'Mise acceptée';
       message.textContent = `Décollage dans ${seconds} seconde${seconds === 1 ? '' : 's'}.`;
     } else if (round.status === 'running') {
       phaseLabel.textContent = 'En vol';
       message.textContent = state.ownBet?.status === 'active'
         ? 'Retire tes gains avant le crash.'
-        : 'Le multiplicateur grimpe. Le crash peut survenir à tout moment.';
+        : 'Le vol continue jusqu’au crash.';
     } else {
       phaseLabel.textContent = 'Vol terminé';
-      message.textContent = `Crash à ${Number(round.crashMultiplier || 1).toFixed(2)}x. Nouvelle manche bientôt.`;
+      message.textContent = `Crash à ${Number(round.crashMultiplier || 1).toFixed(2)}x. Lance une nouvelle partie quand tu veux.`;
     }
   }
 
@@ -152,9 +157,10 @@ const crashModule = (() => {
     const button = document.getElementById('crashBetButton');
     const potential = document.getElementById('crashPotential');
     const stake = Number(input?.value);
-    const validStake = Number.isSafeInteger(stake) && stake > 0 && stake <= 1_000_000;
+    const limits = window.casinoGameSettings?.crash || { minBet: 1, maxBet: 1_000_000 };
+    const validStake = Number.isSafeInteger(stake) && stake >= limits.minBet && stake <= limits.maxBet;
     const ownBet = state.ownBet;
-    const canPlace = state.round?.status === 'betting' && !ownBet && validStake &&
+    const canPlace = ownBet?.status !== 'active' && validStake &&
       stake <= state.balance && !state.requestPending;
     const canCashout = state.round?.status === 'running' && ownBet?.status === 'active' &&
       !state.requestPending;
@@ -164,7 +170,7 @@ const crashModule = (() => {
       button.classList.toggle('crash-cashout-button', canCashout);
       button.disabled = !canCashout;
     } else {
-      button.textContent = state.round?.status === 'betting' ? 'Placer la mise' : 'En attente de la manche';
+      button.textContent = 'Lancer ma partie';
       button.classList.remove('crash-cashout-button');
       button.disabled = !canPlace;
     }
@@ -177,14 +183,14 @@ const crashModule = (() => {
     } else if (ownBet?.status === 'lost') {
       setFeedback(`Crash : ta mise de ${formatChips(ownBet.stake)} jetons est perdue.`, true);
     } else if (ownBet?.status === 'active') {
-      setFeedback(state.round.status === 'running' ? 'Ta mise est en jeu. Tu peux retirer à tout moment.' : 'Mise acceptée. Décollage imminent.', false);
+      setFeedback(state.round.status === 'running' ? 'Ta partie est en jeu. Tu peux retirer à tout moment.' : 'Mise acceptée. Décollage imminent.', false);
     }
   }
 
   function renderBets() {
     const list = document.getElementById('crashBetsList');
     if (!state.bets.length) {
-      list.innerHTML = '<div class="status-box subtle">Aucune mise pour cette manche.</div>';
+      list.innerHTML = '<div class="status-box subtle">Aucune mise pour cette partie.</div>';
       return;
     }
     list.replaceChildren(...state.bets.map((bet) => {
@@ -210,7 +216,7 @@ const crashModule = (() => {
   function renderHistory() {
     const container = document.getElementById('crashHistory');
     if (!state.history.length) {
-      container.innerHTML = '<div class="status-box subtle">Aucune manche terminée.</div>';
+      container.innerHTML = '<div class="status-box subtle">Lance ta première partie pour remplir l’historique.</div>';
       return;
     }
     container.replaceChildren(...state.history.map((entry) => {
@@ -238,8 +244,9 @@ const crashModule = (() => {
       return;
     }
     const stake = Number(document.getElementById('crashStake').value);
-    if (!Number.isSafeInteger(stake) || stake <= 0 || stake > 1_000_000) {
-      setFeedback('Choisis une mise entière comprise entre 1 et 1 000 000 jetons.', true);
+    const limits = window.casinoGameSettings?.crash || { minBet: 1, maxBet: 1_000_000 };
+    if (!Number.isSafeInteger(stake) || stake < limits.minBet || stake > limits.maxBet) {
+      setFeedback(`Choisis une mise entière comprise entre ${limits.minBet} et ${limits.maxBet} jetons.`, true);
       return;
     }
     if (stake > state.balance) {
@@ -252,17 +259,17 @@ const crashModule = (() => {
       const response = await fetch('/api/crash/bets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake, roundId: state.round?.id })
+        body: JSON.stringify({ stake })
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'La mise a été refusée.');
       state.balance = Number(payload.balance);
       syncBalance(state.balance);
-      setFeedback(payload.duplicate ? 'Cette mise avait déjà été enregistrée.' : 'Mise acceptée. Bonne chance !', false);
+      setFeedback(payload.duplicate ? 'Cette mise avait déjà été enregistrée.' : 'Ta partie démarre. Bonne chance !', false);
       await refreshState();
     } catch (error) {
       console.error(error);
-      setFeedback(error.message || 'Impossible de placer la mise.', true);
+      setFeedback(error.message || 'Impossible de lancer la partie.', true);
     } finally {
       state.requestPending = false;
       renderControls();

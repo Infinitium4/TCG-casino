@@ -92,9 +92,10 @@ const slotsModule = (() => {
 
     const player = getPlayer();
     const bet = Number(document.getElementById("slotsStake").value);
+    const limits = window.casinoGameSettings?.slots || { minBet: 1, maxBet: 1_000_000 };
 
-    if (!Number.isFinite(bet) || bet <= 0 || !Number.isInteger(bet)) {
-      showToast("La mise de la machine à sous doit être un nombre entier positif.");
+    if (!Number.isFinite(bet) || bet < limits.minBet || bet > limits.maxBet || !Number.isInteger(bet)) {
+      showToast(`La mise doit être comprise entre ${limits.minBet} et ${limits.maxBet} jetons.`);
       return;
     }
 
