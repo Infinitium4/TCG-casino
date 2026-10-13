@@ -1152,20 +1152,12 @@ function tableToPublicState(table, viewerId = null, revealBlackjackHands = false
         chips: player.chips,
         connected: player.connected,
         bet: player.bet,
-<<<<<<< Updated upstream
-<<<<<<< HEAD
-        hand: isViewer || revealHand ? [...(player.hand || [])] : [],
+        hand: isViewer || revealHand || (table.type === 'blackjack' && revealBlackjackHands) ? [...(player.hand || [])] : [],
         isWinner: (table.showdownWinnerIds || []).includes(Number(player.id)),
-=======
-        hand: isViewer || (table.type === 'blackjack' && table.round === 'finished') ? [...(player.hand || [])] : [],
-=======
-        hand: isViewer || (table.type === 'blackjack' && revealBlackjackHands) ? [...(player.hand || [])] : [],
->>>>>>> Stashed changes
         handCount: (player.hand || []).length,
         finished: !!player.finished,
         outcome: player.outcome || null,
         payout: Number(player.payout || 0),
->>>>>>> f462058a1a806c22da24053a941b4767d1810fdd
         folded: !!player.folded,
         allIn: !!player.allIn,
         isDealer: !!player.isDealer,
