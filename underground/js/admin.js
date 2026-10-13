@@ -13,7 +13,7 @@ const adminModule = (() => {
     button.type = 'button';
     button.dataset.adminAction = action;
     button.dataset.accountId = String(account.id);
-    button.disabled = Boolean(account.is_admin && action !== 'details');
+    button.disabled = Boolean((account.is_admin || account.is_bank) && action !== 'details');
     return button;
   }
 
@@ -60,6 +60,34 @@ const adminModule = (() => {
     }
   }
 
+  async function loadBank() {
+    const summary = document.getElementById('adminBankSummary');
+    const ledger = document.getElementById('adminBankLedger');
+    if (!summary || !ledger) return;
+    summary.textContent = 'Chargement de la banque...';
+    ledger.replaceChildren();
+    try {
+      const payload = await request('/api/admin/bank');
+      summary.textContent = `${payload.bank.username} · solde ${formatChips(payload.bank.chips)} · collecté ${formatChips(payload.totals.collected)} · payé aux joueurs ${formatChips(Math.abs(payload.totals.paid))} · ${payload.totals.settlements} règlement(s)`;
+      if (!payload.recent.length) {
+        ledger.append(element('li', '', 'Aucun règlement enregistré.'));
+        return;
+      }
+      for (const entry of payload.recent) {
+        const bankDelta = Number(entry.bank_delta);
+        const signedDelta = `${bankDelta > 0 ? '+' : ''}${formatChips(bankDelta)}`;
+        ledger.append(element(
+          'li',
+          '',
+          `${entry.created_at} · ${entry.player_username} · ${entry.game_name} · net joueur ${formatChips(entry.player_net)} · banque ${signedDelta}`
+        ));
+      }
+    } catch (error) {
+      console.error(error);
+      summary.textContent = error.message || 'Impossible de charger le compte banque.';
+    }
+  }
+
   function renderAccounts(accounts) {
     const body = document.getElementById('adminAccountsBody');
     for (const account of accounts) {
@@ -70,13 +98,13 @@ const adminModule = (() => {
       row.append(identity);
       row.append(element('td', '', formatChips(account.chips)));
       row.append(element('td', '', String(account.games_played)));
-      const statusText = account.is_admin ? 'Admin' : account.is_banned ? 'Banni' : 'Actif';
+      const statusText = account.is_bank ? 'Banque interne' : account.is_admin ? 'Admin' : account.is_banned ? 'Banni' : 'Actif';
       const statusClass = account.is_banned ? 'admin-banned' : 'admin-active';
       row.append(element('td', statusClass, statusText));
 
       const actions = element('td', 'admin-actions');
       actions.append(actionButton('Détails', 'details', account));
-      if (!account.is_admin) {
+      if (!account.is_admin && !account.is_bank) {
         actions.append(actionButton('Jetons', 'chips', account));
         actions.append(actionButton(account.is_banned ? 'Débannir' : 'Bannir', 'ban', account, account.is_banned ? 'secondary-button' : 'danger-button'));
         if (!account.is_banned) {
@@ -84,7 +112,7 @@ const adminModule = (() => {
         }
         actions.append(actionButton('Supprimer', 'delete', account, 'danger-button'));
       } else {
-        actions.append(element('small', 'admin-meta', 'Administrateur protégé'));
+        actions.append(element('small', 'admin-meta', account.is_bank ? 'Compte banque protégé' : 'Administrateur protégé'));
       }
       row.append(actions);
       body.append(row);
@@ -228,7 +256,10 @@ const adminModule = (() => {
       event.preventDefault();
       loadAccounts();
     });
-    document.getElementById('adminRefreshBtn').addEventListener('click', () => loadAccounts());
+    document.getElementById('adminRefreshBtn').addEventListener('click', () => {
+      loadAccounts();
+      loadBank();
+    });
     document.getElementById('adminLoadMoreBtn').addEventListener('click', () => loadAccounts(false));
     document.getElementById('adminAccountsBody').addEventListener('click', async (event) => {
       const button = event.target.closest('[data-admin-action]');
@@ -241,6 +272,7 @@ const adminModule = (() => {
       }
     });
     loadAccounts();
+    loadBank();
   }
 
   return { initialize };

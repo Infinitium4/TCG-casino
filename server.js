@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 const SQLiteStore = require('connect-sqlite3')(session);
 
@@ -98,9 +99,9 @@ io.use((socket, next) => {
     }
 
     databaseReady
-      .then(() => get('SELECT is_banned FROM users WHERE id = ?', [socket.request.session.userId]))
+      .then(() => get('SELECT is_banned, is_bank FROM users WHERE id = ?', [socket.request.session.userId]))
       .then((user) => {
-        if (!user || user.is_banned) {
+        if (!user || user.is_banned || user.is_bank) {
           return next(new Error('AUTH_REQUIRED'));
         }
         next();
@@ -1118,9 +1119,12 @@ function addGameHistory(userId, gameName, bet, result, payout, net) {
 }
 
 function updateUserChips(userId, delta) {
-  return getUserById(userId).then(async (user) => {
+  return get('SELECT id, chips, is_bank FROM users WHERE id = ?', [userId]).then(async (user) => {
     if (!user) {
       return null;
+    }
+    if (user.is_bank) {
+      throw new Error('Le solde du compte banque ne peut pas être modifié par une action de jeu.');
     }
     const nextValue = Math.max(0, Number(user.chips) + Number(delta));
     await run('UPDATE users SET chips = ? WHERE id = ?', [nextValue, userId]);
@@ -1128,12 +1132,37 @@ function updateUserChips(userId, delta) {
   });
 }
 
-async function persistBlackjackTable(table) {
-  for (const player of table.players) {
-    await run('UPDATE users SET chips = ? WHERE id = ?', [player.chips, player.id]);
+async function getBankAccount() {
+  const bank = await get('SELECT id, username, chips FROM users WHERE is_bank = 1');
+  if (!bank) {
+    throw new Error('Compte banque introuvable. Vérifie BANK_USERNAME.');
+  }
+  return bank;
+}
+
+async function recordBankSettlement(userId, gameName, playerNet, playerUsername = null) {
+  const net = Number(playerNet);
+  if (!Number.isSafeInteger(net)) {
+    throw new Error('Résultat de partie non entier pour le règlement banque.');
   }
 
+  const bank = await getBankAccount();
+  const player = playerUsername
+    ? { username: playerUsername }
+    : await get('SELECT username FROM users WHERE id = ?', [userId]);
+  const bankDelta = -net;
+  await run('UPDATE users SET chips = chips + ? WHERE id = ? AND is_bank = 1', [bankDelta, bank.id]);
+  await run(`
+    INSERT INTO bank_ledger (player_user_id, player_username, game_name, player_net, bank_delta)
+    VALUES (?, ?, ?, ?, ?)
+  `, [userId, player?.username || 'Compte supprimé', String(gameName), net, bankDelta]);
+}
+
+async function persistBlackjackTable(table) {
   if (table.round !== 'finished' || table.recordedRound === table.roundNumber) {
+    for (const player of table.players) {
+      await run('UPDATE users SET chips = ? WHERE id = ?', [player.chips, player.id]);
+    }
     return;
   }
 
@@ -1144,15 +1173,20 @@ async function persistBlackjackTable(table) {
     loss: 'Défaite'
   };
 
-  for (const player of table.players) {
-    await addGameHistory(
-      player.id,
-      'blackjack',
-      player.bet,
-      resultLabels[player.outcome] || 'Défaite',
-      player.payout,
-      player.payout - player.bet
-    );
+  await run('BEGIN IMMEDIATE');
+  try {
+    for (const player of table.players) {
+      const net = player.payout - player.bet;
+      await run('UPDATE users SET chips = ? WHERE id = ?', [player.chips, player.id]);
+      await addGameHistory(player.id, 'blackjack', player.bet, resultLabels[player.outcome] || 'Défaite', player.payout, net);
+      await recordBankSettlement(player.id, 'blackjack', net, player.username);
+    }
+    await run('COMMIT');
+  } catch (error) {
+    await run('ROLLBACK').catch((rollbackError) => {
+      console.error('Annulation du règlement blackjack impossible :', rollbackError);
+    });
+    throw error;
   }
   table.recordedRound = table.roundNumber;
 }
@@ -1373,6 +1407,7 @@ async function initDatabase() {
       chips INTEGER DEFAULT 1000,
       is_admin INTEGER NOT NULL DEFAULT 0,
       is_banned INTEGER NOT NULL DEFAULT 0,
+      is_bank INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -1383,6 +1418,9 @@ async function initDatabase() {
   }
   if (!userColumns.some((column) => column.name === 'is_banned')) {
     await run('ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!userColumns.some((column) => column.name === 'is_bank')) {
+    await run('ALTER TABLE users ADD COLUMN is_bank INTEGER NOT NULL DEFAULT 0');
   }
 
   await run(`
@@ -1411,6 +1449,19 @@ async function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(admin_user_id) REFERENCES users(id),
       FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS bank_ledger (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      player_user_id INTEGER,
+      player_username TEXT NOT NULL,
+      game_name TEXT NOT NULL,
+      player_net INTEGER NOT NULL,
+      bank_delta INTEGER NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(player_user_id) REFERENCES users(id) ON DELETE SET NULL
     )
   `);
 
@@ -1461,22 +1512,77 @@ async function initDatabase() {
   }
 
   const adminUsername = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
+  const secondAdminUsername = process.env.SECOND_ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin2');
+  const bankUsername = process.env.BANK_USERNAME || 'casino-bank';
+  if (adminUsername && secondAdminUsername && adminUsername.toLowerCase() === secondAdminUsername.toLowerCase()) {
+    throw new Error('ADMIN_USERNAME et SECOND_ADMIN_USERNAME doivent être différents.');
+  }
+  if ([adminUsername, secondAdminUsername].filter(Boolean).some((username) => username.toLowerCase() === bankUsername.toLowerCase())) {
+    throw new Error('BANK_USERNAME doit être différent des noms des comptes administrateurs.');
+  }
+
   const count = await get('SELECT COUNT(*) AS total FROM users');
   if ((count?.total || 0) === 0) {
     const adminPassword = process.env.ADMIN_PASSWORD || (IS_PRODUCTION ? '' : 'admin123');
     if (!adminUsername || !adminPassword) {
       console.log('Aucun compte utilisateur. Définis ADMIN_USERNAME et ADMIN_PASSWORD pour créer le compte administrateur initial.');
-      return;
+    } else {
+      const passwordHash = await bcrypt.hash(adminPassword, 10);
+      await run(
+        'INSERT INTO users (username, password_hash, avatar, chips, is_admin) VALUES (?, ?, ?, 1500, 1)',
+        [adminUsername, passwordHash, '🕶️']
+      );
+      console.log(`Compte administrateur initial créé : ${adminUsername}`);
     }
-
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
-    await run(
-      'INSERT INTO users (username, password_hash, avatar, chips, is_admin) VALUES (?, ?, ?, 1500, 1)',
-      [adminUsername, passwordHash, '🕶️']
-    );
-    console.log(`Compte administrateur initial créé : ${adminUsername}`);
   } else if (adminUsername) {
+    const admin = await get('SELECT is_bank FROM users WHERE username = ?', [adminUsername]);
+    if (admin?.is_bank) {
+      throw new Error('ADMIN_USERNAME correspond déjà au compte banque.');
+    }
     await run('UPDATE users SET is_admin = 1 WHERE username = ?', [adminUsername]);
+  }
+
+  if (secondAdminUsername) {
+    let secondAdmin = await get('SELECT id, is_bank FROM users WHERE username = ?', [secondAdminUsername]);
+    if (secondAdmin?.is_bank) {
+      throw new Error('SECOND_ADMIN_USERNAME correspond déjà au compte banque.');
+    }
+    if (!secondAdmin) {
+      const password = process.env.SECOND_ADMIN_PASSWORD || (IS_PRODUCTION ? '' : 'admin123');
+      if (!password) {
+        console.log('Compte admin secondaire non créé : définis SECOND_ADMIN_PASSWORD.');
+      } else {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const created = await run(
+          'INSERT INTO users (username, password_hash, avatar, chips, is_admin) VALUES (?, ?, ?, 1500, 1)',
+          [secondAdminUsername, passwordHash, '🕶️']
+        );
+        secondAdmin = { id: created.id, is_bank: 0 };
+        console.log(`Compte administrateur secondaire créé : ${secondAdminUsername}`);
+      }
+    } else {
+      await run('UPDATE users SET is_admin = 1 WHERE id = ?', [secondAdmin.id]);
+    }
+  }
+
+  let bank = await get('SELECT id, is_admin, is_bank FROM users WHERE username = ?', [bankUsername]);
+  if (bank?.is_admin) {
+    throw new Error('BANK_USERNAME correspond déjà à un compte administrateur.');
+  }
+  if (bank && !bank.is_bank) {
+    throw new Error('BANK_USERNAME correspond déjà à un compte joueur. Choisis un pseudo réservé pour la banque.');
+  }
+  if (!bank) {
+    const randomPassword = crypto.randomBytes(48).toString('hex');
+    const passwordHash = await bcrypt.hash(randomPassword, 10);
+    const created = await run(
+      'INSERT INTO users (username, password_hash, avatar, chips, is_bank) VALUES (?, ?, ?, 0, 1)',
+      [bankUsername, passwordHash, '🏦']
+    );
+    bank = { id: created.id };
+    console.log(`Compte banque interne créé : ${bankUsername}`);
+  } else {
+    await run('UPDATE users SET is_bank = 1, is_admin = 0, is_banned = 0 WHERE id = ?', [bank.id]);
   }
 }
 
@@ -1485,9 +1591,12 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: 'Connexion requise.' });
   }
   try {
-    const user = await get('SELECT is_banned FROM users WHERE id = ?', [req.session.userId]);
+    const user = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
     if (!user) {
       return res.status(401).json({ error: 'Compte introuvable.' });
+    }
+    if (user.is_bank) {
+      return res.status(403).json({ error: 'Le compte banque ne peut pas accéder aux jeux.' });
     }
     if (user.is_banned) {
       return res.status(403).json({ error: 'Ce compte est banni.' });
@@ -1547,8 +1656,8 @@ app.use('/auth-assets', express.static(AUTH_DIR));
 
 app.get('/', handleAsync(async (req, res) => {
   if (req.session.userId) {
-    const user = await get('SELECT is_banned FROM users WHERE id = ?', [req.session.userId]);
-    if (user && !user.is_banned) {
+    const user = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
+    if (user && !user.is_banned && !user.is_bank) {
       return res.sendFile(path.join(GAME_DIR, 'index.html'));
     }
   }
@@ -1559,8 +1668,8 @@ app.get('/game', handleAsync(async (req, res) => {
   if (!req.session.userId) {
     return res.redirect('/');
   }
-  const user = await get('SELECT is_banned FROM users WHERE id = ?', [req.session.userId]);
-  if (!user || user.is_banned) {
+  const user = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
+  if (!user || user.is_banned || user.is_bank) {
     return res.redirect('/');
   }
   return res.sendFile(path.join(GAME_DIR, 'index.html'));
@@ -1595,6 +1704,10 @@ app.get('/api/session', async (req, res) => {
     return res.json({ authenticated: false });
   }
 
+  const account = await get('SELECT is_banned, is_bank FROM users WHERE id = ?', [req.session.userId]);
+  if (!account || account.is_banned || account.is_bank) {
+    return res.json({ authenticated: false });
+  }
   const user = await getUserById(req.session.userId);
   res.json({ authenticated: true, user });
 });
@@ -1655,6 +1768,9 @@ app.post('/api/login', async (req, res) => {
     if (user.is_banned) {
       return res.status(403).json({ error: 'Ce compte est banni.' });
     }
+    if (user.is_bank) {
+      return res.status(403).json({ error: 'Le compte banque est interne et ne peut pas se connecter.' });
+    }
 
     req.session.userId = user.id;
     if (user.is_admin) {
@@ -1693,7 +1809,7 @@ app.get('/api/admin/accounts', requireAuth, requireAdmin, handleAsync(async (req
   const searchPattern = `%${search}%`;
   const accounts = await all(`
     SELECT u.id, u.username, u.avatar, u.chips, u.created_at,
-      u.is_admin, u.is_banned, COUNT(h.id) AS games_played,
+      u.is_admin, u.is_banned, u.is_bank, COUNT(h.id) AS games_played,
       COALESCE(SUM(h.net), 0) AS net_total
     FROM users u
     LEFT JOIN game_history h ON h.user_id = u.id
@@ -1706,13 +1822,36 @@ app.get('/api/admin/accounts', requireAuth, requireAdmin, handleAsync(async (req
   res.json({ accounts, total: Number(count.total), limit, offset });
 }));
 
+app.get('/api/admin/bank', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const bank = await getBankAccount();
+  const recent = await all(`
+    SELECT player_username, game_name, player_net, bank_delta, created_at
+    FROM bank_ledger ORDER BY id DESC LIMIT 30
+  `);
+  const totals = await get(`
+    SELECT COUNT(*) AS settlements,
+      COALESCE(SUM(CASE WHEN bank_delta > 0 THEN bank_delta ELSE 0 END), 0) AS collected,
+      COALESCE(SUM(CASE WHEN bank_delta < 0 THEN bank_delta ELSE 0 END), 0) AS paid
+    FROM bank_ledger
+  `);
+  res.json({
+    bank,
+    totals: {
+      settlements: Number(totals.settlements),
+      collected: Number(totals.collected),
+      paid: Number(totals.paid)
+    },
+    recent
+  });
+}));
+
 app.get('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(async (req, res) => {
   const targetId = Number(req.params.id);
   if (!Number.isSafeInteger(targetId) || targetId <= 0) {
     return res.status(400).json({ error: 'Identifiant de compte invalide.' });
   }
   const user = await get(`
-    SELECT id, username, avatar, chips, is_admin, is_banned, created_at
+    SELECT id, username, avatar, chips, is_admin, is_banned, is_bank, created_at
     FROM users WHERE id = ?
   `, [targetId]);
   if (!user) {
@@ -1747,14 +1886,14 @@ app.post('/api/admin/accounts/:id/chips', requireAuth, requireAdmin, async (req,
 
   try {
     await run('BEGIN IMMEDIATE');
-    const target = await get('SELECT id, username, chips, is_admin FROM users WHERE id = ?', [targetId]);
+    const target = await get('SELECT id, username, chips, is_admin, is_bank FROM users WHERE id = ?', [targetId]);
     if (!target) {
       await run('ROLLBACK');
       return res.status(404).json({ error: 'Compte introuvable.' });
     }
-    if (target.is_admin) {
+    if (target.is_admin || target.is_bank) {
       await run('ROLLBACK');
-      return res.status(400).json({ error: 'Le solde d’un compte administrateur ne peut pas être modifié ici.' });
+      return res.status(400).json({ error: 'Le solde d’un compte protégé ne peut pas être modifié ici.' });
     }
     const newBalance = Number(target.chips) + delta;
     if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > 2_147_483_647) {
@@ -1791,14 +1930,14 @@ app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, r
 
   try {
     await run('BEGIN IMMEDIATE');
-    const target = await get('SELECT id, username, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
+    const target = await get('SELECT id, username, is_admin, is_bank, is_banned FROM users WHERE id = ?', [targetId]);
     if (!target) {
       await run('ROLLBACK');
       return res.status(404).json({ error: 'Compte introuvable.' });
     }
-    if (target.is_admin) {
+    if (target.is_admin || target.is_bank) {
       await run('ROLLBACK');
-      return res.status(400).json({ error: 'Un compte administrateur ne peut pas être banni ici.' });
+      return res.status(400).json({ error: 'Un compte administrateur ou le compte banque ne peut pas être banni ici.' });
     }
     if (Boolean(target.is_banned) === banned) {
       await run('ROLLBACK');
@@ -1838,12 +1977,12 @@ app.delete('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(asy
     return res.status(400).json({ error: 'Tu ne peux pas supprimer ton propre compte administrateur.' });
   }
 
-  const target = await get('SELECT id, username, is_admin FROM users WHERE id = ?', [targetId]);
+  const target = await get('SELECT id, username, is_admin, is_bank FROM users WHERE id = ?', [targetId]);
   if (!target) {
     return res.status(404).json({ error: 'Compte introuvable.' });
   }
-  if (target.is_admin) {
-    return res.status(400).json({ error: 'Un compte administrateur ne peut pas être supprimé ici.' });
+  if (target.is_admin || target.is_bank) {
+    return res.status(400).json({ error: 'Un compte administrateur ou le compte banque ne peut pas être supprimé ici.' });
   }
   const activeBlackjack = [...blackjackTables.values()].some((table) =>
     table.status === 'in-progress' && table.players.some((player) => player.id === targetId)
@@ -1907,11 +2046,11 @@ app.post('/api/admin/support/:id/start', requireAuth, requireAdmin, handleAsync(
   if (!Number.isSafeInteger(targetId) || targetId <= 0 || targetId === req.adminUserId) {
     return res.status(400).json({ error: 'Compte cible invalide.' });
   }
-  const target = await get('SELECT id, username, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
+  const target = await get('SELECT id, username, is_admin, is_bank, is_banned FROM users WHERE id = ?', [targetId]);
   if (!target) {
     return res.status(404).json({ error: 'Compte introuvable.' });
   }
-  if (target.is_admin || target.is_banned) {
+  if (target.is_admin || target.is_bank || target.is_banned) {
     return res.status(400).json({ error: 'La vue support est indisponible pour ce compte.' });
   }
   await run(`
@@ -2211,23 +2350,47 @@ app.post('/api/poker/tables/:id/leave', requireAuth, async (req, res) => {
 
 app.post('/api/result', requireAuth, async (req, res) => {
   const { game, bet, result, payout, net } = req.body || {};
-
-  if (!game || !Number.isFinite(Number(bet))) {
+  const normalizedGame = String(game || '');
+  const normalizedBet = Number(bet);
+  const normalizedPayout = Number(payout);
+  const normalizedNet = Number(net);
+  if (!['roulette', 'slots'].includes(normalizedGame) ||
+      !Number.isSafeInteger(normalizedBet) || normalizedBet < 0 ||
+      !Number.isSafeInteger(normalizedPayout) || normalizedPayout < 0 ||
+      !Number.isSafeInteger(normalizedNet) || normalizedNet !== normalizedPayout - normalizedBet ||
+      typeof result !== 'string' || result.length > 80) {
     return res.status(400).json({ error: 'Payload invalide.' });
   }
 
-  const user = await getUserById(req.session.userId);
-  if (!user) {
-    return res.status(404).json({ error: 'Utilisateur introuvable.' });
+  try {
+    await run('BEGIN IMMEDIATE');
+    const user = await get('SELECT id, username, chips FROM users WHERE id = ?', [req.session.userId]);
+    if (!user) {
+      await run('ROLLBACK');
+      return res.status(404).json({ error: 'Utilisateur introuvable.' });
+    }
+    if (normalizedBet > Number(user.chips)) {
+      await run('ROLLBACK');
+      return res.status(400).json({ error: 'La mise dépasse le solde du compte.' });
+    }
+    const newChips = Number(user.chips) + normalizedNet;
+    if (!Number.isSafeInteger(newChips) || newChips < 0 || newChips > 2_147_483_647) {
+      await run('ROLLBACK');
+      return res.status(400).json({ error: 'Le solde après la partie est invalide.' });
+    }
+    await addGameHistory(req.session.userId, normalizedGame, normalizedBet, result, normalizedPayout, normalizedNet);
+    await run('UPDATE users SET chips = ? WHERE id = ?', [newChips, req.session.userId]);
+    await recordBankSettlement(req.session.userId, normalizedGame, normalizedNet, user.username);
+    await run('COMMIT');
+    const updated = await getUserById(req.session.userId);
+    return res.json({ ok: true, user: updated });
+  } catch (error) {
+    await run('ROLLBACK').catch((rollbackError) => {
+      console.error('Annulation du règlement de partie impossible :', rollbackError);
+    });
+    console.error('Erreur du règlement de partie :', error);
+    return res.status(500).json({ error: 'Le résultat de la partie n’a pas pu être enregistré.' });
   }
-
-  const newChips = user.chips + Number(net || 0);
-
-  await addGameHistory(req.session.userId, game, bet, result, payout, net);
-  await run('UPDATE users SET chips = ? WHERE id = ?', [Math.max(newChips, 0), req.session.userId]);
-
-  const updated = await getUserById(req.session.userId);
-  res.json({ ok: true, user: updated });
 });
 
 app.post('/api/reset', requireAuth, async (req, res) => {

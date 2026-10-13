@@ -21,7 +21,17 @@ La **vue support** ouvre temporairement l’application comme le compte sélecti
 
 La suppression d’un compte retire son historique de parties, l’invalide sur le serveur et conserve son pseudo dans le journal administratif. Elle est refusée pour les comptes admin ou ceux engagés dans une manche en cours.
 
-Au démarrage, le serveur ajoute automatiquement les colonnes de rôle et de bannissement aux bases existantes. Sur une base locale neuve, le compte de démonstration `admin` reçoit le rôle administrateur. En production, une base neuve crée le compte indiqué par `ADMIN_USERNAME` et `ADMIN_PASSWORD`. Pour donner le rôle à un compte déjà présent en production, configure `ADMIN_USERNAME` avec son pseudo exact et redémarre le serveur. `ADMIN_PASSWORD` ne réinitialise pas le mot de passe d’un compte existant.
+Au démarrage, le serveur ajoute automatiquement les colonnes de rôle et de bannissement aux bases existantes. Sur une base locale, `admin` et `admin2` reçoivent le rôle administrateur (mot de passe de démonstration `admin123`). En production, configure `ADMIN_USERNAME` / `ADMIN_PASSWORD` et `SECOND_ADMIN_USERNAME` / `SECOND_ADMIN_PASSWORD` avec deux identifiants distincts. Pour donner le rôle à un compte déjà présent, configure le nom correspondant et redémarre le serveur; le mot de passe d'un compte existant n'est jamais réinitialisé.
+
+Un compte interne `casino-bank` (modifiable avec `BANK_USERNAME`) est provisionné automatiquement. Il n'a pas de mot de passe utilisable, ne peut pas se connecter ni jouer, et apparaît dans l'administration avec le solde de la banque ainsi que ses derniers règlements. Les pertes des joueurs aux jeux contre la maison augmentent ce solde; les gains le diminuent, sans plancher à zéro. Le journal conserve aussi les égalités. Le poker est joueur contre joueur et sans commission (« rake ») : ses mises ne constituent donc pas un revenu de la banque.
+
+Dans `.env` de production, définis un mot de passe long et unique pour le deuxième administrateur, par exemple :
+
+```ini
+SECOND_ADMIN_USERNAME=admin2
+SECOND_ADMIN_PASSWORD=CHOISIR_UN_AUTRE_MOT_DE_PASSE_LONG_ET_UNIQUE
+BANK_USERNAME=casino-bank
+```
 
 ## Lancement avec Docker
 
@@ -80,6 +90,9 @@ DATA_DIR=/var/lib/tcg-casino
 SESSION_SECRET=REMPLACER_PAR_LE_SECRET_GENERE
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=CHOISIR_UN_MOT_DE_PASSE_LONG_ET_UNIQUE
+SECOND_ADMIN_USERNAME=admin2
+SECOND_ADMIN_PASSWORD=CHOISIR_UN_AUTRE_MOT_DE_PASSE_LONG_ET_UNIQUE
+BANK_USERNAME=casino-bank
 ```
 
 Protège le fichier :
