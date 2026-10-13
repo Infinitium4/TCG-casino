@@ -82,6 +82,7 @@ const adminModule = (() => {
         if (!account.is_banned) {
           actions.append(actionButton('Vue support', 'support', account));
         }
+        actions.append(actionButton('Supprimer', 'delete', account, 'danger-button'));
       } else {
         actions.append(element('small', 'admin-meta', 'Administrateur protégé'));
       }
@@ -178,6 +179,24 @@ const adminModule = (() => {
       });
       await loadAccounts();
       await showDetails(accountId);
+      return;
+    }
+
+    if (button.dataset.adminAction === 'delete') {
+      if (!window.confirm(`Supprimer définitivement le compte ${account.username} et son historique de parties ? Cette action est irréversible.`)) return;
+      if (window.prompt(`Pour confirmer, saisis exactement le pseudo : ${account.username}`) !== account.username) {
+        window.alert('Le pseudo ne correspond pas. Suppression annulée.');
+        return;
+      }
+      const reason = window.prompt('Motif obligatoire pour le journal administratif :');
+      if (!reason?.trim()) return;
+      await request(`/api/admin/accounts/${accountId}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ reason })
+      });
+      document.getElementById('adminDetailTitle').textContent = 'Détails du compte';
+      document.getElementById('adminAccountDetails').replaceChildren();
+      await loadAccounts();
     }
   }
 

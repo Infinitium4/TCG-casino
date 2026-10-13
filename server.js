@@ -116,9 +116,15 @@ const db = new sqlite3.Database(DB_PATH, (error) => {
     process.exit(1);
   }
   console.log('Base SQLite connectée');
-  initDatabase().then(resolveDatabaseReady, (initializationError) => {
-    console.error('Initialisation de la base de données impossible :', initializationError);
-    rejectDatabaseReady(initializationError);
+  db.run('PRAGMA foreign_keys = ON', (pragmaError) => {
+    if (pragmaError) {
+      rejectDatabaseReady(pragmaError);
+      return;
+    }
+    initDatabase().then(resolveDatabaseReady, (initializationError) => {
+      console.error('Initialisation de la base de données impossible :', initializationError);
+      rejectDatabaseReady(initializationError);
+    });
   });
 });
 
@@ -1397,15 +1403,62 @@ async function initDatabase() {
     CREATE TABLE IF NOT EXISTS admin_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       admin_user_id INTEGER NOT NULL,
-      target_user_id INTEGER NOT NULL,
+      target_user_id INTEGER,
+      target_username TEXT NOT NULL DEFAULT '',
       action TEXT NOT NULL,
       amount INTEGER,
       reason TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(admin_user_id) REFERENCES users(id),
-      FOREIGN KEY(target_user_id) REFERENCES users(id)
+      FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE SET NULL
     )
   `);
+
+  const auditColumns = await all('PRAGMA table_info(admin_audit)');
+  const auditForeignKeys = await all('PRAGMA foreign_key_list(admin_audit)');
+  const targetIdColumn = auditColumns.find((column) => column.name === 'target_user_id');
+  const needsAuditMigration = !auditColumns.some((column) => column.name === 'target_username') ||
+    Boolean(targetIdColumn?.notnull) ||
+    auditForeignKeys.some((foreignKey) => foreignKey.from === 'target_user_id' && foreignKey.on_delete !== 'SET NULL');
+  if (needsAuditMigration) {
+    await run('BEGIN IMMEDIATE');
+    try {
+      await run(`
+        CREATE TABLE admin_audit_migrated (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          admin_user_id INTEGER NOT NULL,
+          target_user_id INTEGER,
+          target_username TEXT NOT NULL DEFAULT '',
+          action TEXT NOT NULL,
+          amount INTEGER,
+          reason TEXT NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(admin_user_id) REFERENCES users(id),
+          FOREIGN KEY(target_user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+      `);
+      const oldAuditColumns = new Set(auditColumns.map((column) => column.name));
+      const targetUsername = oldAuditColumns.has('target_username')
+        ? "COALESCE(a.target_username, u.username, '')"
+        : "COALESCE(u.username, '')";
+      await run(`
+        INSERT INTO admin_audit_migrated
+          (id, admin_user_id, target_user_id, target_username, action, amount, reason, created_at)
+        SELECT a.id, a.admin_user_id, a.target_user_id, ${targetUsername},
+          a.action, a.amount, a.reason, a.created_at
+        FROM admin_audit a
+        LEFT JOIN users u ON u.id = a.target_user_id
+      `);
+      await run('DROP TABLE admin_audit');
+      await run('ALTER TABLE admin_audit_migrated RENAME TO admin_audit');
+      await run('COMMIT');
+    } catch (error) {
+      await run('ROLLBACK').catch((rollbackError) => {
+        console.error('Annulation de migration du journal admin impossible :', rollbackError);
+      });
+      throw error;
+    }
+  }
 
   const adminUsername = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
   const count = await get('SELECT COUNT(*) AS total FROM users');
@@ -1437,7 +1490,6 @@ async function requireAuth(req, res, next) {
       return res.status(401).json({ error: 'Compte introuvable.' });
     }
     if (user.is_banned) {
-      req.session.destroy(() => {});
       return res.status(403).json({ error: 'Ce compte est banni.' });
     }
     next();
@@ -1493,20 +1545,26 @@ async function getUserById(userId) {
 app.use(express.static(GAME_DIR, { index: false }));
 app.use('/auth-assets', express.static(AUTH_DIR));
 
-app.get('/', (req, res) => {
+app.get('/', handleAsync(async (req, res) => {
   if (req.session.userId) {
-    res.sendFile(path.join(GAME_DIR, 'index.html'));
-    return;
+    const user = await get('SELECT is_banned FROM users WHERE id = ?', [req.session.userId]);
+    if (user && !user.is_banned) {
+      return res.sendFile(path.join(GAME_DIR, 'index.html'));
+    }
   }
-  res.sendFile(path.join(AUTH_DIR, 'auth.html'));
-});
+  return res.sendFile(path.join(AUTH_DIR, 'auth.html'));
+}));
 
-app.get('/game', (req, res) => {
+app.get('/game', handleAsync(async (req, res) => {
   if (!req.session.userId) {
     return res.redirect('/');
   }
-  res.sendFile(path.join(GAME_DIR, 'index.html'));
-});
+  const user = await get('SELECT is_banned FROM users WHERE id = ?', [req.session.userId]);
+  if (!user || user.is_banned) {
+    return res.redirect('/');
+  }
+  return res.sendFile(path.join(GAME_DIR, 'index.html'));
+}));
 
 app.get('/poker/game/:tableId', requireAuth, (req, res) => {
   const table = pokerTables.get(String(req.params.tableId));
@@ -1689,7 +1747,7 @@ app.post('/api/admin/accounts/:id/chips', requireAuth, requireAdmin, async (req,
 
   try {
     await run('BEGIN IMMEDIATE');
-    const target = await get('SELECT id, chips, is_admin FROM users WHERE id = ?', [targetId]);
+    const target = await get('SELECT id, username, chips, is_admin FROM users WHERE id = ?', [targetId]);
     if (!target) {
       await run('ROLLBACK');
       return res.status(404).json({ error: 'Compte introuvable.' });
@@ -1705,9 +1763,9 @@ app.post('/api/admin/accounts/:id/chips', requireAuth, requireAdmin, async (req,
     }
     await run('UPDATE users SET chips = ? WHERE id = ?', [newBalance, targetId]);
     await run(`
-      INSERT INTO admin_audit (admin_user_id, target_user_id, action, amount, reason)
-      VALUES (?, ?, 'chips_adjustment', ?, ?)
-    `, [req.adminUserId, targetId, delta, reason]);
+      INSERT INTO admin_audit (admin_user_id, target_user_id, target_username, action, amount, reason)
+      VALUES (?, ?, ?, 'chips_adjustment', ?, ?)
+    `, [req.adminUserId, targetId, target.username, delta, reason]);
     await run('COMMIT');
     return res.json({ ok: true, chips: newBalance });
   } catch (error) {
@@ -1733,7 +1791,7 @@ app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, r
 
   try {
     await run('BEGIN IMMEDIATE');
-    const target = await get('SELECT id, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
+    const target = await get('SELECT id, username, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
     if (!target) {
       await run('ROLLBACK');
       return res.status(404).json({ error: 'Compte introuvable.' });
@@ -1748,9 +1806,9 @@ app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, r
     }
     await run('UPDATE users SET is_banned = ? WHERE id = ?', [banned ? 1 : 0, targetId]);
     await run(`
-      INSERT INTO admin_audit (admin_user_id, target_user_id, action, reason)
-      VALUES (?, ?, ?, ?)
-    `, [req.adminUserId, targetId, banned ? 'ban' : 'unban', reason]);
+      INSERT INTO admin_audit (admin_user_id, target_user_id, target_username, action, reason)
+      VALUES (?, ?, ?, ?, ?)
+    `, [req.adminUserId, targetId, target.username, banned ? 'ban' : 'unban', reason]);
     await run('COMMIT');
   } catch (error) {
     await run('ROLLBACK').catch((rollbackError) => {
@@ -1770,12 +1828,86 @@ app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, r
   return res.json({ ok: true, banned });
 });
 
+app.delete('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const targetId = Number(req.params.id);
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0 || !reason) {
+    return res.status(400).json({ error: 'Identifiant ou motif de suppression invalide.' });
+  }
+  if (targetId === req.adminUserId) {
+    return res.status(400).json({ error: 'Tu ne peux pas supprimer ton propre compte administrateur.' });
+  }
+
+  const target = await get('SELECT id, username, is_admin FROM users WHERE id = ?', [targetId]);
+  if (!target) {
+    return res.status(404).json({ error: 'Compte introuvable.' });
+  }
+  if (target.is_admin) {
+    return res.status(400).json({ error: 'Un compte administrateur ne peut pas être supprimé ici.' });
+  }
+  const activeBlackjack = [...blackjackTables.values()].some((table) =>
+    table.status === 'in-progress' && table.players.some((player) => player.id === targetId)
+  );
+  const activePoker = [...pokerTables.values()].some((table) =>
+    table.status === 'in-progress' && table.players.some((player) => player.id === targetId)
+  );
+  if (activeBlackjack || activePoker) {
+    return res.status(409).json({ error: 'Ce compte participe à une partie en cours. Réessaie après la fin de la manche.' });
+  }
+
+  try {
+    await run('BEGIN IMMEDIATE');
+    await run(`
+      INSERT INTO admin_audit (admin_user_id, target_user_id, target_username, action, reason)
+      VALUES (?, ?, ?, 'account_deleted', ?)
+    `, [req.adminUserId, targetId, target.username, reason]);
+    await run('DELETE FROM game_history WHERE user_id = ?', [targetId]);
+    const deleted = await run('DELETE FROM users WHERE id = ?', [targetId]);
+    if (deleted.changes !== 1) {
+      await run('ROLLBACK');
+      return res.status(404).json({ error: 'Compte introuvable.' });
+    }
+    await run('COMMIT');
+  } catch (error) {
+    await run('ROLLBACK').catch((rollbackError) => {
+      console.error('Annulation de la suppression du compte impossible :', rollbackError);
+    });
+    console.error('Erreur de suppression du compte :', error);
+    return res.status(500).json({ error: 'La suppression du compte a échoué.' });
+  }
+
+  for (const [tableId, table] of blackjackTables) {
+    if (!table.players.some((player) => player.id === targetId)) continue;
+    table.removePlayer(targetId);
+    if (!table.players.length) {
+      blackjackTables.delete(tableId);
+    } else {
+      io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
+    }
+  }
+  for (const [tableId, table] of pokerTables) {
+    if (!table.players.some((player) => player.id === targetId)) continue;
+    table.removePlayer(targetId);
+    if (!table.players.length) {
+      pokerTables.delete(tableId);
+    } else {
+      io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table));
+    }
+  }
+  for (const socket of io.sockets.sockets.values()) {
+    if (Number(socket.data.user?.id) === targetId) {
+      socket.disconnect(true);
+    }
+  }
+  return res.json({ ok: true, deleted: { id: targetId, username: target.username } });
+}));
+
 app.post('/api/admin/support/:id/start', requireAuth, requireAdmin, handleAsync(async (req, res) => {
   const targetId = Number(req.params.id);
   if (!Number.isSafeInteger(targetId) || targetId <= 0 || targetId === req.adminUserId) {
     return res.status(400).json({ error: 'Compte cible invalide.' });
   }
-  const target = await get('SELECT id, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
+  const target = await get('SELECT id, username, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
   if (!target) {
     return res.status(404).json({ error: 'Compte introuvable.' });
   }
@@ -1783,9 +1915,9 @@ app.post('/api/admin/support/:id/start', requireAuth, requireAdmin, handleAsync(
     return res.status(400).json({ error: 'La vue support est indisponible pour ce compte.' });
   }
   await run(`
-    INSERT INTO admin_audit (admin_user_id, target_user_id, action, reason)
-    VALUES (?, ?, 'support_start', 'Ouverture de la vue support temporaire')
-  `, [req.adminUserId, targetId]);
+    INSERT INTO admin_audit (admin_user_id, target_user_id, target_username, action, reason)
+    VALUES (?, ?, ?, 'support_start', 'Ouverture de la vue support temporaire')
+  `, [req.adminUserId, targetId, target.username]);
   req.session.adminUserId = req.adminUserId;
   req.session.supportOriginalUserId = req.session.userId;
   req.session.userId = targetId;
@@ -1797,9 +1929,9 @@ app.post('/api/admin/support/end', requireSupportAdmin, handleAsync(async (req, 
     return res.status(400).json({ error: 'Aucune vue support active.' });
   }
   await run(`
-    INSERT INTO admin_audit (admin_user_id, target_user_id, action, reason)
-    VALUES (?, ?, 'support_end', 'Fermeture de la vue support temporaire')
-  `, [req.adminUserId, req.session.userId]);
+    INSERT INTO admin_audit (admin_user_id, target_user_id, target_username, action, reason)
+    VALUES (?, ?, ?, 'support_end', 'Fermeture de la vue support temporaire')
+  `, [req.adminUserId, req.session.userId, (await getUserById(req.session.userId))?.username || 'Compte supprimé']);
   req.session.userId = req.session.adminUserId;
   delete req.session.adminUserId;
   delete req.session.supportOriginalUserId;

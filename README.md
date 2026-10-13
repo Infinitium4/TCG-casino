@@ -15,9 +15,11 @@ Ouvre `http://127.0.0.1:5500/`. Sur une base neuve en développement, le compte 
 
 ## Administration des comptes
 
-Connecte-toi avec un compte administrateur pour afficher l’onglet **Administration**. Il permet de rechercher les comptes, consulter leur solde et leur historique, ajouter ou retirer des jetons, bannir ou débannir un compte et consulter le journal des actions.
+Connecte-toi avec un compte administrateur pour afficher l’onglet **Administration**. Il permet de rechercher les comptes, consulter leur solde et leur historique, ajouter ou retirer des jetons, bannir ou débannir un compte, supprimer définitivement un compte et consulter le journal des actions. Un compte banni qui est débanni retrouve l’accès avec sa session existante ou après reconnexion.
 
 La **vue support** ouvre temporairement l’application comme le compte sélectionné, sans révéler ni modifier son mot de passe. Un bandeau reste visible pendant cette vue et son ouverture comme sa fermeture sont journalisées.
+
+La suppression d’un compte retire son historique de parties, l’invalide sur le serveur et conserve son pseudo dans le journal administratif. Elle est refusée pour les comptes admin ou ceux engagés dans une manche en cours.
 
 Au démarrage, le serveur ajoute automatiquement les colonnes de rôle et de bannissement aux bases existantes. Sur une base locale neuve, le compte de démonstration `admin` reçoit le rôle administrateur. En production, une base neuve crée le compte indiqué par `ADMIN_USERNAME` et `ADMIN_PASSWORD`. Pour donner le rôle à un compte déjà présent en production, configure `ADMIN_USERNAME` avec son pseudo exact et redémarre le serveur. `ADMIN_PASSWORD` ne réinitialise pas le mot de passe d’un compte existant.
 
