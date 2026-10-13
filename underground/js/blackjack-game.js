@@ -163,6 +163,7 @@ const blackjackGame = (() => {
   function renderActions(table) {
     const controlsNode = document.getElementById('actionControls');
     const turnInfo = document.getElementById('turnInfo');
+    const nextBetValue = document.getElementById('blackjackNextBet')?.value;
     const currentUserId = getCurrentUserId();
     const player = getCurrentPlayer(table);
     const activePlayer = table.players[Number(table.currentTurn)] || null;
@@ -215,6 +216,10 @@ const blackjackGame = (() => {
           ${table.round === 'finished' ? 'Rejouer' : 'Lancer la manche'}
         </button>
       `;
+      const nextBetInput = document.getElementById('blackjackNextBet');
+      if (nextBetValue !== undefined) {
+        nextBetInput.value = nextBetValue;
+      }
       document.getElementById('startBlackjackRound')?.addEventListener('click', startNextRound);
     } else {
       controlsNode.innerHTML = '<div class="status-box subtle">En attente de l’hôte.</div>';
