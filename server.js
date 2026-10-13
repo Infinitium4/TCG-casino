@@ -1,13 +1,16 @@
-const express = require('express');
+﻿const express = require('express');
+const http = require('http');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const { Server } = require('socket.io');
 const SQLiteStore = require('connect-sqlite3')(session);
 const { rateLimit } = require('express-rate-limit');
 
 const app = express();
+const server = http.createServer(app);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT || 5500);
 const HOST = process.env.HOST || (IS_PRODUCTION ? '127.0.0.1' : '0.0.0.0');
@@ -44,9 +47,7 @@ const AUTH_DIR = resolveExistingPath(
   path.join(__dirname, 'TCG-casino', 'public')
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(session({
+const sessionMiddleware = session({
   store: new SQLiteStore({
     db: 'sessions.sqlite',
     dir: DATA_DIR,
@@ -61,7 +62,11 @@ app.use(session({
     sameSite: 'lax',
     secure: IS_PRODUCTION
   }
-}));
+});
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(sessionMiddleware);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -69,6 +74,25 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de tentatives. Réessaie dans 15 minutes.' }
+});
+
+const io = new Server(server, {
+  cors: { origin: true, credentials: true },
+  transports: ['websocket', 'polling']
+});
+
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, (error) => {
+    if (error) {
+      return next(error);
+    }
+
+    if (!socket.request.session || !socket.request.session.userId) {
+      return next(new Error('AUTH_REQUIRED'));
+    }
+
+    next();
+  });
 });
 
 const db = new sqlite3.Database(DB_PATH, (error) => {
@@ -116,6 +140,954 @@ function all(sql, params = []) {
   });
 }
 
+const SUITS = ['♠', '♥', '♦', '♣'];
+const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+const HAND_RANKS = {
+  'High Card': 0,
+  'Pair': 1,
+  'Two Pair': 2,
+  'Three of a Kind': 3,
+  'Straight': 4,
+  'Flush': 5,
+  'Full House': 6,
+  'Four of a Kind': 7,
+  'Straight Flush': 8,
+  'Royal Flush': 9
+};
+
+function createDeck() {
+  const deck = [];
+  for (const suit of SUITS) {
+    for (const rank of RANKS) {
+      deck.push(`${rank}${suit}`);
+    }
+  }
+  return deck;
+}
+
+function shuffleDeck(cards) {
+  const copy = [...cards];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[randomIndex]] = [copy[randomIndex], copy[index]];
+  }
+  return copy;
+}
+
+function getCardValue(card) {
+  const value = String(card).slice(0, -1);
+  if (value === 'A') return 14;
+  if (value === 'K') return 13;
+  if (value === 'Q') return 12;
+  if (value === 'J') return 11;
+  return Number(value);
+}
+
+function getCardSuit(card) {
+  return String(card).slice(-1);
+}
+
+function compareValues(a, b) {
+  return Number(b) - Number(a);
+}
+
+function chooseCombinations(cards, size) {
+  const results = [];
+  function backtrack(start, current) {
+    if (current.length === size) {
+      results.push([...current]);
+      return;
+    }
+    for (let index = start; index < cards.length; index += 1) {
+      current.push(cards[index]);
+      backtrack(index + 1, current);
+      current.pop();
+    }
+  }
+  backtrack(0, []);
+  return results;
+}
+
+function compareHandScore(a, b) {
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const currentA = Number(a[index] ?? 0);
+    const currentB = Number(b[index] ?? 0);
+    if (currentA !== currentB) {
+      return currentA - currentB;
+    }
+  }
+  return 0;
+}
+
+function evaluateFiveCards(cards) {
+  const values = cards.map(getCardValue).sort(compareValues);
+  const suitMap = {};
+  for (const card of cards) {
+    const suit = getCardSuit(card);
+    suitMap[suit] = (suitMap[suit] || 0) + 1;
+  }
+
+  const counts = new Map();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+
+  const sortedCounts = [...counts.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return b[0] - a[0];
+  });
+
+  const isFlush = Object.values(suitMap).some((count) => count >= 5);
+  const uniqueValues = [...new Set(values)];
+  const straightHigh = (() => {
+    if (uniqueValues.length < 5) return null;
+    const sortedUnique = [...new Set(uniqueValues)].sort((a, b) => a - b);
+    const hasAceLow = sortedUnique.includes(14) && sortedUnique.includes(5) && sortedUnique.includes(4) && sortedUnique.includes(3) && sortedUnique.includes(2);
+    if (hasAceLow) return 5;
+    for (let index = 0; index <= sortedUnique.length - 5; index += 1) {
+      const slice = sortedUnique.slice(index, index + 5);
+      const test = slice.every((value, subIndex) => {
+        if (subIndex === 0) return true;
+        return value === slice[subIndex - 1] + 1;
+      });
+      if (test) {
+        return slice[slice.length - 1];
+      }
+    }
+    return null;
+  })();
+
+  const isStraight = straightHigh !== null;
+
+  if (isStraight && isFlush) {
+    const royalValues = [10, 11, 12, 13, 14];
+    const royal = cards.map(getCardValue).sort(compareValues).filter((value) => royalValues.includes(value));
+    if (royal.length === 5) {
+      return { rank: HAND_RANKS['Royal Flush'], name: 'Royal Flush', score: [9, 14], best: cards.slice().sort((a, b) => getCardValue(b) - getCardValue(a)) };
+    }
+    return { rank: HAND_RANKS['Straight Flush'], name: 'Straight Flush', score: [8, straightHigh], best: cards.slice().sort((a, b) => getCardValue(b) - getCardValue(a)) };
+  }
+
+  if (sortedCounts[0][1] === 4) {
+    const quadValue = sortedCounts[0][0];
+    const kicker = values.find((value) => value !== quadValue);
+    return { rank: HAND_RANKS['Four of a Kind'], name: 'Four of a Kind', score: [7, quadValue, kicker], best: cards.slice().sort((a, b) => getCardValue(b) - getCardValue(a)) };
+  }
+
+  if (sortedCounts[0][1] === 3 && sortedCounts[1][1] === 2) {
+    return { rank: HAND_RANKS['Full House'], name: 'Full House', score: [6, sortedCounts[0][0], sortedCounts[1][0]], best: cards.slice() };
+  }
+
+  if (isFlush) {
+    return { rank: HAND_RANKS['Flush'], name: 'Flush', score: [5, ...values.slice().reverse()], best: cards.slice().sort((a, b) => getCardValue(b) - getCardValue(a)) };
+  }
+
+  if (isStraight) {
+    return { rank: HAND_RANKS['Straight'], name: 'Straight', score: [4, straightHigh], best: cards.slice() };
+  }
+
+  if (sortedCounts[0][1] === 3) {
+    const tripValue = sortedCounts[0][0];
+    const kickers = values.filter((value) => value !== tripValue).sort(compareValues).slice(0, 2).reverse();
+    return { rank: HAND_RANKS['Three of a Kind'], name: 'Three of a Kind', score: [3, tripValue, ...kickers], best: cards.slice() };
+  }
+
+  if (sortedCounts[0][1] === 2 && sortedCounts[1][1] === 2) {
+    const pairs = sortedCounts.slice(0, 2).map(([value]) => value).sort((a, b) => b - a);
+    const kicker = values.find((value) => !pairs.includes(value));
+    return { rank: HAND_RANKS['Two Pair'], name: 'Two Pair', score: [2, ...pairs, kicker], best: cards.slice() };
+  }
+
+  if (sortedCounts[0][1] === 2) {
+    const pairValue = sortedCounts[0][0];
+    const kickers = values.filter((value) => value !== pairValue).sort(compareValues).slice(0, 3).reverse();
+    return { rank: HAND_RANKS['Pair'], name: 'Pair', score: [1, pairValue, ...kickers], best: cards.slice() };
+  }
+
+  return { rank: HAND_RANKS['High Card'], name: 'High Card', score: [0, ...values.slice().reverse()], best: cards.slice() };
+}
+
+function evaluatePokerHand(cards) {
+  const normalized = cards.map((card) => String(card).trim());
+  if (normalized.length < 5) {
+    return { rank: 0, name: 'High Card', score: [0], best: [] };
+  }
+
+  let best = null;
+  const picks = normalized.length > 5 ? chooseCombinations(normalized, 5) : [normalized];
+
+  for (const combo of picks) {
+    const current = evaluateFiveCards(combo);
+    if (!best || compareHandScore(current.score, best.score) > 0) {
+      best = current;
+    }
+  }
+
+  return best;
+}
+
+function sanitizeUser(user) {
+  return {
+    id: Number(user.id),
+    username: user.username,
+    avatar: user.avatar || '🎲',
+    chips: Number(user.chips || 0),
+    created_at: user.created_at
+  };
+}
+
+function createBlackjackTable(id = `bj-${Date.now()}`) {
+  return {
+    id,
+    type: 'blackjack',
+    name: `Table ${id}`,
+    maxPlayers: 5,
+    minPlayers: 1,
+    status: 'waiting',
+    players: [],
+    hostId: null,
+    deck: [],
+    dealerCards: [],
+    round: null,
+    addPlayer(player) {
+      if (this.players.length >= this.maxPlayers) return false;
+      if (this.players.some((entry) => entry.id === player.id)) return false;
+      const safePlayer = {
+        id: Number(player.id),
+        username: player.username,
+        avatar: player.avatar || '🎲',
+        chips: Number(player.chips || 0),
+        hand: [],
+        bet: 0,
+        finished: false,
+        connected: true
+      };
+      this.players.push(safePlayer);
+      if (!this.hostId) this.hostId = safePlayer.id;
+      return true;
+    },
+    removePlayer(playerId) {
+      const index = this.players.findIndex((player) => player.id === Number(playerId));
+      if (index >= 0) {
+        const [removed] = this.players.splice(index, 1);
+        if (this.hostId === removed.id && this.players.length > 0) {
+          this.hostId = this.players[0].id;
+        }
+        return removed;
+      }
+      return null;
+    }
+  };
+}
+
+function createPokerTable(id = `poker-${Date.now()}`) {
+  const table = {
+    id,
+    type: 'poker',
+    name: `Poker ${id}`,
+    maxPlayers: 8,
+    minPlayers: 3,
+    status: 'waiting',
+    hostId: null,
+    players: [],
+    deck: [],
+    board: [],
+    currentBet: 0,
+    pot: 0,
+    round: 'waiting',
+    currentTurn: 0,
+    lastAction: 'Aucune action',
+    dealerIndex: 0,
+    smallBlindIndex: 0,
+    bigBlindIndex: 0,
+    blinds: { small: 10, big: 20 },
+    recentHistory: [],
+    addPlayer(player) {
+      if (this.status === 'in-progress') return false;
+      if (this.players.length >= this.maxPlayers) return false;
+      if (this.players.some((entry) => entry.id === player.id)) return false;
+      const safePlayer = {
+        id: Number(player.id),
+        username: player.username,
+        avatar: player.avatar || '🎲',
+        chips: Number(player.chips || 0),
+        hand: [],
+        bet: 0,
+        totalContribution: 0,
+        folded: false,
+        allIn: false,
+        connected: true,
+        isDealer: false,
+        isSmallBlind: false,
+        isBigBlind: false
+      };
+      this.players.push(safePlayer);
+      if (!this.hostId) this.hostId = safePlayer.id;
+      return true;
+    },
+    removePlayer(playerId) {
+      const index = this.players.findIndex((player) => player.id === Number(playerId));
+      if (index < 0) return null;
+
+      const [removed] = this.players.splice(index, 1);
+      if (this.hostId === removed.id && this.players.length > 0) {
+        this.hostId = this.players[0].id;
+      }
+
+      if (this.status === 'in-progress' && this.players.length > 0) {
+        if (index < this.currentTurn) {
+          this.currentTurn = Math.max(0, this.currentTurn - 1);
+        } else if (index === this.currentTurn) {
+          this.currentTurn = Math.min(this.currentTurn, this.players.length - 1);
+        }
+        if (this.currentTurn >= this.players.length) {
+          this.currentTurn = 0;
+        }
+        if (this.players[this.currentTurn] && this.players[this.currentTurn].folded) {
+          this.currentTurn = this.getNextLivePlayerIndex(this.currentTurn);
+        }
+      }
+
+      if (this.players.length < this.minPlayers && this.status === 'in-progress') {
+        this.status = 'waiting';
+        this.round = 'waiting';
+        this.board = [];
+        this.currentBet = 0;
+        this.lastAction = 'Table mise en attente.';
+      }
+
+      return removed;
+    },
+    getActivePlayers() {
+      return this.players.filter((player) => !player.folded && (Number(player.chips || 0) > 0 || !!player.allIn));
+    },
+    getActionablePlayers() {
+      return this.players.filter((player) => !player.folded && Number(player.chips || 0) > 0);
+    },
+    getPlayerIndex(playerId) {
+      return this.players.findIndex((player) => Number(player.id) === Number(playerId));
+    },
+    getNextActionablePlayerIndex(startIndex = this.currentTurn) {
+      if (!this.players.length) {
+        return 0;
+      }
+      for (let offset = 1; offset <= this.players.length; offset += 1) {
+        const candidate = (startIndex + offset) % this.players.length;
+        const player = this.players[candidate];
+        if (player && !player.folded && Number(player.chips || 0) > 0) {
+          return candidate;
+        }
+      }
+      return startIndex;
+    },
+    buildSidePots(contenders = this.getActivePlayers()) {
+      const contenderSet = new Set(contenders);
+      const levels = [...new Set(this.players
+        .map((player) => Number(player.totalContribution || 0))
+        .filter((contribution) => contribution > 0))].sort((a, b) => a - b);
+      const pots = [];
+      let previousLevel = 0;
+
+      for (const level of levels) {
+        const contributors = this.players.filter((player) => Number(player.totalContribution || 0) >= level);
+        const amount = (level - previousLevel) * contributors.length;
+        const eligiblePlayers = contributors.filter((player) => contenderSet.has(player));
+        if (amount > 0) {
+          if (eligiblePlayers.length) {
+            pots.push({ amount, eligiblePlayers });
+          } else if (pots.length) {
+            pots[pots.length - 1].amount += amount;
+          } else if (contenders.length) {
+            pots.push({ amount, eligiblePlayers: contenders });
+          }
+        }
+        previousLevel = level;
+      }
+
+      const recordedPot = pots.reduce((total, pot) => total + pot.amount, 0);
+      const untrackedAmount = Number(this.pot || 0) - recordedPot;
+      if (untrackedAmount > 0) {
+        if (pots.length) {
+          pots[0].amount += untrackedAmount;
+        } else if (contenders.length) {
+          pots.push({ amount: untrackedAmount, eligiblePlayers: contenders });
+        }
+      }
+      return pots;
+    },
+    getNextLivePlayerIndex(startIndex = this.currentTurn) {
+      if (!this.players.length) {
+        return 0;
+      }
+      for (let offset = 1; offset <= this.players.length; offset += 1) {
+        const candidate = (startIndex + offset) % this.players.length;
+        const player = this.players[candidate];
+        if (player && !player.folded && (Number(player.chips || 0) > 0 || !!player.allIn)) {
+          return candidate;
+        }
+      }
+      return startIndex;
+    },
+    isBettingRoundComplete() {
+      const activePlayers = this.getActivePlayers();
+      if (activePlayers.length <= 1) {
+        return true;
+      }
+
+      const highestBet = Math.max(...this.players.map((player) => Number(player.bet || 0)), 0);
+      const actionablePlayers = this.getActionablePlayers();
+      if (!actionablePlayers.length) {
+        return true;
+      }
+      const everyoneMatched = actionablePlayers.every((player) => Number(player.bet || 0) >= highestBet);
+      const everyoneActed = actionablePlayers.every((player) => player.actionTakenThisRound || Number(player.bet || 0) >= highestBet);
+      return everyoneMatched && everyoneActed;
+    },
+    resolveLastActivePlayer() {
+      const activePlayers = this.getActivePlayers();
+      if (activePlayers.length !== 1) {
+        return false;
+      }
+
+      const winner = activePlayers[0];
+      const payout = Number(this.pot || 0);
+      if (payout > 0) {
+        winner.chips = Number(winner.chips || 0) + payout;
+      }
+      this.pot = 0;
+      this.currentBet = 0;
+      this.round = 'showdown';
+      this.status = 'waiting';
+      this.currentTurn = this.getPlayerIndex(winner.id);
+      this.lastAction = `${winner.username} remporte le pot après les abandons.`;
+      this.recentHistory.push(this.lastAction);
+      return true;
+    },
+    resolveShowdownWinner() {
+      const contenders = this.getActivePlayers();
+      if (!contenders.length) {
+        this.pot = 0;
+        this.round = 'showdown';
+        this.status = 'waiting';
+        this.lastAction = 'Showdown terminé sans gagnant.';
+        this.recentHistory.push(this.lastAction);
+        return [];
+      }
+
+      const evaluations = new Map();
+      for (const player of contenders) {
+        const hand = [...(this.board || []), ...(player.hand || [])];
+        evaluations.set(player, evaluatePokerHand(hand));
+      }
+
+      const pots = this.buildSidePots(contenders);
+      if (!pots.length) {
+        this.pot = 0;
+        this.round = 'showdown';
+        this.status = 'waiting';
+        this.lastAction = 'Showdown terminé sans gagnant.';
+        this.recentHistory.push(this.lastAction);
+        return [];
+      }
+
+      const payouts = new Map();
+      const handNames = new Set();
+      for (const pot of pots) {
+        let bestScore = null;
+        let winners = [];
+        for (const player of pot.eligiblePlayers) {
+          const evaluation = evaluations.get(player);
+          if (!bestScore || compareHandScore(evaluation.score, bestScore.score) > 0) {
+            bestScore = evaluation;
+            winners = [player];
+          } else if (compareHandScore(evaluation.score, bestScore.score) === 0) {
+            winners.push(player);
+          }
+        }
+
+        if (!winners.length) {
+          continue;
+        }
+        handNames.add(bestScore.name);
+        const splitValue = Math.floor(pot.amount / winners.length);
+        const remainder = pot.amount % winners.length;
+        winners.sort((first, second) => {
+          const firstDistance = (this.getPlayerIndex(first.id) - this.dealerIndex + this.players.length) % this.players.length || this.players.length;
+          const secondDistance = (this.getPlayerIndex(second.id) - this.dealerIndex + this.players.length) % this.players.length || this.players.length;
+          return firstDistance - secondDistance;
+        });
+        winners.forEach((player, index) => {
+          const gain = splitValue + (index < remainder ? 1 : 0);
+          player.chips = Number(player.chips || 0) + gain;
+          payouts.set(player, (payouts.get(player) || 0) + gain);
+        });
+      }
+
+      const winners = [...payouts.keys()];
+
+      this.pot = 0;
+      this.currentBet = 0;
+      this.round = 'showdown';
+      this.status = 'waiting';
+      this.currentTurn = this.getPlayerIndex(winners[0].id);
+
+      if (winners.length > 1) {
+        this.lastAction = `${winners.map((player) => player.username).join(', ')} se partagent les pots (${[...handNames].join(', ')}).`;
+      } else {
+        this.lastAction = `${winners[0].username} remporte ${pots.length > 1 ? 'les pots' : 'le pot'} avec ${[...handNames].join(', ')}.`;
+      }
+      this.recentHistory.push(this.lastAction);
+      return winners;
+    },
+    finalizeAction(player) {
+      player.actionTakenThisRound = true;
+      if (this.resolveLastActivePlayer()) {
+        return;
+      }
+      if (this.isBettingRoundComplete()) {
+        this.advanceStreet();
+        return;
+      }
+      this.currentTurn = this.getNextLivePlayerIndex(this.currentTurn);
+    },
+    startRound() {
+      if (this.status === 'in-progress' || !canStartPokerTable(this)) {
+        return false;
+      }
+
+      this.status = 'in-progress';
+      this.round = 'pre-flop';
+      this.board = [];
+      this.currentBet = 0;
+      this.pot = 0;
+      this.recentHistory = [];
+      this.deck = shuffleDeck(createDeck());
+
+      this.players.forEach((player) => {
+        player.hand = [this.deck.pop(), this.deck.pop()];
+        player.bet = 0;
+        player.totalContribution = 0;
+        player.folded = false;
+        player.allIn = false;
+        player.actionTakenThisRound = false;
+        player.isDealer = false;
+        player.isSmallBlind = false;
+        player.isBigBlind = false;
+      });
+
+      this.dealerIndex = this.players.length ? (this.dealerIndex + 1) % this.players.length : 0;
+      this.smallBlindIndex = this.players.length ? (this.dealerIndex + 1) % this.players.length : 0;
+      this.bigBlindIndex = this.players.length ? (this.smallBlindIndex + 1) % this.players.length : 0;
+      this.players[this.dealerIndex].isDealer = true;
+      this.players[this.smallBlindIndex].isSmallBlind = true;
+      this.players[this.bigBlindIndex].isBigBlind = true;
+
+      const smallBlindPlayer = this.players[this.smallBlindIndex];
+      const bigBlindPlayer = this.players[this.bigBlindIndex];
+      if (smallBlindPlayer) {
+        const smallBlind = Math.min(Number(smallBlindPlayer.chips || 0), this.blinds.small);
+        smallBlindPlayer.chips -= smallBlind;
+        smallBlindPlayer.bet = smallBlind;
+        smallBlindPlayer.totalContribution = smallBlind;
+        smallBlindPlayer.allIn = smallBlindPlayer.chips === 0;
+        smallBlindPlayer.actionTakenThisRound = true;
+        this.pot += smallBlind;
+      }
+      if (bigBlindPlayer) {
+        const bigBlind = Math.min(Number(bigBlindPlayer.chips || 0), this.blinds.big);
+        bigBlindPlayer.chips -= bigBlind;
+        bigBlindPlayer.bet = bigBlind;
+        bigBlindPlayer.totalContribution = bigBlind;
+        bigBlindPlayer.allIn = bigBlindPlayer.chips === 0;
+        bigBlindPlayer.actionTakenThisRound = true;
+        this.pot += bigBlind;
+      }
+
+      this.currentBet = Math.max(smallBlindPlayer?.bet || 0, bigBlindPlayer?.bet || 0);
+      this.currentTurn = this.getNextActionablePlayerIndex(this.bigBlindIndex);
+      this.lastAction = 'La main démarre.';
+      return true;
+    },
+    advanceStreet() {
+      if (this.round === 'pre-flop') {
+        this.round = 'flop';
+        while (this.board.length < 3) {
+          this.board.push(this.deck.pop());
+        }
+        this.currentBet = 0;
+        this.players.forEach((player) => {
+          player.bet = 0;
+          player.actionTakenThisRound = false;
+        });
+        this.lastAction = 'Flop.';
+        this.recentHistory.push(this.lastAction);
+        this.currentTurn = this.getNextActionablePlayerIndex(this.bigBlindIndex);
+        if (this.getActionablePlayers().length <= 1) this.advanceStreet();
+        return;
+      }
+      if (this.round === 'flop') {
+        this.round = 'turn';
+        if (this.board.length < 4) {
+          this.board.push(this.deck.pop());
+        }
+        this.currentBet = 0;
+        this.players.forEach((player) => {
+          player.bet = 0;
+          player.actionTakenThisRound = false;
+        });
+        this.lastAction = 'Turn.';
+        this.recentHistory.push(this.lastAction);
+        this.currentTurn = this.getNextActionablePlayerIndex(this.bigBlindIndex);
+        if (this.getActionablePlayers().length <= 1) this.advanceStreet();
+        return;
+      }
+      if (this.round === 'turn') {
+        this.round = 'river';
+        if (this.board.length < 5) {
+          this.board.push(this.deck.pop());
+        }
+        this.currentBet = 0;
+        this.players.forEach((player) => {
+          player.bet = 0;
+          player.actionTakenThisRound = false;
+        });
+        this.lastAction = 'River.';
+        this.recentHistory.push(this.lastAction);
+        this.currentTurn = this.getNextActionablePlayerIndex(this.bigBlindIndex);
+        if (this.getActionablePlayers().length <= 1) this.advanceStreet();
+        return;
+      }
+      this.resolveShowdownWinner();
+      this.lastAction = this.lastAction || 'Showdown.';
+      this.recentHistory.push(this.lastAction);
+    },
+    applyAction(userId, type, amount = 0) {
+      const playerIndex = this.getPlayerIndex(userId);
+      if (playerIndex < 0) {
+        return { ok: false, message: 'Joueur introuvable dans la table.' };
+      }
+      const player = this.players[playerIndex];
+      if (this.status !== 'in-progress') {
+        return { ok: false, message: 'La table n’est pas en cours.' };
+      }
+      if (player.folded) {
+        return { ok: false, message: 'Tu as déjà quitté la main.' };
+      }
+      if (Number(this.players[this.currentTurn]?.id) !== Number(userId)) {
+        return { ok: false, message: 'Ce n’est pas ton tour.' };
+      }
+
+      if (type === 'fold') {
+        player.folded = true;
+        player.actionTakenThisRound = true;
+        this.lastAction = `${player.username} se couche.`;
+        this.recentHistory.push(this.lastAction);
+        this.finalizeAction(player);
+        return { ok: true, table: tableToPublicState(this) };
+      }
+
+      if (type === 'check') {
+        if (this.currentBet > Number(player.bet || 0)) {
+          return { ok: false, message: 'Tu dois suivre pour continuer.' };
+        }
+        player.actionTakenThisRound = true;
+        this.lastAction = `${player.username} check.`;
+        this.recentHistory.push(this.lastAction);
+        this.finalizeAction(player);
+        return { ok: true, table: tableToPublicState(this) };
+      }
+
+      if (type === 'call') {
+        const amountToCall = Math.max(0, Number(this.currentBet || 0) - Number(player.bet || 0));
+        if (amountToCall <= 0) {
+          player.actionTakenThisRound = true;
+          this.lastAction = `${player.username} check.`;
+          this.recentHistory.push(this.lastAction);
+          this.finalizeAction(player);
+          return { ok: true, table: tableToPublicState(this) };
+        }
+
+        const chipValue = Math.min(Number(player.chips || 0), amountToCall);
+        player.chips = Math.max(0, Number(player.chips || 0) - chipValue);
+        player.bet = Number(player.bet || 0) + chipValue;
+        player.totalContribution = Number(player.totalContribution || 0) + chipValue;
+        this.pot += chipValue;
+        if (Number(player.chips || 0) <= 0) {
+          player.allIn = true;
+        }
+        player.actionTakenThisRound = true;
+        this.lastAction = `${player.username} suit pour ${chipValue}.`;
+        this.recentHistory.push(this.lastAction);
+        this.finalizeAction(player);
+        return { ok: true, table: tableToPublicState(this) };
+      }
+
+      if (type === 'bet' || type === 'raise') {
+        const betAmount = Math.max(0, Number(amount || 0));
+        if (betAmount <= 0) {
+          return { ok: false, message: 'Le montant de mise est invalide.' };
+        }
+        if (betAmount > Number(player.chips || 0)) {
+          return { ok: false, message: 'Tu n’as pas assez de jetons.' };
+        }
+
+        const minimumRaise = this.currentBet > 0 ? this.currentBet + this.blinds.big : this.blinds.big;
+        if (betAmount < minimumRaise) {
+          return { ok: false, message: `Le montant doit être au moins ${minimumRaise}.` };
+        }
+
+        player.chips = Math.max(0, Number(player.chips || 0) - betAmount);
+        player.bet = Number(player.bet || 0) + betAmount;
+        player.totalContribution = Number(player.totalContribution || 0) + betAmount;
+        this.pot += betAmount;
+        this.currentBet = Math.max(this.currentBet, player.bet);
+        if (Number(player.chips || 0) <= 0) {
+          player.allIn = true;
+        }
+        player.actionTakenThisRound = true;
+        this.lastAction = `${player.username} ${type === 'bet' ? 'mise' : 'relance'} ${betAmount}.`;
+        this.recentHistory.push(this.lastAction);
+        this.finalizeAction(player);
+        return { ok: true, table: tableToPublicState(this) };
+      }
+
+      if (type === 'all-in') {
+        const allInValue = Number(player.chips || 0);
+        if (allInValue <= 0) {
+          return { ok: false, message: 'Tu n’as plus de jetons.' };
+        }
+        player.chips = 0;
+        player.bet = Number(player.bet || 0) + allInValue;
+        player.totalContribution = Number(player.totalContribution || 0) + allInValue;
+        this.pot += allInValue;
+        this.currentBet = Math.max(this.currentBet, player.bet);
+        player.allIn = true;
+        player.actionTakenThisRound = true;
+        this.lastAction = `${player.username} all-in pour ${allInValue}.`;
+        this.recentHistory.push(this.lastAction);
+        this.finalizeAction(player);
+        return { ok: true, table: tableToPublicState(this) };
+      }
+
+      return { ok: false, message: 'Action inconnue.' };
+    }
+  };
+
+  return table;
+}
+
+function canStartPokerTable(table) {
+  return !!table && table.players.length >= table.minPlayers && table.players.length <= table.maxPlayers;
+}
+
+function addGameHistory(userId, gameName, bet, result, payout, net) {
+  return run(
+    'INSERT INTO game_history (user_id, game_name, bet, result, payout, net) VALUES (?, ?, ?, ?, ?, ?)',
+    [userId, String(gameName), Number(bet), String(result), Number(payout || 0), Number(net || 0)]
+  );
+}
+
+function updateUserChips(userId, delta) {
+  return getUserById(userId).then(async (user) => {
+    if (!user) {
+      return null;
+    }
+    const nextValue = Math.max(0, Number(user.chips) + Number(delta));
+    await run('UPDATE users SET chips = ? WHERE id = ?', [nextValue, userId]);
+    return nextValue;
+  });
+}
+
+function tableToPublicState(table, viewerId = null) {
+  const viewer = viewerId ? Number(viewerId) : null;
+
+  return {
+    id: table.id,
+    type: table.type,
+    name: table.name,
+    status: table.status,
+    hostId: table.hostId,
+    players: table.players.map((player) => {
+      const isViewer = viewer !== null && Number(player.id) === Number(viewer);
+      return {
+        id: player.id,
+        username: player.username,
+        avatar: player.avatar,
+        chips: player.chips,
+        connected: player.connected,
+        bet: player.bet,
+        hand: isViewer ? [...(player.hand || [])] : [],
+        folded: !!player.folded,
+        allIn: !!player.allIn,
+        isDealer: !!player.isDealer,
+        isSmallBlind: !!player.isSmallBlind,
+        isBigBlind: !!player.isBigBlind
+      };
+    }),
+    maxPlayers: table.maxPlayers,
+    minPlayers: table.minPlayers,
+    currentBet: table.currentBet || 0,
+    pot: table.pot || 0,
+    board: table.board || [],
+    round: table.round || 'waiting',
+    dealerIndex: table.dealerIndex ?? 0,
+    smallBlindIndex: table.smallBlindIndex ?? 0,
+    bigBlindIndex: table.bigBlindIndex ?? 0,
+    currentTurn: table.currentTurn ?? 0,
+    lastAction: table.lastAction || 'Aucune action',
+    recentHistory: table.recentHistory || []
+  };
+}
+
+const blackjackTables = new Map();
+const pokerTables = new Map();
+
+async function populateUserFromSocket(socket) {
+  const user = await getUserById(socket.request.session.userId);
+  if (!user) {
+    socket.disconnect();
+    return null;
+  }
+  socket.data.user = sanitizeUser(user);
+  return socket.data.user;
+}
+
+function emitTables(namespace, tableMap) {
+  const payload = [...tableMap.values()].map(tableToPublicState);
+  namespace.emit('tables:update', payload);
+}
+
+io.on('connection', async (socket) => {
+  const user = await populateUserFromSocket(socket);
+  if (!user) return;
+
+  socket.emit('session:ready', { user });
+
+  socket.on('blackjack:tables:list', () => {
+    socket.emit('blackjack:tables:list', [...blackjackTables.values()].map(tableToPublicState));
+  });
+
+  socket.on('blackjack:table:create', ({ tableName } = {}) => {
+    const table = createBlackjackTable();
+    table.name = tableName || `Table ${table.id}`;
+    if (!table.addPlayer(user)) {
+      return socket.emit('blackjack:table:error', { message: 'Impossible de créer la table.' });
+    }
+    blackjackTables.set(table.id, table);
+    socket.join(`blackjack:${table.id}`);
+    emitTables(io.to(`blackjack:${table.id}`), blackjackTables);
+    socket.emit('blackjack:table:joined', tableToPublicState(table));
+  });
+
+  socket.on('blackjack:table:join', ({ tableId } = {}) => {
+    const table = blackjackTables.get(String(tableId));
+    if (!table) {
+      return socket.emit('blackjack:table:error', { message: 'Table introuvable.' });
+    }
+    if (!table.addPlayer(user)) {
+      return socket.emit('blackjack:table:error', { message: 'La table est pleine ou tu y es déjà inscrit.' });
+    }
+    socket.join(`blackjack:${table.id}`);
+    io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
+  });
+
+  socket.on('poker:tables:list', () => {
+    socket.emit('poker:tables:list', [...pokerTables.values()].map(tableToPublicState));
+  });
+
+  socket.on('poker:table:create', ({ tableName } = {}) => {
+    const table = createPokerTable();
+    table.name = tableName || `Table ${table.id}`;
+    if (!table.addPlayer(user)) {
+      return socket.emit('poker:table:error', { message: 'Impossible de créer la table.' });
+    }
+    pokerTables.set(table.id, table);
+    socket.join(`poker:${table.id}`);
+    emitTables(io.to(`poker:${table.id}`), pokerTables);
+    socket.emit('poker:table:joined', tableToPublicState(table, user.id));
+  });
+
+  socket.on('poker:table:join', ({ tableId } = {}) => {
+    const table = pokerTables.get(String(tableId));
+    if (!table) {
+      return socket.emit('poker:table:error', { message: 'Table introuvable.' });
+    }
+    if (!table.addPlayer(user)) {
+      return socket.emit('poker:table:error', { message: 'La table est complète ou tu y es déjà inscrit.' });
+    }
+    socket.join(`poker:${table.id}`);
+    io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table, user.id));
+  });
+
+  socket.on('poker:table:start', ({ tableId } = {}) => {
+    const table = pokerTables.get(String(tableId));
+    if (!table) {
+      return socket.emit('poker:table:error', { message: 'Table introuvable.' });
+    }
+    if (table.hostId !== user.id) {
+      return socket.emit('poker:table:error', { message: 'Seul l’hôte peut lancer la partie.' });
+    }
+    if (table.status === 'in-progress') {
+      return socket.emit('poker:table:error', { message: 'Une partie est déjà en cours.' });
+    }
+    if (!canStartPokerTable(table)) {
+      return socket.emit('poker:table:error', { message: 'Une table de poker doit contenir entre 3 et 8 joueurs.' });
+    }
+    if (!table.startRound()) {
+      return socket.emit('poker:table:error', { message: 'Impossible de démarrer une nouvelle main.' });
+    }
+    io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table, user.id));
+  });
+
+  socket.on('poker:table:action', ({ tableId, action, amount } = {}) => {
+    const table = pokerTables.get(String(tableId));
+    if (!table) {
+      return socket.emit('poker:table:error', { message: 'Table introuvable.' });
+    }
+    const result = table.applyAction(user.id, action, Number(amount || 0));
+    if (!result.ok) {
+      return socket.emit('poker:table:error', { message: result.message });
+    }
+    io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table, user.id));
+  });
+
+  socket.on('poker:table:leave', ({ tableId } = {}) => {
+    const table = pokerTables.get(String(tableId));
+    if (!table) {
+      return socket.emit('poker:table:error', { message: 'Table introuvable.' });
+    }
+
+    const committed = Number(table.players.find((player) => player.id === user.id)?.bet || 0);
+    const removed = table.removePlayer(user.id);
+
+    if (removed) {
+      if (committed > 0) {
+        updateUserChips(user.id, -committed).catch(() => {});
+      }
+      socket.leave(`poker:${table.id}`);
+      io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table, user.id));
+      socket.emit('poker:table:left', { tableId: table.id, committed });
+    }
+  });
+
+  socket.on('disconnect', () => {
+    const playerId = socket.data.user?.id;
+    if (!playerId) return;
+    for (const table of blackjackTables.values()) {
+      const player = table.players.find((entry) => entry.id === playerId);
+      if (player) {
+        player.connected = false;
+      }
+    }
+    for (const table of pokerTables.values()) {
+      const player = table.players.find((entry) => entry.id === playerId);
+      if (player) {
+        player.connected = false;
+      }
+    }
+  });
+});
+
 async function initDatabase() {
   await run(`
     CREATE TABLE IF NOT EXISTS users (
@@ -153,8 +1125,8 @@ async function initDatabase() {
 
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     await run(
-      'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, ?)',
-      [adminUsername, passwordHash, '🕶️', 1500]
+      'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, 1500)',
+      [adminUsername, passwordHash, '🕶️']
     );
     console.log(`Compte administrateur initial créé : ${adminUsername}`);
   }
@@ -187,6 +1159,18 @@ app.get('/game', (req, res) => {
     return res.redirect('/');
   }
   res.sendFile(path.join(GAME_DIR, 'index.html'));
+});
+
+app.get('/poker/game/:tableId', requireAuth, (req, res) => {
+  const table = pokerTables.get(String(req.params.tableId));
+  if (!table) {
+    return res.redirect('/game');
+  }
+  const isParticipant = table.players.some((player) => Number(player.id) === Number(req.session.userId));
+  if (!isParticipant) {
+    return res.redirect('/game');
+  }
+  res.sendFile(path.join(GAME_DIR, 'poker-game.html'));
 });
 
 app.get('/api/health', (req, res) => {
@@ -328,6 +1312,143 @@ app.get('/api/leaderboard', async (req, res) => {
   res.json({ leaderboard: rows });
 });
 
+app.get('/api/blackjack/tables', requireAuth, (req, res) => {
+  res.json({ tables: [...blackjackTables.values()].map(tableToPublicState) });
+});
+
+app.get('/api/poker/tables', requireAuth, (req, res) => {
+  res.json({ tables: [...pokerTables.values()].map((table) => tableToPublicState(table, req.session.userId)) });
+});
+
+app.get('/api/poker/tables/:id', requireAuth, (req, res) => {
+  const table = pokerTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  const isParticipant = table.players.some((player) => Number(player.id) === Number(req.session.userId));
+  if (!isParticipant) {
+    return res.status(403).json({ error: 'Tu n’as pas accès à cette table.' });
+  }
+  res.json({ table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/blackjack/tables', requireAuth, async (req, res) => {
+  const { tableName } = req.body || {};
+  const table = createBlackjackTable();
+  table.name = tableName || `Table ${table.id}`;
+  const user = await getUserById(req.session.userId);
+  if (!user || !table.addPlayer(user)) {
+    return res.status(400).json({ error: 'Impossible de créer la table.' });
+  }
+  blackjackTables.set(table.id, table);
+  res.status(201).json({ table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/poker/tables', requireAuth, async (req, res) => {
+  const { tableName } = req.body || {};
+  const table = createPokerTable();
+  table.name = tableName || `Table ${table.id}`;
+  const user = await getUserById(req.session.userId);
+  if (!user || !table.addPlayer(user)) {
+    return res.status(400).json({ error: 'Impossible de créer la table.' });
+  }
+  pokerTables.set(table.id, table);
+  res.status(201).json({ table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/blackjack/tables/:id/join', requireAuth, async (req, res) => {
+  const table = blackjackTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  const user = await getUserById(req.session.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'Utilisateur introuvable.' });
+  }
+  if (!table.addPlayer(user)) {
+    return res.status(400).json({ error: 'Impossible de rejoindre cette table.' });
+  }
+  res.json({ table: tableToPublicState(table) });
+});
+
+app.post('/api/poker/tables/:id/join', requireAuth, async (req, res) => {
+  const table = pokerTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  const user = await getUserById(req.session.userId);
+  if (!user) {
+    return res.status(404).json({ error: 'Utilisateur introuvable.' });
+  }
+  if (table.status === 'in-progress') {
+    return res.status(400).json({ error: 'Cette table est déjà en cours.' });
+  }
+  if (!table.addPlayer(user)) {
+    return res.status(400).json({ error: 'Impossible de rejoindre cette table.' });
+  }
+  res.json({ table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/poker/tables/:id/start', requireAuth, async (req, res) => {
+  const table = pokerTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+  if (table.hostId !== req.session.userId) {
+    return res.status(403).json({ error: 'Seul l’hôte peut lancer la partie.' });
+  }
+  if (table.status === 'in-progress') {
+    return res.status(400).json({ error: 'Une partie est déjà en cours.' });
+  }
+  if (!canStartPokerTable(table)) {
+    return res.status(400).json({ error: 'Une table doit contenir au moins 3 joueurs.' });
+  }
+  if (!table.startRound()) {
+    return res.status(400).json({ error: 'Impossible de démarrer une nouvelle main.' });
+  }
+  res.json({ ok: true, table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/poker/tables/:id/action', requireAuth, async (req, res) => {
+  const table = pokerTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+
+  const action = String(req.body.action || '').toLowerCase();
+  const amount = Number(req.body.amount || 0);
+  const result = table.applyAction(req.session.userId, action, amount);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message });
+  }
+
+  res.json({ ok: true, table: tableToPublicState(table, req.session.userId) });
+});
+
+app.post('/api/poker/tables/:id/leave', requireAuth, async (req, res) => {
+  const table = pokerTables.get(String(req.params.id));
+  if (!table) {
+    return res.status(404).json({ error: 'Table introuvable.' });
+  }
+
+  const player = table.players.find((entry) => entry.id === Number(req.session.userId));
+  if (!player) {
+    return res.status(404).json({ error: 'Tu n’es pas dans cette table.' });
+  }
+
+  const committed = Number(player.bet || 0);
+  const removed = table.removePlayer(req.session.userId);
+  if (!removed) {
+    return res.status(400).json({ error: 'Impossible de quitter la table.' });
+  }
+
+  if (committed > 0) {
+    await updateUserChips(req.session.userId, -committed);
+  }
+
+  res.json({ ok: true, table: tableToPublicState(table, req.session.userId), committed });
+});
+
 app.post('/api/result', requireAuth, async (req, res) => {
   const { game, bet, result, payout, net } = req.body || {};
 
@@ -342,11 +1463,7 @@ app.post('/api/result', requireAuth, async (req, res) => {
 
   const newChips = user.chips + Number(net || 0);
 
-  await run(
-    'INSERT INTO game_history (user_id, game_name, bet, result, payout, net) VALUES (?, ?, ?, ?, ?, ?)',
-    [req.session.userId, String(game), Number(bet), String(result), Number(payout || 0), Number(net || 0)]
-  );
-
+  await addGameHistory(req.session.userId, game, bet, result, payout, net);
   await run('UPDATE users SET chips = ? WHERE id = ?', [Math.max(newChips, 0), req.session.userId]);
 
   const updated = await getUserById(req.session.userId);
@@ -367,6 +1484,25 @@ app.use((req, res) => {
   res.sendFile(path.join(GAME_DIR, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Serveur démarré sur http://${HOST}:${PORT}`);
-});
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`Serveur démarré sur http://${HOST}:${PORT}`);
+  });
+}
+
+module.exports = {
+  app,
+  server,
+  io,
+  createDeck,
+  shuffleDeck,
+  createBlackjackTable,
+  createPokerTable,
+  canStartPokerTable,
+  evaluatePokerHand,
+  tableToPublicState,
+  addGameHistory,
+  updateUserChips,
+  getUserById,
+  HAND_RANKS
+};

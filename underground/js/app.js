@@ -21,6 +21,7 @@ async function initializeApp() {
   renderLeaderboard();
   rouletteModule.initialize();
   blackjackModule.initialize();
+  pokerModule.initialize();
   slotsModule.initialize();
 }
 
@@ -82,6 +83,13 @@ function renderHomeView() {
       description: "Approchez-vous de 21 sans le dépasser.",
       action: "JOUER AU BLACKJACK",
       view: "blackjack"
+    },
+    {
+      name: "Poker",
+      icon: "♠",
+      description: "Texas Hold'em multi-joueurs, tables et blinds.",
+      action: "REJOINDRE LE POKER",
+      view: "poker"
     },
     {
       name: "Machine à sous",

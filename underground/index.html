@@ -44,6 +44,7 @@
         <button class="nav-item active" data-view="home" type="button">Accueil</button>
         <button class="nav-item" data-view="roulette" type="button">Roulette</button>
         <button class="nav-item" data-view="blackjack" type="button">Blackjack</button>
+        <button class="nav-item" data-view="poker" type="button">Poker</button>
         <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
@@ -195,6 +196,48 @@
           </div>
         </section>
 
+        <section id="pokerView" class="view" aria-label="Poker">
+          <div class="panel table-panel poker-layout">
+            <div class="blackjack-console">
+              <div class="section-heading compact">
+                <h2>Tables de poker</h2>
+              </div>
+
+              <div class="action-row stacked">
+                <button id="pokerCreateTableBtn" class="primary-button" type="button">Créer une table</button>
+                <button id="pokerStartTableBtn" class="gold-button" type="button">Démarrer la main</button>
+              </div>
+
+              <div id="pokerStatus" class="status-box">3 à 8 joueurs requis pour démarrer une table.</div>
+              <div id="pokerTableList" class="history-list"></div>
+            </div>
+
+            <div id="pokerWaitingRoom" class="panel" style="display:none; margin-top: 1rem;">
+              <div class="section-heading compact">
+                <h3>Salle d’attente</h3>
+              </div>
+              <div id="pokerWaitingMeta" class="status-box"></div>
+              <div id="pokerWaitingPlayers" class="history-list"></div>
+              <div id="pokerWaitingBoard" class="status-box" style="margin-top: 0.75rem;"></div>
+              <div class="action-row stacked" style="margin-top: 1rem;">
+                <button id="pokerLeaveTableBtn" class="secondary-button" type="button">Quitter la table</button>
+                <button id="pokerHostStartBtn" class="gold-button" type="button">Lancer la partie</button>
+              </div>
+            </div>
+
+            <div id="pokerTableScreen" class="panel" style="display:none; margin-top: 1rem;">
+              <div class="section-heading compact">
+                <h3>Table de poker</h3>
+              </div>
+              <div id="pokerTableMeta" class="status-box"></div>
+              <div id="pokerTableBoard" style="display:flex; justify-content:center; gap:0.5rem; margin: 1rem 0; min-height: 64px; flex-wrap: wrap;"></div>
+              <div id="pokerTablePlayers" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;"></div>
+              <div id="pokerTableHistory" class="status-box" style="margin-top: 1rem;"></div>
+              <div id="pokerActionPanel" class="action-row stacked" style="margin-top: 1rem;"></div>
+            </div>
+          </div>
+        </section>
+
         <section id="slotsView" class="view" aria-label="Machine à sous">
           <div class="panel table-panel slots-layout">
             <div class="slots-machine">
@@ -295,6 +338,7 @@
     <script src="js/storage.js"></script>
     <script src="js/roulette.js"></script>
     <script src="js/blackjack.js"></script>
+    <script src="js/poker.js"></script>
     <script src="js/slots.js"></script>
     <script src="js/app.js"></script>
   </body>
