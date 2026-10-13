@@ -1480,7 +1480,7 @@ async function getCrashState(userId) {
 }
 
 async function broadcastCrashState() {
-  if (!CRASH_ENABLED || io.engine.clientsCount === 0) return;
+  if (activeCrashRounds.size === 0 || io.engine.clientsCount === 0) return;
   for (const socket of io.sockets.sockets.values()) {
     const userId = socket.data.user?.id;
     if (userId) {
