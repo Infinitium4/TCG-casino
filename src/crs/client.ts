@@ -13,6 +13,7 @@ namespace crsModule {
   let selection: FactionId | null = null;
   let pending = false;
   let initialized = false;
+  let availabilityTimer: number | null = null;
   const node = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
   const number = (value: number): string => value.toLocaleString('fr-FR');
   const assetRoot = '/games/crs-vs-manifestants/assets/';
@@ -59,6 +60,11 @@ namespace crsModule {
     if (response.status === 401) { window.location.assign('/'); throw new Error('Reconnecte-toi pour accéder au jeu.'); }
     if (response.status === 404) throw new Error('Redémarre le serveur pour charger la rubrique CRS VS Manifestants.');
     const payload = await response.json();
+    if (response.status === 503) {
+      data = null; selection = null;
+      node('crsFactionChoice').hidden = true; node('crsDashboard').hidden = true;
+      node('crsSelectionConfirm').hidden = true;
+    }
     if (!response.ok) throw new Error(payload.error || 'Impossible de charger ta faction.');
     return payload as GameState;
   }
@@ -110,7 +116,13 @@ namespace crsModule {
     busy(true);
     node('crsError').textContent = '';
     try { data = await request('GET'); render(); }
-    catch (error) { node('crsLoading').hidden = true; node('crsError').textContent = error instanceof Error ? error.message : 'Chargement impossible.'; }
+    catch (error) {
+      data = null; selection = null;
+      node('crsFactionChoice').hidden = true; node('crsDashboard').hidden = true;
+      node('crsSelectionConfirm').hidden = true;
+      node('crsLoading').hidden = true;
+      node('crsError').textContent = error instanceof Error ? error.message : 'Chargement impossible.';
+    }
     finally { busy(false); }
   }
   export function initialize(): void {
@@ -162,5 +174,11 @@ namespace crsModule {
       finally { busy(false); }
     });
   }
-  export function setActive(active: boolean): void { if (active) void refresh(); }
+  export function setActive(active: boolean): void {
+    if (availabilityTimer !== null) { window.clearInterval(availabilityTimer); availabilityTimer = null; }
+    if (active) {
+      void refresh();
+      availabilityTimer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 15000);
+    }
+  }
 }

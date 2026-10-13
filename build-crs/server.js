@@ -44,7 +44,15 @@ async function initializeCrsSchema(run) {
     BEGIN SELECT RAISE(ABORT, 'Faction is permanent'); END`);
 }
 function registerCrsRoutes(deps) {
-    const { app, requireAuth, handleAsync, get, all, run, withDatabaseTransaction } = deps;
+    const { app, requireAuth, handleAsync, get, all, run, withDatabaseTransaction, getGameSettings } = deps;
+    async function availability() {
+        const settings = await getGameSettings('crs');
+        if (!settings?.enabled)
+            return 'CRS VS Manifestants est temporairement désactivé.';
+        if (settings.maintenance)
+            return 'CRS VS Manifestants est en maintenance. Ta progression est conservée. Réessaie plus tard.';
+        return null;
+    }
     async function state(userId) {
         const account = await get('SELECT chips, username FROM users WHERE id = ?', [userId]);
         const player = await get('SELECT * FROM crs_players WHERE user_id = ?', [userId]);
@@ -58,6 +66,11 @@ function registerCrsRoutes(deps) {
         };
     }
     app.get('/api/crs/state', requireAuth, handleAsync(async (req, res) => {
+        const unavailable = await availability();
+        if (unavailable) {
+            res.status(503).json({ error: unavailable });
+            return;
+        }
         res.json(await state(req.session.userId));
     }));
     app.post('/api/crs/faction', requireAuth, handleAsync(async (req, res) => {
@@ -67,6 +80,9 @@ function registerCrsRoutes(deps) {
             return;
         }
         const created = await withDatabaseTransaction(async () => {
+            const unavailable = await availability();
+            if (unavailable)
+                return unavailable;
             if (await get('SELECT user_id FROM crs_players WHERE user_id = ?', [req.session.userId]))
                 return false;
             await run('INSERT INTO crs_players (user_id, faction) VALUES (?, ?)', [req.session.userId, faction]);
@@ -74,6 +90,10 @@ function registerCrsRoutes(deps) {
             await run("INSERT INTO crs_buildings (user_id, kind, x, y) VALUES (?, 'headquarters', 5, 5)", [req.session.userId]);
             return true;
         });
+        if (typeof created === 'string') {
+            res.status(503).json({ error: created });
+            return;
+        }
         if (!created) {
             res.status(409).json({ error: 'Ta faction est déjà choisie et ne peut plus être changée.' });
             return;

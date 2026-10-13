@@ -32,3 +32,7 @@ Phase 3 : transactions de construction utilisant `users.chips`, horodatages pers
 Phase 4 : recrutement et statistiques persistantes. Phase 5 : salons 1v1 sur le serveur Socket.IO existant, simulation autoritaire à fréquence fixe et résultats atomiques. Phase 6 : augmenter les effectifs après mesures de performance. Phase 7 : technologies, classement et raids fondés sur une copie de la citadelle, sans détruire sa progression persistante.
 
 La phase 1 n’implémente pas de carte jouable, de constructions, d’armée ou de combats. Elle doit être validée avant la phase 2.
+
+## Maintenance
+
+Dans Administration → Contrôles de l’admin principal → CRS VS Manifestants, admin1 peut désactiver le jeu ou cocher Maintenance. Le réglage utilise `casino_game_settings`, persiste après redémarrage et figure au journal administratif. Les routes du jeu répondent 503 pendant la maintenance, sans modifier la faction ni sa progression. Le client vérifie la disponibilité à l’ouverture et toutes les 15 secondes uniquement lorsque cette rubrique est affichée. Les limites de mise ne sont pas présentées pour ce jeu de stratégie.

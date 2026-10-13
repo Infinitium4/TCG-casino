@@ -170,10 +170,31 @@ test('CRS phase 1 uses existing accounts, creates factions atomically and persis
     const bytes = Buffer.from(await image.arrayBuffer());
     assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
   }
+  const adminLogin = await request('/api/login', { method: 'POST', body: JSON.stringify({ username: 'crash-admin', password: 'crash-admin-password' }) });
+  assert.equal(adminLogin.response.status, 200);
+  const secondaryLogin = await request('/api/login', { method: 'POST', body: JSON.stringify({ username: 'crash-admin-2', password: 'crash-admin-2-password' }) });
+  assert.equal(secondaryLogin.response.status, 200);
+  const maintenance = { enabled: true, maintenance: true, minBet: 1, maxBet: 1, reason: 'CRS maintenance test' };
+  for (const cookie of [alice, secondaryLogin.cookie]) {
+    const denied = await request('/api/admin/games/crs', { cookie, method: 'PATCH', body: JSON.stringify(maintenance) });
+    assert.equal(denied.response.status, 403);
+  }
+  const maintained = await request('/api/admin/games/crs', { cookie: adminLogin.cookie, method: 'PATCH', body: JSON.stringify(maintenance) });
+  assert.equal(maintained.response.status, 200, maintained.body.error);
+  const publicSettings = await request('/api/game-settings');
+  assert.equal(publicSettings.body.games.crs.maintenance, true);
+  const blockedState = await request('/api/crs/state', { cookie: alice });
+  assert.equal(blockedState.response.status, 503);
+  assert.match(blockedState.body.error, /maintenance/);
+  const blockedChoice = await request('/api/crs/faction', { cookie: bob, method: 'POST', body: JSON.stringify({ faction: 'crs' }) });
+  assert.equal(blockedChoice.response.status, 503);
   await stopServer();
   await startServer();
   const login = await request('/api/login', { method: 'POST', body: JSON.stringify({ username: 'crs-alice', password: 'player-password' }) });
   assert.equal(login.response.status, 200);
+  assert.equal((await request('/api/crs/state', { cookie: login.cookie })).response.status, 503, 'maintenance survives server restart');
+  const reopened = await request('/api/admin/games/crs', { cookie: adminLogin.cookie, method: 'PATCH', body: JSON.stringify({ ...maintenance, maintenance: false }) });
+  assert.equal(reopened.response.status, 200, reopened.body.error);
   const persisted = await request('/api/crs/state', { cookie: login.cookie });
   assert.deepEqual(persisted.body.player, created.player);
   assert.deepEqual(persisted.body.citadel, created.citadel);

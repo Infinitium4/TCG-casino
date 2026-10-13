@@ -5,6 +5,7 @@ var crsModule;
     let selection = null;
     let pending = false;
     let initialized = false;
+    let availabilityTimer = null;
     const node = (id) => document.getElementById(id);
     const number = (value) => value.toLocaleString('fr-FR');
     const assetRoot = '/games/crs-vs-manifestants/assets/';
@@ -63,6 +64,13 @@ var crsModule;
         if (response.status === 404)
             throw new Error('Redémarre le serveur pour charger la rubrique CRS VS Manifestants.');
         const payload = await response.json();
+        if (response.status === 503) {
+            data = null;
+            selection = null;
+            node('crsFactionChoice').hidden = true;
+            node('crsDashboard').hidden = true;
+            node('crsSelectionConfirm').hidden = true;
+        }
         if (!response.ok)
             throw new Error(payload.error || 'Impossible de charger ta faction.');
         return payload;
@@ -125,6 +133,11 @@ var crsModule;
             render();
         }
         catch (error) {
+            data = null;
+            selection = null;
+            node('crsFactionChoice').hidden = true;
+            node('crsDashboard').hidden = true;
+            node('crsSelectionConfirm').hidden = true;
             node('crsLoading').hidden = true;
             node('crsError').textContent = error instanceof Error ? error.message : 'Chargement impossible.';
         }
@@ -198,7 +211,16 @@ var crsModule;
         });
     }
     crsModule.initialize = initialize;
-    function setActive(active) { if (active)
-        void refresh(); }
+    function setActive(active) {
+        if (availabilityTimer !== null) {
+            window.clearInterval(availabilityTimer);
+            availabilityTimer = null;
+        }
+        if (active) {
+            void refresh();
+            availabilityTimer = window.setInterval(() => { if (!document.hidden)
+                void refresh(); }, 15000);
+        }
+    }
     crsModule.setActive = setActive;
 })(crsModule || (crsModule = {}));

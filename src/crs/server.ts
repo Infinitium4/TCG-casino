@@ -11,6 +11,7 @@ interface Dependencies {
   get<T>(sql: string, params?: Parameters): Promise<T | undefined>;
   all<T>(sql: string, params?: Parameters): Promise<T[]>;
   withDatabaseTransaction<T>(work: () => Promise<T>): Promise<T>;
+  getGameSettings(game: string): Promise<{ enabled: boolean; maintenance: boolean } | null>;
 }
 
 export const factions = {
@@ -60,7 +61,13 @@ interface Citadel { headquarters_level: number; grid_width: number; grid_height:
 interface Building { id: number; kind: string; level: number; x: number; y: number }
 
 export function registerCrsRoutes(deps: Dependencies): void {
-  const { app, requireAuth, handleAsync, get, all, run, withDatabaseTransaction } = deps;
+  const { app, requireAuth, handleAsync, get, all, run, withDatabaseTransaction, getGameSettings } = deps;
+  async function availability(): Promise<string | null> {
+    const settings = await getGameSettings('crs');
+    if (!settings?.enabled) return 'CRS VS Manifestants est temporairement désactivé.';
+    if (settings.maintenance) return 'CRS VS Manifestants est en maintenance. Ta progression est conservée. Réessaie plus tard.';
+    return null;
+  }
   async function state(userId: number) {
     const account = await get<{ chips: number; username: string }>('SELECT chips, username FROM users WHERE id = ?', [userId]);
     const player = await get<Player>('SELECT * FROM crs_players WHERE user_id = ?', [userId]);
@@ -72,6 +79,8 @@ export function registerCrsRoutes(deps: Dependencies): void {
     };
   }
   app.get('/api/crs/state', requireAuth, handleAsync(async (req, res) => {
+    const unavailable = await availability();
+    if (unavailable) { res.status(503).json({ error: unavailable }); return; }
     res.json(await state(req.session.userId));
   }));
   app.post('/api/crs/faction', requireAuth, handleAsync(async (req, res) => {
@@ -80,12 +89,15 @@ export function registerCrsRoutes(deps: Dependencies): void {
       res.status(400).json({ error: 'Choisis CRS ou Manifestants.' }); return;
     }
     const created = await withDatabaseTransaction(async () => {
+      const unavailable = await availability();
+      if (unavailable) return unavailable;
       if (await get<Player>('SELECT user_id FROM crs_players WHERE user_id = ?', [req.session.userId])) return false;
       await run('INSERT INTO crs_players (user_id, faction) VALUES (?, ?)', [req.session.userId, faction]);
       await run('INSERT INTO crs_citadels (user_id) VALUES (?)', [req.session.userId]);
       await run("INSERT INTO crs_buildings (user_id, kind, x, y) VALUES (?, 'headquarters', 5, 5)", [req.session.userId]);
       return true;
     });
+    if (typeof created === 'string') { res.status(503).json({ error: created }); return; }
     if (!created) { res.status(409).json({ error: 'Ta faction est déjà choisie et ne peut plus être changée.' }); return; }
     res.status(201).json(await state(req.session.userId));
   }));

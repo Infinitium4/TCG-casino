@@ -31,7 +31,8 @@
     blackjack: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     poker: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     slots: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    crash: { enabled: CRASH_ENABLED, minBet: 1, maxBet: CRASH_MAX_BET }
+    crash: { enabled: CRASH_ENABLED, minBet: 1, maxBet: CRASH_MAX_BET },
+    crs: { enabled: true, minBet: 1, maxBet: 1 }
   };
 
   if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
@@ -3159,7 +3160,7 @@
     });
   });
 
-  registerCrsRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction });
+  registerCrsRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction, getGameSettings });
 
   app.patch('/api/profile', requireAuth, async (req, res) => {
     const avatar = String(req.body.avatar || '');

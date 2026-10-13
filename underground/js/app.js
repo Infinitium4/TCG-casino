@@ -45,7 +45,7 @@ function applyGameAvailability() {
   window.casinoGameSettings = publicGameSettings;
   for (const [game, settings] of Object.entries(publicGameSettings)) {
     const available = settings.enabled && !settings.maintenance;
-    document.querySelector(`.nav-item[data-view="${game}"]`)?.toggleAttribute("hidden", !available);
+    document.querySelector(`.nav-item[data-view="${game}"]`)?.toggleAttribute("hidden", game === 'crs' ? !settings.enabled : !available);
     for (const inputId of game === "roulette" ? ["rouletteCustomStake"]
       : game === "blackjack" ? ["blackjackTableStake"]
         : game === "slots" ? ["slotsStake"]
@@ -101,7 +101,7 @@ function bindGlobalButtons() {
 
 function showView(viewName) {
   const settings = publicGameSettings[viewName];
-  if ((settings && (!settings.enabled || settings.maintenance)) ||
+  if ((settings && (!settings.enabled || (settings.maintenance && viewName !== 'crs'))) ||
       (viewName === "crash" && !crashModule.isEnabled())) {
     viewName = "home";
   }
