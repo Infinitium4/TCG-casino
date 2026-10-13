@@ -115,6 +115,20 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal(registered.response.status, 201, registered.body.error);
   let playerCookie = registered.cookie;
   assert.ok(playerCookie);
+  const avatarImage = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p1sAAAAASUVORK5CYII=';
+  const avatarUpload = await request('/api/profile/avatar', {
+    cookie: playerCookie,
+    method: 'PATCH',
+    body: JSON.stringify({ image: avatarImage })
+  });
+  assert.equal(avatarUpload.response.status, 200, avatarUpload.body.error);
+  assert.equal(avatarUpload.body.user.avatar_image, avatarImage);
+  const invalidAvatar = await request('/api/profile/avatar', {
+    cookie: playerCookie,
+    method: 'PATCH',
+    body: JSON.stringify({ image: 'data:image/svg+xml;base64,PHN2Zy8+' })
+  });
+  assert.equal(invalidAvatar.response.status, 400);
   const crashStatus = await request('/api/crash/status');
   assert.equal(crashStatus.body.enabled, false);
   const disabledCrashState = await request('/api/crash/state', { cookie: playerCookie });
@@ -188,6 +202,14 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal(leaderboard.response.status, 200);
   assert.deepEqual(leaderboard.body.leaderboard.map((entry) => entry.username), ['bank-test-player']);
   assert.equal(leaderboard.body.leaderboard[0].chips, 1100);
+  assert.equal(leaderboard.body.leaderboard[0].avatar_image, avatarImage);
+  const publicProfile = await request(`/api/players/${registered.body.user.id}`, { cookie: adminCookie });
+  assert.equal(publicProfile.response.status, 200, publicProfile.body.error);
+  assert.equal(publicProfile.body.profile.username, 'bank-test-player');
+  assert.equal(publicProfile.body.profile.chips, 1100);
+  assert.equal(publicProfile.body.profile.gamesPlayed, 2);
+  assert.equal(publicProfile.body.profile.wins, 1);
+  assert.equal(publicProfile.body.profile.avatar_image, avatarImage);
 
   const primarySettings = await request('/api/admin/settings', { cookie: adminCookie });
   const secondarySettings = await request('/api/admin/settings', { cookie: admin2Cookie });

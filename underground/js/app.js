@@ -86,6 +86,16 @@ function bindGlobalButtons() {
       window.location.replace("/");
     }
   });
+
+  document.body.addEventListener("click", (event) => {
+    const profileButton = event.target.closest("[data-player-profile]");
+    if (profileButton) openPlayerProfile(profileButton.dataset.playerProfile);
+  });
+  const profileDialog = document.getElementById("playerProfileDialog");
+  document.getElementById("closePlayerProfileBtn").addEventListener("click", () => profileDialog.close());
+  profileDialog.addEventListener("click", (event) => {
+    if (event.target === profileDialog) profileDialog.close();
+  });
 }
 
 function showView(viewName) {
@@ -109,7 +119,103 @@ function updateTopbar() {
   const player = getPlayer();
   document.getElementById("topbarBalance").textContent = formatChips(player.chips);
   document.getElementById("topbarName").textContent = sanitizeText(player.name, 14);
-  document.getElementById("topbarAvatar").textContent = player.avatar || "🎲";
+  setAvatarContent(document.getElementById("topbarAvatar"), player.avatar, player.avatarImage);
+}
+
+function setAvatarContent(container, emoji, image) {
+  container.replaceChildren();
+  if (image) {
+    const photo = document.createElement("img");
+    photo.src = image;
+    photo.alt = "";
+    container.append(photo);
+  } else {
+    container.textContent = emoji || "🎲";
+  }
+}
+
+function createPlayerProfileButton(player, detail) {
+  const button = document.createElement("button");
+  button.className = "leaderboard-profile-button";
+  button.type = "button";
+  button.dataset.playerProfile = String(player.id);
+  const avatar = document.createElement("span");
+  avatar.className = "player-avatar";
+  setAvatarContent(avatar, player.avatar, player.avatar_image);
+  const identity = document.createElement("span");
+  const name = document.createElement("strong");
+  name.textContent = player.username;
+  const subtitle = document.createElement("small");
+  subtitle.textContent = detail;
+  identity.append(name, document.createElement("br"), subtitle);
+  button.append(avatar, identity);
+  return button;
+}
+
+async function openPlayerProfile(playerId) {
+  const dialog = document.getElementById("playerProfileDialog");
+  const content = document.getElementById("playerProfileContent");
+  content.textContent = "Chargement du profil…";
+  if (!dialog.open) dialog.showModal();
+  try {
+    const response = await fetch(`/api/players/${encodeURIComponent(playerId)}`);
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Profil indisponible.");
+    const profile = payload.profile;
+    const avatar = document.createElement("div");
+    avatar.className = "player-profile-avatar";
+    setAvatarContent(avatar, profile.avatar, profile.avatar_image);
+    const name = document.createElement("h3");
+    name.textContent = profile.username;
+    const stats = document.createElement("div");
+    stats.className = "player-profile-stats";
+    const values = [
+      ["Solde", `${formatChips(profile.chips)} jetons`],
+      ["Parties", profile.gamesPlayed],
+      ["Victoires", profile.wins],
+      ["Taux de victoire", `${profile.winRate}%`],
+      ["Meilleur gain", `${formatChips(profile.bestWin)} jetons`],
+      ["Bilan net", `${profile.net > 0 ? "+" : ""}${formatChips(profile.net)} jetons`]
+    ];
+    for (const [label, value] of values) {
+      const stat = document.createElement("div");
+      stat.className = "player-profile-stat";
+      const caption = document.createElement("span");
+      caption.textContent = label;
+      const result = document.createElement("strong");
+      result.textContent = String(value);
+      stat.append(caption, result);
+      stats.append(stat);
+    }
+    content.replaceChildren(avatar, name, stats);
+  } catch (error) {
+    content.textContent = error.message || "Profil indisponible.";
+  }
+}
+
+async function saveProfileImage(image) {
+  const status = document.getElementById("avatarUploadStatus");
+  status.textContent = "Enregistrement…";
+  try {
+    const response = await fetch("/api/profile/avatar", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Enregistrement de la photo impossible.");
+    accountUser.avatar_image = payload.user.avatar_image;
+    const player = getPlayer();
+    player.avatarImage = payload.user.avatar_image;
+    localStorage.setItem(STORAGE_KEYS.player, JSON.stringify(player));
+    updateTopbar();
+    renderHomeView();
+    renderLeaderboard();
+    renderProfileView();
+    document.getElementById("avatarUploadStatus").textContent = image ? "Photo de profil mise à jour." : "Photo retirée.";
+  } catch (error) {
+    status.textContent = error.message || "Enregistrement de la photo impossible.";
+  }
 }
 
 function renderHomeView() {
@@ -245,11 +351,9 @@ function renderLeaderboardMini() {
         const rank = document.createElement("span");
         rank.className = "rank";
         rank.textContent = String(index + 1);
-        const identity = document.createElement("div");
-        identity.innerHTML = `<strong>${sanitizeText(row.avatar || "🎲", 16)} ${sanitizeText(row.username, 18)}</strong><br /><small>${Number(row.wins)} victoires</small>`;
         const balance = document.createElement("strong");
         balance.textContent = formatChips(row.chips);
-        entry.append(rank, identity, balance);
+        entry.append(rank, createPlayerProfileButton(row, `${Number(row.wins)} victoires`), balance);
         return entry;
       }));
     })
@@ -267,8 +371,7 @@ function renderLeaderboard() {
         const rank = document.createElement("span");
         rank.className = "rank";
         rank.textContent = String(index + 1);
-        const identity = document.createElement("div");
-        identity.innerHTML = `<strong>${sanitizeText(row.avatar || "🎲", 16)} ${sanitizeText(row.username, 18)}</strong><br /><small>${Number(row.games_played)} parties · ${Number(row.wins)} victoires</small>`;
+        const identity = createPlayerProfileButton(row, `${Number(row.games_played)} parties · ${Number(row.wins)} victoires`);
         const wins = document.createElement("div");
         wins.innerHTML = `<small>Meilleur gain</small><br /><strong>${formatChips(row.best_win || 0)}</strong>`;
         const balance = document.createElement("div");
@@ -290,6 +393,11 @@ function renderProfileView() {
   nameInput.value = player.name;
   nameInput.readOnly = true;
   soundToggle.checked = !!player.soundEnabled;
+  const profileImage = document.getElementById("profileAvatarImage");
+  profileImage.hidden = !player.avatarImage;
+  profileImage.src = player.avatarImage || "";
+  document.getElementById("profileAvatarFallback").textContent = player.avatar || "🎲";
+  document.getElementById("removeAvatarImageBtn").hidden = !player.avatarImage;
 
   avatarChoices.innerHTML = AVATAR_OPTIONS.map(
     (avatar) => `
@@ -310,10 +418,36 @@ function renderProfileView() {
       playerData.avatar = button.dataset.avatar;
       savePlayer(playerData);
       updateTopbar();
-      renderProfileView();
+      if (playerData.avatarImage) {
+        saveProfileImage(null);
+      } else {
+        renderProfileView();
+      }
       showToast("Avatar mis à jour.");
     });
   });
+
+  document.getElementById("avatarImageInput").onchange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 1_000_000) {
+      document.getElementById("avatarUploadStatus").textContent = "Choisis une image PNG, JPEG ou WebP de 1 Mo maximum.";
+      event.target.value = "";
+      return;
+    }
+    const image = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Lecture de l’image impossible."));
+      reader.readAsDataURL(file);
+    }).catch((error) => {
+      document.getElementById("avatarUploadStatus").textContent = error.message;
+      return null;
+    });
+    if (image) await saveProfileImage(image);
+    event.target.value = "";
+  };
+  document.getElementById("removeAvatarImageBtn").onclick = () => saveProfileImage(null);
 
   soundToggle.onchange = () => {
     const playerData = getPlayer();

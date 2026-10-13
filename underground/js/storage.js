@@ -10,6 +10,7 @@ function getDefaultPlayer() {
   return {
     name: "Joueur",
     avatar: "🎲",
+    avatarImage: null,
     chips: 1000,
     soundEnabled: false,
     stats: {
@@ -113,6 +114,7 @@ async function loadAccountData() {
     ...parseStoredJson(STORAGE_KEYS.player, {}),
     name: user.username,
     avatar: user.avatar || "🎲",
+    avatarImage: user.avatar_image || null,
     chips: Number(user.chips),
     createdAt: user.created_at,
     stats: {

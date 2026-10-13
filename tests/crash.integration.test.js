@@ -184,6 +184,16 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   });
   assert.equal(changedDuplicate.response.status, 409);
 
+  const crashPlayer = (await request('/api/admin/accounts?search=crash-player', { cookie: adminLogin.cookie })).body.accounts[0];
+  for (let index = 0; index < 3; index += 1) {
+    const balanceAdjustment = await request(`/api/admin/accounts/${crashPlayer.id}/chips`, {
+      cookie: adminLogin.cookie,
+      method: 'POST',
+      body: JSON.stringify({ delta: 1_000_000_000, reason: 'High-balance cashout test' })
+    });
+    assert.equal(balanceAdjustment.response.status, 200, balanceAdjustment.body.error);
+  }
+
   await waitForState(playerCookie, (state) => state.round.status === 'running');
   const withdrawn = await request(`/api/crash/bets/${placed.body.bet.id}/cashout`, {
     cookie: playerCookie,
@@ -192,6 +202,8 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   assert.equal(withdrawn.response.status, 200, withdrawn.body.error);
   assert.equal(withdrawn.body.bet.status, 'cashed_out');
   assert.equal(withdrawn.body.bet.payout, Math.floor(withdrawn.body.bet.cashoutMultiplier * 100));
+  assert.equal(withdrawn.body.balance, 3_000_000_900 + withdrawn.body.bet.payout);
+  assert.ok(withdrawn.body.balance > 2_147_483_647);
 
   const duplicateCashout = await request(`/api/crash/bets/${placed.body.bet.id}/cashout`, {
     cookie: playerCookie,

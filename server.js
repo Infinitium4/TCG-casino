@@ -24,6 +24,7 @@ const CRASH_TEST_MODE = process.env.NODE_ENV === 'test';
 const CRASH_BETTING_WINDOW_MS = CRASH_TEST_MODE ? 1000 : 8000;
 const CRASH_TIME_SCALE_MS = CRASH_TEST_MODE ? 500 : 12000;
 const CRASH_MAX_BET = 1_000_000;
+const MAX_CHIPS = Number.MAX_SAFE_INTEGER;
 const GAME_DEFAULTS = {
   roulette: { enabled: true, minBet: 1, maxBet: 1_000_000 },
   blackjack: { enabled: true, minBet: 1, maxBet: 1_000_000 },
@@ -94,7 +95,7 @@ const sessionMiddleware = session({
   }
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 
@@ -1607,7 +1608,7 @@ async function cashoutCrashBet(userId, betId) {
     }
     const credit = await run(
       'UPDATE users SET chips = chips + ? WHERE id = ? AND chips <= ?',
-      [payout, userId, 2_147_483_647 - payout]
+      [payout, userId, MAX_CHIPS - payout]
     );
     if (credit.changes !== 1) {
       throw crashActionError(400, 'Le solde maximal serait dépassé.');
@@ -1880,6 +1881,7 @@ async function initDatabase() {
       username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       avatar TEXT DEFAULT '🎲',
+      avatar_image TEXT,
       chips INTEGER DEFAULT 1000,
       is_admin INTEGER NOT NULL DEFAULT 0,
       is_banned INTEGER NOT NULL DEFAULT 0,
@@ -1898,6 +1900,9 @@ async function initDatabase() {
   }
   if (!userColumns.some((column) => column.name === 'suspended_until')) {
     await run('ALTER TABLE users ADD COLUMN suspended_until INTEGER');
+  }
+  if (!userColumns.some((column) => column.name === 'avatar_image')) {
+    await run('ALTER TABLE users ADD COLUMN avatar_image TEXT');
   }
   if (!userColumns.some((column) => column.name === 'is_bank')) {
     await run('ALTER TABLE users ADD COLUMN is_bank INTEGER NOT NULL DEFAULT 0');
@@ -2262,7 +2267,18 @@ function handleAsync(handler) {
 }
 
 async function getUserById(userId) {
-  return get('SELECT id, username, avatar, chips, created_at FROM users WHERE id = ?', [userId]);
+  return get('SELECT id, username, avatar, avatar_image, chips, created_at FROM users WHERE id = ?', [userId]);
+}
+
+function validateAvatarImage(dataUrl) {
+  const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
+  if (!match) return null;
+  const buffer = Buffer.from(match[2], 'base64');
+  if (buffer.length === 0 || buffer.length > 1_000_000) return null;
+  const isPng = match[1] === 'png' && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  const isJpeg = match[1] === 'jpeg' && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isWebp = match[1] === 'webp' && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+  return isPng || isJpeg || isWebp ? `data:image/${match[1]};base64,${match[2]}` : null;
 }
 
 app.use(express.static(GAME_DIR, { index: false }));
@@ -2572,7 +2588,7 @@ app.post('/api/admin/chips/distribute', requireAuth, requireAdmin, handleAsync(a
   }
   const outcome = await withDatabaseTransaction(async () => {
     const players = await all('SELECT id, username, chips FROM users WHERE is_admin = 0 AND is_bank = 0');
-    if (players.some((player) => Number(player.chips) + amount > 2_147_483_647)) {
+    if (players.some((player) => Number(player.chips) + amount > MAX_CHIPS)) {
       return { error: 'La distribution dépasserait le solde maximal d’un joueur.' };
     }
     for (const player of players) {
@@ -2600,7 +2616,7 @@ app.patch('/api/admin/games/:game', requireAuth, requireAdmin, requirePrimaryAdm
   const reason = String(req.body?.reason || '').trim().slice(0, 240);
   if (typeof enabled !== 'boolean' || typeof maintenance !== 'boolean' ||
       !Number.isSafeInteger(minBet) || !Number.isSafeInteger(maxBet) ||
-      minBet < 1 || maxBet < minBet || maxBet > 2_147_483_647 || !reason) {
+      minBet < 1 || maxBet < minBet || maxBet > MAX_CHIPS || !reason) {
     return res.status(400).json({ error: 'Réglages ou motif invalides.' });
   }
   await run(`
@@ -2729,8 +2745,8 @@ app.post('/api/admin/accounts/:id/chips', requireAuth, requireAdmin, async (req,
         return { status: 400, error: 'Le solde de ce compte protégé ne peut pas être modifié ici.' };
       }
       const newBalance = Number(target.chips) + delta;
-      if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > 2_147_483_647) {
-        return { status: 400, error: 'Le solde résultant doit être compris entre 0 et 2 147 483 647.' };
+      if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > MAX_CHIPS) {
+        return { status: 400, error: `Le solde résultant doit être compris entre 0 et ${MAX_CHIPS}.` };
       }
       await run('UPDATE users SET chips = ? WHERE id = ?', [newBalance, targetId]);
       await run(`
@@ -3005,6 +3021,23 @@ app.patch('/api/profile', requireAuth, async (req, res) => {
   res.json({ ok: true, user: await getUserById(req.session.userId) });
 });
 
+app.patch('/api/profile/avatar', requireAuth, async (req, res) => {
+  const image = req.body?.image;
+  if (image === null) {
+    await run('UPDATE users SET avatar_image = NULL WHERE id = ?', [req.session.userId]);
+    return res.json({ ok: true, user: await getUserById(req.session.userId) });
+  }
+  if (typeof image !== 'string') {
+    return res.status(400).json({ error: 'Image de profil invalide.' });
+  }
+  const validatedImage = validateAvatarImage(image);
+  if (!validatedImage) {
+    return res.status(400).json({ error: 'Choisis une image PNG, JPEG ou WebP de 1 Mo maximum.' });
+  }
+  await run('UPDATE users SET avatar_image = ? WHERE id = ?', [validatedImage, req.session.userId]);
+  res.json({ ok: true, user: await getUserById(req.session.userId) });
+});
+
 app.get('/api/crash/status', handleAsync(async (req, res) => {
   const settings = await getGameSettings('crash');
   const activeBet = req.session.userId ? await get(
@@ -3061,7 +3094,7 @@ app.get('/api/history', requireAuth, async (req, res) => {
 
 app.get('/api/leaderboard', async (req, res) => {
   const rows = await all(`
-    SELECT u.username, u.avatar, u.chips,
+    SELECT u.id, u.username, u.avatar, u.avatar_image, u.chips,
       (SELECT COUNT(*) FROM game_history gh WHERE gh.user_id = u.id AND gh.net > 0) AS wins,
       (SELECT COUNT(*) FROM game_history gh WHERE gh.user_id = u.id) AS games_played,
       (SELECT MAX(payout) FROM game_history gh WHERE gh.user_id = u.id) AS best_win
@@ -3072,6 +3105,40 @@ app.get('/api/leaderboard', async (req, res) => {
   `);
   res.json({ leaderboard: rows });
 });
+
+app.get('/api/players/:id', requireAuth, handleAsync(async (req, res) => {
+  const playerId = Number(req.params.id);
+  if (!Number.isSafeInteger(playerId) || playerId <= 0) {
+    return res.status(400).json({ error: 'Identifiant de joueur invalide.' });
+  }
+  const player = await get(`
+    SELECT id, username, avatar, avatar_image, chips, created_at
+    FROM users WHERE id = ? AND is_admin = 0 AND is_bank = 0
+  `, [playerId]);
+  if (!player) return res.status(404).json({ error: 'Profil introuvable.' });
+  const stats = await get(`
+    SELECT COUNT(*) AS games_played,
+      SUM(CASE WHEN net > 0 THEN 1 ELSE 0 END) AS wins,
+      COALESCE(MAX(payout), 0) AS best_win,
+      COALESCE(SUM(net), 0) AS net_total,
+      MAX(created_at) AS last_played
+    FROM game_history WHERE user_id = ?
+  `, [playerId]);
+  const gamesPlayed = Number(stats.games_played || 0);
+  const wins = Number(stats.wins || 0);
+  res.json({
+    profile: {
+      ...player,
+      chips: Number(player.chips),
+      gamesPlayed,
+      wins,
+      winRate: gamesPlayed ? Math.round((wins / gamesPlayed) * 1000) / 10 : 0,
+      bestWin: Number(stats.best_win || 0),
+      net: Number(stats.net_total || 0),
+      lastPlayed: stats.last_played
+    }
+  });
+}));
 
 app.get('/api/blackjack/tables', requireAuth, (req, res) => {
   res.json({ tables: [...blackjackTables.values()].map((table) => tableToPublicState(table, req.session.userId)) });
@@ -3345,7 +3412,7 @@ app.post('/api/result', requireAuth, async (req, res) => {
         return { status: 400, error: 'La mise dépasse le solde du compte.' };
       }
       const newChips = Number(user.chips) + normalizedNet;
-      if (!Number.isSafeInteger(newChips) || newChips < 0 || newChips > 2_147_483_647) {
+      if (!Number.isSafeInteger(newChips) || newChips < 0 || newChips > MAX_CHIPS) {
         return { status: 400, error: 'Le solde après la partie est invalide.' };
       }
       await addGameHistory(req.session.userId, normalizedGame, normalizedBet, result, normalizedPayout, normalizedNet);

@@ -545,6 +545,16 @@
 
               <div class="avatar-panel">
                 <span>Avatar</span>
+                <div id="profileAvatarPreview" class="profile-avatar-preview" aria-label="Photo de profil">
+                  <span id="profileAvatarFallback">🎲</span>
+                  <img id="profileAvatarImage" alt="" hidden />
+                </div>
+                <label class="input-group avatar-upload-label" for="avatarImageInput">
+                  <span>Photo de profil</span>
+                  <input id="avatarImageInput" type="file" accept="image/png,image/jpeg,image/webp" />
+                </label>
+                <button id="removeAvatarImageBtn" class="secondary-button" type="button" hidden>Retirer la photo</button>
+                <p id="avatarUploadStatus" class="admin-note" role="status"></p>
                 <div id="avatarChoices" class="avatar-grid"></div>
               </div>
 
@@ -578,6 +588,16 @@
         </section>
       </main>
     </div>
+
+    <dialog id="playerProfileDialog" class="player-profile-dialog">
+      <div class="player-profile-dialog-inner">
+        <div class="section-heading">
+          <h2>Profil joueur</h2>
+          <button id="closePlayerProfileBtn" class="secondary-button" type="button" aria-label="Fermer le profil">Fermer</button>
+        </div>
+        <div id="playerProfileContent" class="player-profile-content"></div>
+      </div>
+    </dialog>
 
     <div id="toast" class="toast" aria-live="polite"></div>
 

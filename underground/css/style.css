@@ -171,6 +171,17 @@ button {
   border-radius: 50%;
   background: rgba(197, 161, 90, 0.14);
   border: 1px solid rgba(197, 161, 90, 0.45);
+  overflow: hidden;
+}
+
+.avatar-badge img,
+.player-avatar img,
+.profile-avatar-preview img,
+.player-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 .icon-button {
@@ -473,6 +484,40 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.leaderboard-profile-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.leaderboard-profile-button strong {
+  color: var(--gold-soft);
+}
+
+.leaderboard-profile-button:hover strong,
+.leaderboard-profile-button:focus-visible strong {
+  text-decoration: underline;
+}
+
+.player-avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(197, 161, 90, 0.3);
+  border-radius: 50%;
+  background: rgba(197, 161, 90, 0.12);
+  font-size: 1.1rem;
 }
 
 .table-panel {
@@ -1427,6 +1472,92 @@ select {
   display: grid;
   grid-template-columns: repeat(5, minmax(42px, 1fr));
   gap: 10px;
+}
+
+.profile-avatar-preview,
+.player-profile-avatar {
+  display: grid;
+  width: 112px;
+  height: 112px;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(197, 161, 90, 0.55);
+  border-radius: 50%;
+  background: rgba(197, 161, 90, 0.12);
+  font-size: 2.5rem;
+}
+
+.avatar-upload-label input[type="file"] {
+  max-width: 100%;
+  padding: 8px;
+}
+
+.player-profile-dialog {
+  width: min(480px, calc(100vw - 28px));
+  max-height: min(720px, calc(100dvh - 28px));
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid rgba(197, 161, 90, 0.42);
+  border-radius: 10px;
+  background: var(--panel, #171411);
+  color: var(--text);
+}
+
+.player-profile-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(3px);
+}
+
+.player-profile-dialog-inner {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+}
+
+.player-profile-dialog .section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.player-profile-content {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.player-profile-content h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.player-profile-stats {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.player-profile-stat {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(197, 161, 90, 0.16);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.player-profile-stat span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.player-profile-stat strong {
+  color: var(--gold-soft);
 }
 
 .avatar-option {
