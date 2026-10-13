@@ -390,11 +390,13 @@ function createPokerTable(id = `poker-${Date.now()}`) {
     status: 'waiting',
     hostId: null,
     players: [],
+    departedContributions: [],
     deck: [],
     board: [],
     currentBet: 0,
     pot: 0,
     round: 'waiting',
+    showdownWinnerIds: [],
     currentTurn: 0,
     lastAction: 'Aucune action',
     dealerIndex: 0,
@@ -458,6 +460,50 @@ function createPokerTable(id = `poker-${Date.now()}`) {
 
       return removed;
     },
+    leavePlayer(playerId) {
+      const index = this.getPlayerIndex(playerId);
+      const player = this.players[index];
+      if (!player) {
+        return { ok: false, message: 'Joueur introuvable dans la table.' };
+      }
+      if (this.status !== 'in-progress') {
+        return { ok: !!this.removePlayer(playerId), removed: true, folded: false };
+      }
+
+      const wasCurrentTurn = this.players[this.currentTurn]?.id === player.id;
+      const committed = Number(player.totalContribution || 0);
+      this.departedContributions.push({ totalContribution: committed });
+      this.players.splice(index, 1);
+      if (this.hostId === player.id) {
+        this.hostId = this.players[0]?.id || null;
+      }
+      this.lastAction = `${player.username} quitte la table et se couche.`;
+      this.recentHistory.push(this.lastAction);
+
+      if (!this.players.length) {
+        this.currentTurn = 0;
+        this.status = 'waiting';
+        this.round = 'waiting';
+        return { ok: true, removed: true, folded: true, committed };
+      }
+
+      if (index < this.currentTurn) {
+        this.currentTurn -= 1;
+      } else if (wasCurrentTurn) {
+        this.currentTurn = (index - 1 + this.players.length) % this.players.length;
+      } else if (this.currentTurn >= this.players.length) {
+        this.currentTurn = 0;
+      }
+
+      if (this.resolveLastActivePlayer()) {
+        return { ok: true, removed: true, folded: true, committed };
+      } else if (this.isBettingRoundComplete()) {
+        this.advanceStreet();
+      } else if (wasCurrentTurn) {
+        this.currentTurn = this.getNextActionablePlayerIndex(this.currentTurn);
+      }
+      return { ok: true, removed: true, folded: true, committed };
+    },
     getActivePlayers() {
       return this.players.filter((player) => !player.folded && (Number(player.chips || 0) > 0 || !!player.allIn));
     },
@@ -482,16 +528,20 @@ function createPokerTable(id = `poker-${Date.now()}`) {
     },
     buildSidePots(contenders = this.getActivePlayers()) {
       const contenderSet = new Set(contenders);
-      const levels = [...new Set(this.players
-        .map((player) => Number(player.totalContribution || 0))
+      const contributionEntries = [
+        ...this.players.map((player) => ({ player, totalContribution: Number(player.totalContribution || 0) })),
+        ...this.departedContributions.map((entry) => ({ player: null, totalContribution: Number(entry.totalContribution || 0) }))
+      ];
+      const levels = [...new Set(contributionEntries
+        .map((entry) => entry.totalContribution)
         .filter((contribution) => contribution > 0))].sort((a, b) => a - b);
       const pots = [];
       let previousLevel = 0;
 
       for (const level of levels) {
-        const contributors = this.players.filter((player) => Number(player.totalContribution || 0) >= level);
+        const contributors = contributionEntries.filter((entry) => entry.totalContribution >= level);
         const amount = (level - previousLevel) * contributors.length;
-        const eligiblePlayers = contributors.filter((player) => contenderSet.has(player));
+        const eligiblePlayers = contributors.map((entry) => entry.player).filter((player) => player && contenderSet.has(player));
         if (amount > 0) {
           if (eligiblePlayers.length) {
             pots.push({ amount, eligiblePlayers });
@@ -540,7 +590,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
         return true;
       }
       const everyoneMatched = actionablePlayers.every((player) => Number(player.bet || 0) >= highestBet);
-      const everyoneActed = actionablePlayers.every((player) => player.actionTakenThisRound || Number(player.bet || 0) >= highestBet);
+      const everyoneActed = actionablePlayers.every((player) => player.actionTakenThisRound);
       return everyoneMatched && everyoneActed;
     },
     resolveLastActivePlayer() {
@@ -559,6 +609,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
       this.round = 'showdown';
       this.status = 'waiting';
       this.currentTurn = this.getPlayerIndex(winner.id);
+      this.showdownWinnerIds = [winner.id];
       this.lastAction = `${winner.username} remporte le pot après les abandons.`;
       this.recentHistory.push(this.lastAction);
       return true;
@@ -569,6 +620,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
         this.pot = 0;
         this.round = 'showdown';
         this.status = 'waiting';
+        this.showdownWinnerIds = [];
         this.lastAction = 'Showdown terminé sans gagnant.';
         this.recentHistory.push(this.lastAction);
         return [];
@@ -585,6 +637,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
         this.pot = 0;
         this.round = 'showdown';
         this.status = 'waiting';
+        this.showdownWinnerIds = [];
         this.lastAction = 'Showdown terminé sans gagnant.';
         this.recentHistory.push(this.lastAction);
         return [];
@@ -630,6 +683,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
       this.round = 'showdown';
       this.status = 'waiting';
       this.currentTurn = this.getPlayerIndex(winners[0].id);
+      this.showdownWinnerIds = winners.map((player) => player.id);
 
       if (winners.length > 1) {
         this.lastAction = `${winners.map((player) => player.username).join(', ')} se partagent les pots (${[...handNames].join(', ')}).`;
@@ -638,6 +692,16 @@ function createPokerTable(id = `poker-${Date.now()}`) {
       }
       this.recentHistory.push(this.lastAction);
       return winners;
+    },
+    resetActionsAfterRaise(actingPlayer, previousBet) {
+      if (this.currentBet <= previousBet) {
+        return;
+      }
+      this.players.forEach((player) => {
+        if (player.id !== actingPlayer.id && !player.folded && Number(player.chips || 0) > 0) {
+          player.actionTakenThisRound = false;
+        }
+      });
     },
     finalizeAction(player) {
       player.actionTakenThisRound = true;
@@ -648,7 +712,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
         this.advanceStreet();
         return;
       }
-      this.currentTurn = this.getNextLivePlayerIndex(this.currentTurn);
+      this.currentTurn = this.getNextActionablePlayerIndex(this.currentTurn);
     },
     startRound() {
       if (this.status === 'in-progress' || !canStartPokerTable(this)) {
@@ -657,9 +721,11 @@ function createPokerTable(id = `poker-${Date.now()}`) {
 
       this.status = 'in-progress';
       this.round = 'pre-flop';
+      this.showdownWinnerIds = [];
       this.board = [];
       this.currentBet = 0;
       this.pot = 0;
+      this.departedContributions = [];
       this.recentHistory = [];
       this.deck = shuffleDeck(createDeck());
 
@@ -690,7 +756,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
         smallBlindPlayer.bet = smallBlind;
         smallBlindPlayer.totalContribution = smallBlind;
         smallBlindPlayer.allIn = smallBlindPlayer.chips === 0;
-        smallBlindPlayer.actionTakenThisRound = true;
+        smallBlindPlayer.actionTakenThisRound = false;
         this.pot += smallBlind;
       }
       if (bigBlindPlayer) {
@@ -699,7 +765,7 @@ function createPokerTable(id = `poker-${Date.now()}`) {
         bigBlindPlayer.bet = bigBlind;
         bigBlindPlayer.totalContribution = bigBlind;
         bigBlindPlayer.allIn = bigBlindPlayer.chips === 0;
-        bigBlindPlayer.actionTakenThisRound = true;
+        bigBlindPlayer.actionTakenThisRound = false;
         this.pot += bigBlind;
       }
 
@@ -831,16 +897,18 @@ function createPokerTable(id = `poker-${Date.now()}`) {
           return { ok: false, message: 'Tu n’as pas assez de jetons.' };
         }
 
-        const minimumRaise = this.currentBet > 0 ? this.currentBet + this.blinds.big : this.blinds.big;
+        const minimumRaise = Math.max(1, (this.currentBet > 0 ? this.currentBet + this.blinds.big : this.blinds.big) - Number(player.bet || 0));
         if (betAmount < minimumRaise) {
           return { ok: false, message: `Le montant doit être au moins ${minimumRaise}.` };
         }
 
+        const previousBet = this.currentBet;
         player.chips = Math.max(0, Number(player.chips || 0) - betAmount);
         player.bet = Number(player.bet || 0) + betAmount;
         player.totalContribution = Number(player.totalContribution || 0) + betAmount;
         this.pot += betAmount;
         this.currentBet = Math.max(this.currentBet, player.bet);
+        this.resetActionsAfterRaise(player, previousBet);
         if (Number(player.chips || 0) <= 0) {
           player.allIn = true;
         }
@@ -856,11 +924,13 @@ function createPokerTable(id = `poker-${Date.now()}`) {
         if (allInValue <= 0) {
           return { ok: false, message: 'Tu n’as plus de jetons.' };
         }
+        const previousBet = this.currentBet;
         player.chips = 0;
         player.bet = Number(player.bet || 0) + allInValue;
         player.totalContribution = Number(player.totalContribution || 0) + allInValue;
         this.pot += allInValue;
         this.currentBet = Math.max(this.currentBet, player.bet);
+        this.resetActionsAfterRaise(player, previousBet);
         player.allIn = true;
         player.actionTakenThisRound = true;
         this.lastAction = `${player.username} all-in pour ${allInValue}.`;
@@ -909,6 +979,7 @@ function tableToPublicState(table, viewerId = null) {
     hostId: table.hostId,
     players: table.players.map((player) => {
       const isViewer = viewer !== null && Number(player.id) === Number(viewer);
+      const revealHand = table.round === 'showdown' && !player.folded;
       return {
         id: player.id,
         username: player.username,
@@ -916,7 +987,8 @@ function tableToPublicState(table, viewerId = null) {
         chips: player.chips,
         connected: player.connected,
         bet: player.bet,
-        hand: isViewer ? [...(player.hand || [])] : [],
+        hand: isViewer || revealHand ? [...(player.hand || [])] : [],
+        isWinner: (table.showdownWinnerIds || []).includes(Number(player.id)),
         folded: !!player.folded,
         allIn: !!player.allIn,
         isDealer: !!player.isDealer,
@@ -928,6 +1000,7 @@ function tableToPublicState(table, viewerId = null) {
     minPlayers: table.minPlayers,
     currentBet: table.currentBet || 0,
     pot: table.pot || 0,
+    blinds: { ...(table.blinds || { small: 10, big: 20 }) },
     board: table.board || [],
     round: table.round || 'waiting',
     dealerIndex: table.dealerIndex ?? 0,
@@ -1057,16 +1130,14 @@ io.on('connection', async (socket) => {
       return socket.emit('poker:table:error', { message: 'Table introuvable.' });
     }
 
-    const committed = Number(table.players.find((player) => player.id === user.id)?.bet || 0);
-    const removed = table.removePlayer(user.id);
-
-    if (removed) {
-      if (committed > 0) {
-        updateUserChips(user.id, -committed).catch(() => {});
+    const result = table.leavePlayer(user.id);
+    if (result.ok) {
+      if (result.committed > 0) {
+        updateUserChips(user.id, -result.committed).catch(() => {});
       }
       socket.leave(`poker:${table.id}`);
-      io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table, user.id));
-      socket.emit('poker:table:left', { tableId: table.id, committed });
+      io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table));
+      socket.emit('poker:table:left', { tableId: table.id, folded: result.folded, committed: result.committed });
     }
   });
 
@@ -1436,17 +1507,16 @@ app.post('/api/poker/tables/:id/leave', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'Tu n’es pas dans cette table.' });
   }
 
-  const committed = Number(player.bet || 0);
-  const removed = table.removePlayer(req.session.userId);
-  if (!removed) {
-    return res.status(400).json({ error: 'Impossible de quitter la table.' });
+  const result = table.leavePlayer(req.session.userId);
+  if (!result.ok) {
+    return res.status(400).json({ error: result.message || 'Impossible de quitter la table.' });
+  }
+  if (result.committed > 0) {
+    await updateUserChips(req.session.userId, -result.committed);
   }
 
-  if (committed > 0) {
-    await updateUserChips(req.session.userId, -committed);
-  }
-
-  res.json({ ok: true, table: tableToPublicState(table, req.session.userId), committed });
+  io.to(`poker:${table.id}`).emit('poker:table:update', tableToPublicState(table));
+  res.json({ ok: true, table: tableToPublicState(table, req.session.userId), folded: result.folded, committed: result.committed });
 });
 
 app.post('/api/result', requireAuth, async (req, res) => {

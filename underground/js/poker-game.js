@@ -3,7 +3,8 @@ const pokerGame = (() => {
   const state = {
     table: null,
     socket: null,
-    poller: null
+    poller: null,
+    amountDraft: null
   };
 
   function getCurrentUserId() {
@@ -75,14 +76,16 @@ const pokerGame = (() => {
         const isDealer = !!player.isDealer;
         const isSmallBlind = !!player.isSmallBlind;
         const isBigBlind = !!player.isBigBlind;
+        const isWinner = !!player.isWinner;
+        const revealHand = table.round === 'showdown' && !player.folded;
         const position = getSeatPosition(table.players.length, index);
-        const handDisplay = isMe && player.hand?.length ? player.hand.map((card) => cardMarkup(card, true)).join('') : '<div class="poker-card face-down">?</div><div class="poker-card face-down">?</div>';
-        const badge = isDealer ? 'Dealer' : isSmallBlind ? 'SB' : isBigBlind ? 'BB' : '';
+        const handDisplay = (isMe || revealHand) && player.hand?.length ? player.hand.map((card) => cardMarkup(card, true)).join('') : '<div class="poker-card face-down">?</div><div class="poker-card face-down">?</div>';
+        const badge = isWinner ? 'Gagnant' : isDealer ? 'Dealer' : isSmallBlind ? 'SB' : isBigBlind ? 'BB' : '';
 
         return `
-          <div class="poker-seat" style="left:${position.x}%; top:${position.y}%">
-            <div class="seat-badge ${isTurn ? 'active' : ''}">${badge || (isTurn ? 'Tour' : '')}</div>
-            <div class="seat-player">
+          <div class="poker-seat ${isWinner ? 'winner' : ''}" style="left:${position.x}%; top:${position.y}%">
+            <div class="seat-badge ${isTurn ? 'active' : ''} ${isWinner ? 'winner' : ''}">${badge || (isTurn ? 'Tour' : '')}</div>
+            <div class="seat-player ${isWinner ? 'winner' : ''}">
               <div class="seat-name">${sanitizeText(player.username || 'Joueur', 14)}</div>
               <div class="seat-chip">${formatChips(player.chips || 0)} jetons</div>
               <div class="seat-bet">Mise: ${formatChips(player.bet || 0)}</div>
@@ -143,7 +146,16 @@ const pokerGame = (() => {
     }
 
     turnInfo.textContent = `À toi de jouer. Tu as ${formatChips(currentPlayer.chips || 0)} jetons restants.`;
-    const defaultAmount = Math.max(10, Number(table.currentBet || 0) || 10);
+    const minimumAmount = Math.max(1, (Number(table.currentBet || 0) > 0
+      ? Number(table.currentBet || 0) + Number(table.blinds?.big || 20)
+      : Number(table.blinds?.big || 20)) - Number(currentPlayer.bet || 0));
+    const maxAmount = Number(currentPlayer.chips || 0);
+    const amountKey = `${currentPlayer.id}:${table.round}:${table.currentBet}:${currentPlayer.bet}:${maxAmount}:${minimumAmount}`;
+    const amountValue = state.amountDraft?.key === amountKey ? state.amountDraft.value : minimumAmount;
+    const existingAmountInput = document.getElementById('pokerAmountInput');
+    if (existingAmountInput?.dataset.amountKey === amountKey && document.activeElement === existingAmountInput) {
+      return;
+    }
     const actionButtons = [
       canFold ? '<button class="secondary-button" type="button" data-action="fold">Fold</button>' : '',
       canCheck ? '<button class="secondary-button" type="button" data-action="check">Check</button>' : '',
@@ -159,14 +171,22 @@ const pokerGame = (() => {
       </div>
       <label class="inline-amount">
         <span>Montant</span>
-        <input id="pokerAmountInput" type="number" min="10" step="10" value="${defaultAmount}" />
+        <input id="pokerAmountInput" data-amount-key="${amountKey}" type="number" min="${minimumAmount}" max="${maxAmount}" step="1" value="${amountValue}" />
       </label>
     `;
+
+    const amountInput = document.getElementById('pokerAmountInput');
+    amountInput?.addEventListener('input', () => {
+      state.amountDraft = { key: amountKey, value: amountInput.value };
+    });
 
     controlsNode.querySelectorAll('[data-action]').forEach((button) => {
       button.addEventListener('click', async () => {
         const action = button.dataset.action;
         const amountInput = document.getElementById('pokerAmountInput');
+        if ((action === 'bet' || action === 'raise') && !amountInput?.reportValidity()) {
+          return;
+        }
         const amount = Number(amountInput?.value || 0);
         await sendAction(action, amount);
       });
@@ -202,6 +222,27 @@ const pokerGame = (() => {
     } catch (error) {
       console.error(error);
       alert(error.message || 'Impossible de relancer la partie.');
+    }
+  }
+
+  async function leaveTable() {
+    const leaveButton = document.getElementById('goLobbyBtn');
+    if (leaveButton?.disabled) {
+      return;
+    }
+    if (leaveButton) leaveButton.disabled = true;
+
+    try {
+      const response = await fetch(`/api/poker/tables/${tableId}/leave`, { method: 'POST' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'Impossible de quitter la partie.');
+      }
+      window.location.href = '/game';
+    } catch (error) {
+      if (leaveButton) leaveButton.disabled = false;
+      console.error(error);
+      alert(error.message || 'Impossible de quitter la partie.');
     }
   }
 
@@ -267,9 +308,7 @@ const pokerGame = (() => {
     }
     state.poller = setInterval(refreshTable, 2500);
 
-    document.getElementById('goLobbyBtn').addEventListener('click', () => {
-      window.location.href = '/game';
-    });
+    document.getElementById('goLobbyBtn').addEventListener('click', leaveTable);
   }
 
   return { initialize };

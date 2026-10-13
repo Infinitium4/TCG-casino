@@ -1024,6 +1024,13 @@ select {
   background: rgba(197, 161, 90, 0.18);
 }
 
+.seat-badge.winner {
+  color: #171211;
+  background: var(--gold-soft);
+  border-color: var(--gold-soft);
+  font-weight: 800;
+}
+
 .seat-player {
   display: flex;
   flex-direction: column;
@@ -1034,6 +1041,17 @@ select {
   background: rgba(16, 13, 12, 0.65);
   border: 1px solid rgba(197, 161, 90, 0.18);
   min-width: 160px;
+}
+
+.seat-player.winner {
+  border-color: var(--gold-soft);
+  background: rgba(197, 161, 90, 0.2);
+  box-shadow: 0 0 22px rgba(197, 161, 90, 0.48);
+}
+
+.poker-inline-player.winner {
+  outline: 2px solid var(--gold-soft);
+  box-shadow: 0 0 22px rgba(197, 161, 90, 0.48);
 }
 
 .seat-name {

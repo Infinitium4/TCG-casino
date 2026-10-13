@@ -48,6 +48,56 @@ test('a leaving player loses their committed poker bet', () => {
   assert.equal(table.players.length, 2);
 });
 
+test('leaving during a hand folds the player and keeps their contribution for the pot', () => {
+  const table = createPokerTable('test-poker-leave-fold');
+  [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
+  table.status = 'in-progress';
+  table.round = 'river';
+  table.currentTurn = 0;
+  table.pot = 90;
+  table.board = ['2h', '3d', '4c', '8s', '9h'];
+  table.players.forEach((player) => {
+    player.totalContribution = 30;
+    player.hand = ['10h', 'Jc'];
+  });
+
+  const leaveResult = table.leavePlayer(3);
+  const foldResult = table.applyAction(1, 'fold');
+
+  assert.equal(leaveResult.ok, true);
+  assert.equal(leaveResult.folded, true);
+  assert.equal(foldResult.ok, true);
+  assert.equal(table.players.some((player) => player.id === 3), false);
+  assert.equal(table.players[1].chips, 590);
+  assert.equal(table.pot, 0);
+});
+
+test('leaving on the current turn folds immediately and advances action only once', () => {
+  const table = createPokerTable('test-poker-leave-on-turn');
+  [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
+  table.status = 'in-progress';
+  table.round = 'flop';
+  table.currentTurn = 0;
+  table.pot = 60;
+  table.players.forEach((player) => {
+    player.totalContribution = 20;
+    player.hand = ['10h', 'Jc'];
+  });
+
+  const firstLeave = table.leavePlayer(1);
+  const nextTurn = table.players[table.currentTurn].id;
+  const historyLength = table.recentHistory.length;
+  const repeatedLeave = table.leavePlayer(1);
+
+  assert.equal(firstLeave.ok, true);
+  assert.equal(table.players.some((player) => player.id === 1), false);
+  assert.equal(table.departedContributions[0].totalContribution, 20);
+  assert.equal(nextTurn, 2);
+  assert.equal(repeatedLeave.ok, false);
+  assert.equal(table.players[table.currentTurn].id, 2);
+  assert.equal(table.recentHistory.length, historyLength);
+});
+
 test('removing a player before the active turn keeps the turn pointer valid', () => {
   const table = createPokerTable('test-poker-turn-reindex');
   [1, 2, 3, 4].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
@@ -112,6 +162,26 @@ test('a poker table exposes private cards only to their owner', () => {
   assert.equal(bobView.players[0].hand.length, 0);
 });
 
+test('showdown reveals only remaining hands and identifies the winner', () => {
+  const table = createPokerTable('test-poker-showdown-reveal');
+  [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
+  table.players.forEach((player) => {
+    player.hand = ['Ah', 'Kd'];
+  });
+  table.players[2].folded = true;
+  table.showdownWinnerIds = [2];
+
+  const beforeShowdown = tableToPublicState(table, 1);
+  assert.equal(beforeShowdown.players[1].hand.length, 0);
+
+  table.round = 'showdown';
+  const showdown = tableToPublicState(table, 1);
+
+  assert.deepEqual(showdown.players[1].hand, ['Ah', 'Kd']);
+  assert.equal(showdown.players[1].isWinner, true);
+  assert.equal(showdown.players[2].hand.length, 0);
+});
+
 test('a full poker betting round advances to the flop when everyone calls', () => {
   const table = createPokerTable('test-poker-betting-round');
   [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
@@ -129,6 +199,45 @@ test('a full poker betting round advances to the flop when everyone calls', () =
   assert.equal(table.board.length, 3);
 });
 
+test('every actionable player must check before the street advances', () => {
+  const table = createPokerTable('test-poker-check-turns');
+  [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
+  table.status = 'in-progress';
+  table.round = 'flop';
+  table.currentBet = 0;
+  table.currentTurn = 0;
+  table.board = ['2h', '3d', '4c'];
+  table.players.forEach((player) => {
+    player.bet = 0;
+    player.actionTakenThisRound = false;
+    player.hand = ['10h', 'Jc'];
+  });
+
+  assert.equal(table.applyAction(1, 'check').ok, true);
+  assert.equal(table.round, 'flop');
+  assert.equal(table.players[table.currentTurn].id, 2);
+  assert.equal(table.applyAction(2, 'check').ok, true);
+  assert.equal(table.round, 'flop');
+  assert.equal(table.applyAction(3, 'check').ok, true);
+  assert.equal(table.round, 'turn');
+});
+
+test('the big blind still gets an action after everyone calls pre-flop', () => {
+  const table = createPokerTable('test-poker-big-blind-option');
+  [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
+  table.startRound();
+
+  for (let actionCount = 0; actionCount < 2; actionCount += 1) {
+    const playerId = table.players[table.currentTurn].id;
+    assert.equal(table.applyAction(playerId, 'call').ok, true);
+  }
+
+  assert.equal(table.round, 'pre-flop');
+  assert.equal(table.players[table.currentTurn].id, table.players[table.bigBlindIndex].id);
+  assert.equal(table.applyAction(table.players[table.currentTurn].id, 'call').ok, true);
+  assert.equal(table.round, 'flop');
+});
+
 test('a player can place a legal custom bet and rejects an illegal under-bet', () => {
   const table = createPokerTable('test-poker-bet-validation');
   [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
@@ -143,6 +252,36 @@ test('a player can place a legal custom bet and rejects an illegal under-bet', (
   const invalidBet = table.applyAction(nextPlayerId, 'bet', 10);
   assert.equal(invalidBet.ok, false);
   assert.equal(String(invalidBet.message).includes('au moins'), true);
+});
+
+test('a player can bet an arbitrary valid chip amount', () => {
+  const table = createPokerTable('test-poker-arbitrary-bet');
+  [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
+  table.status = 'in-progress';
+  table.round = 'flop';
+  table.currentTurn = 0;
+  table.currentBet = 0;
+
+  const result = table.applyAction(1, 'bet', 37);
+
+  assert.equal(result.ok, true);
+  assert.equal(table.players[0].bet, 37);
+  assert.equal(table.currentBet, 37);
+});
+
+test('a raise makes previous callers act again', () => {
+  const table = createPokerTable('test-poker-reopen-action');
+  [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
+  table.status = 'in-progress';
+  table.round = 'flop';
+  table.currentTurn = 0;
+  table.currentBet = 0;
+
+  assert.equal(table.applyAction(1, 'bet', 40).ok, true);
+  assert.equal(table.applyAction(2, 'call').ok, true);
+  assert.equal(table.applyAction(3, 'raise', 60).ok, true);
+  assert.equal(table.players[0].actionTakenThisRound, false);
+  assert.equal(table.players[table.currentTurn].id, 1);
 });
 
 test('a new round starts without community cards and only resolves after the first betting street', () => {

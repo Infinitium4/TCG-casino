@@ -2,7 +2,8 @@ const pokerModule = (() => {
   const state = {
     tables: [],
     currentTableId: null,
-    poller: null
+    poller: null,
+    amountDraft: null
   };
 
   function getCurrentUserId() {
@@ -229,7 +230,7 @@ const pokerModule = (() => {
     }
 
     const currentTable = getCurrentTable();
-    if (!currentTable || currentTable.status !== 'in-progress') {
+    if (!currentTable || (currentTable.status !== 'in-progress' && currentTable.round !== 'showdown')) {
       tableScreen.style.display = 'none';
       return;
     }
@@ -248,15 +249,16 @@ const pokerModule = (() => {
 
     playersNode.innerHTML = currentTable.players
       .map((player, index) => {
-        const handVisible = Number(player.id) === Number(currentUserId) || currentTable.round === 'showdown';
+        const isWinner = !!player.isWinner;
+        const handVisible = Number(player.id) === Number(currentUserId) || (currentTable.round === 'showdown' && !player.folded);
         const cards = handVisible && player.hand?.length ? player.hand.join(' ') : '🂠 🂠';
         const isTurn = Number(currentTable.currentTurn) === index;
         const isDealer = !!player.isDealer;
         const isSmallBlind = !!player.isSmallBlind;
         const isBigBlind = !!player.isBigBlind;
-        const badge = isDealer ? 'Dealer' : isSmallBlind ? 'Small blind' : isBigBlind ? 'Big blind' : '';
+        const badge = isWinner ? 'Gagnant' : isDealer ? 'Dealer' : isSmallBlind ? 'Small blind' : isBigBlind ? 'Big blind' : '';
         return `
-          <div style="background: rgba(17,24,39,0.85); border: ${isTurn ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.18)'}; border-radius: 12px; padding: 0.75rem;">
+          <div class="poker-inline-player ${isWinner ? 'winner' : ''}" style="background: rgba(17,24,39,0.85); border: ${isTurn ? '2px solid #fbbf24' : '1px solid rgba(255,255,255,0.18)'}; border-radius: 12px; padding: 0.75rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
               <strong>${sanitizeText(player.username || 'Joueur', 16)}</strong>
               <span>${badge}</span>
@@ -264,13 +266,18 @@ const pokerModule = (() => {
             <div style="margin-bottom:0.5rem; font-size:0.9rem;">Jetons: ${player.chips}</div>
             <div style="margin-bottom:0.5rem; font-size:0.9rem;">Mise: ${player.bet}</div>
             <div style="display:flex; gap:0.4rem; margin-bottom:0.5rem;">${cards}</div>
-            <div style="font-size:0.75rem; color:#d3d8e6;">${player.folded ? 'Couché' : isTurn ? 'À jouer' : 'En jeu'}</div>
+            <div style="font-size:0.75rem; color:#d3d8e6;">${isWinner ? 'Gagnant' : player.folded ? 'Couché' : isTurn ? 'À jouer' : 'En jeu'}</div>
           </div>
         `;
       })
       .join('');
 
     historyNode.textContent = currentTable.recentHistory?.length ? currentTable.recentHistory[currentTable.recentHistory.length - 1] : currentTable.lastAction || 'Aucune action';
+
+    if (currentTable.round === 'showdown') {
+      actionPanel.innerHTML = '<div class="status-box subtle">Showdown terminé.</div>';
+      return;
+    }
 
     const canCheck = isMyTurn && currentPlayer && !currentPlayer.folded && Number(currentTable.currentBet || 0) <= Number(currentPlayer.bet || 0);
     const canCall = isMyTurn && currentPlayer && !currentPlayer.folded && Number(currentTable.currentBet || 0) > Number(currentPlayer.bet || 0) && Number(currentPlayer.chips || 0) > 0;
@@ -288,12 +295,30 @@ const pokerModule = (() => {
       canAllIn ? '<button class="danger-button" type="button" data-poker-action="all-in">All-in</button>' : ''
     ].filter(Boolean).join('');
 
-    actionPanel.innerHTML = `${actionButtons}<input id="pokerActionAmount" type="number" min="10" step="10" value="${Math.max(10, Number(currentTable.currentBet || 0) || 10)}" style="max-width:120px;" />`;
+    const minimumAmount = Math.max(1, (Number(currentTable.currentBet || 0) > 0
+      ? Number(currentTable.currentBet || 0) + Number(currentTable.blinds?.big || 20)
+      : Number(currentTable.blinds?.big || 20)) - Number(currentPlayer.bet || 0));
+    const maxAmount = Number(currentPlayer.chips || 0);
+    const amountKey = `${currentPlayer.id}:${currentTable.round}:${currentTable.currentBet}:${currentPlayer.bet}:${maxAmount}:${minimumAmount}`;
+    const amountValue = state.amountDraft?.key === amountKey ? state.amountDraft.value : minimumAmount;
+    const existingAmountInput = document.getElementById("pokerActionAmount");
+    if (existingAmountInput?.dataset.amountKey === amountKey && document.activeElement === existingAmountInput) {
+      return;
+    }
+    actionPanel.innerHTML = `${actionButtons}<input id="pokerActionAmount" data-amount-key="${amountKey}" type="number" min="${minimumAmount}" max="${maxAmount}" step="1" value="${amountValue}" style="max-width:120px;" />`;
+
+    const amountInput = document.getElementById("pokerActionAmount");
+    amountInput?.addEventListener("input", () => {
+      state.amountDraft = { key: amountKey, value: amountInput.value };
+    });
 
     actionPanel.querySelectorAll("[data-poker-action]").forEach((button) => {
       button.addEventListener("click", async () => {
         const action = button.dataset.pokerAction;
         const amountInput = document.getElementById("pokerActionAmount");
+        if ((action === "bet" || action === "raise") && !amountInput?.reportValidity()) {
+          return;
+        }
         const amount = Number(amountInput?.value || 0);
         await sendTableAction(action, amount);
       });
