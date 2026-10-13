@@ -1,6 +1,6 @@
 const blackjackGame = (() => {
   const tableId = window.location.pathname.split('/').filter(Boolean).pop();
-  const state = { table: null, socket: null, poller: null };
+  const state = { table: null, socket: null, poller: null, actionPending: false };
 
   function getCurrentUserId() {
     return Number(accountUser?.id ?? getPlayer()?.id ?? 0);
@@ -148,6 +148,31 @@ const blackjackGame = (() => {
         if (cardIndex === 1) return table.players.length + index + 2;
         return 0;
       });
+      let splitArea = seat.querySelector('.blackjack-split-hands');
+      if (player.hands?.length > 1) {
+        seat.querySelector('.seat-cards').hidden = true;
+        if (!splitArea) {
+          splitArea = document.createElement('div');
+          splitArea.className = 'blackjack-split-hands';
+          seat.querySelector('.seat-cards').after(splitArea);
+        }
+        while (splitArea.children.length < player.hands.length) {
+          const group = document.createElement('div');
+          group.className = 'blackjack-split-hand';
+          group.innerHTML = '<small></small><div class="blackjack-seat-cards"></div>';
+          splitArea.append(group);
+        }
+        player.hands.forEach((hand, handIndex) => {
+          const group = splitArea.children[handIndex];
+          group.classList.toggle('is-active-hand', isTurn && player.activeHand === handIndex);
+          const result = { win: 'Gagné', loss: 'Perdu', push: 'Égalité' }[hand.outcome] || (hand.finished ? 'Terminée' : '');
+          group.querySelector('small').textContent = `Main ${handIndex + 1} · ${hand.cards.length ? calculateHandValue(hand.cards) : '?'} · Mise ${formatChips(hand.bet)} ${result}`;
+          syncCardRow(group.querySelector('.blackjack-seat-cards'), hand.cards.length ? hand.cards : Array(hand.handCount).fill(null), `${table.roundNumber}-${handIndex}`, () => 0);
+        });
+      } else {
+        seat.querySelector('.seat-cards').hidden = false;
+        splitArea?.remove();
+      }
     });
   }
 
@@ -186,13 +211,21 @@ const blackjackGame = (() => {
         return;
       }
       turnInfo.textContent = `À toi. Main : ${calculateHandValue(player.hand || [])} • Mise : ${formatChips(player.bet)} jetons.`;
+      if (player.hands?.length > 1) {
+        const hand = player.hands[player.activeHand];
+        turnInfo.textContent = `À toi · Main ${player.activeHand + 1}/${player.hands.length} · Score ${calculateHandValue(hand.cards)} · Mise ${formatChips(hand.bet)} jetons.`;
+      }
       controlsNode.innerHTML = `
         <div class="action-row stacked">
           <button class="primary-button" type="button" data-blackjack-action="hit">Tirer</button>
           <button class="gold-button" type="button" data-blackjack-action="stand">Rester</button>
+          <button class="secondary-button" type="button" data-blackjack-action="double" ${player.canDouble ? '' : 'disabled'} title="Double la mise, reçoit une carte puis termine la main">Doubler</button>
+          <button class="secondary-button" type="button" data-blackjack-action="split" ${player.canSplit ? '' : 'disabled'} title="Sépare une paire en deux mains avec une mise supplémentaire">Séparer</button>
         </div>
+        <small>Double : 1 carte puis arrêt. Split : 2 mains, une mise par main. As séparés : 1 carte chacun.</small>
       `;
       controlsNode.querySelectorAll('[data-blackjack-action]').forEach((button) => {
+        if (state.actionPending) button.disabled = true;
         button.addEventListener('click', () => sendAction(button.dataset.blackjackAction));
       });
       return;
@@ -236,6 +269,9 @@ const blackjackGame = (() => {
   }
 
   async function sendAction(action) {
+    if (state.actionPending) return;
+    state.actionPending = true;
+    renderActions(state.table);
     try {
       const response = await fetch(`/api/blackjack/tables/${tableId}/action`, {
         method: 'POST',
@@ -245,10 +281,13 @@ const blackjackGame = (() => {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Action invalide.');
       renderTable(payload.table);
-      if (payload.table.round === 'finished') await loadAccountData();
+      await loadAccountData();
     } catch (error) {
       console.error(error);
       window.alert(error.message || 'Action invalide.');
+    } finally {
+      state.actionPending = false;
+      if (state.table) renderActions(state.table);
     }
   }
 

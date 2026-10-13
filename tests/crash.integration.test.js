@@ -135,6 +135,22 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   const playerCookie = await register('crash-player');
   const observerCookie = await register('crash-observer');
 
+  const banner = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p1sAAAAASUVORK5CYII=';
+  const design = { accent: '#6ee7c7', style: 'midnight', banner, fit: 'contain', position: 35, bio: 'Mon profil personnalisé' };
+  const saveDesign = await request('/api/profile/design', { cookie: playerCookie, method: 'PATCH', body: JSON.stringify(design) });
+  assert.equal(saveDesign.response.status, 200, saveDesign.body.error);
+  const profileAccount = await request('/api/me', { cookie: playerCookie });
+  assert.deepEqual(JSON.parse(profileAccount.body.user.profile_design), design);
+  const publicProfile = await request(`/api/players/${profileAccount.body.user.id}`, { cookie: observerCookie });
+  assert.equal(publicProfile.response.status, 200);
+  assert.deepEqual(JSON.parse(publicProfile.body.profile.profile_design), design);
+  for (const invalidDesign of [{ accent: 'red' }, { banner: 'javascript:alert(1)' }, { position: 101 }, { bio: 'x'.repeat(161) }]) {
+    const invalid = await request('/api/profile/design', { cookie: playerCookie, method: 'PATCH', body: JSON.stringify({ ...design, ...invalidDesign }) });
+    assert.equal(invalid.response.status, 400);
+  }
+  const observerAccount = await request('/api/me', { cookie: observerCookie });
+  assert.deepEqual(JSON.parse(observerAccount.body.user.profile_design), {});
+
   const unauthenticated = await request('/api/crash/state');
   assert.equal(unauthenticated.response.status, 401);
 
@@ -158,6 +174,16 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   });
   assert.equal(tooLarge.response.status, 400);
 
+  const crashPlayer = (await request('/api/admin/accounts?search=crash-player', { cookie: adminLogin.cookie })).body.accounts[0];
+  for (let index = 0; index < 3; index += 1) {
+    const balanceAdjustment = await request(`/api/admin/accounts/${crashPlayer.id}/chips`, {
+      cookie: adminLogin.cookie,
+      method: 'POST',
+      body: JSON.stringify({ delta: 1_000_000_000, reason: 'High-balance cashout test' })
+    });
+    assert.equal(balanceAdjustment.response.status, 200, balanceAdjustment.body.error);
+  }
+
   const [firstBetRequest, secondBetRequest] = await Promise.all([
     request('/api/crash/bets', {
       cookie: playerCookie,
@@ -173,7 +199,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   const placed = firstBetRequest.body.duplicate ? secondBetRequest : firstBetRequest;
   const duplicateBet = firstBetRequest.body.duplicate ? firstBetRequest : secondBetRequest;
   assert.equal(placed.response.status, 200, placed.body.error);
-  assert.equal(placed.body.balance, 900);
+  assert.equal(placed.body.balance, 3_000_000_900);
   assert.equal(duplicateBet.response.status, 200, duplicateBet.body.error);
   assert.equal(duplicateBet.body.duplicate, true);
   assert.equal(duplicateBet.body.bet.id, placed.body.bet.id);
@@ -184,17 +210,12 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   });
   assert.equal(changedDuplicate.response.status, 409);
 
-  const crashPlayer = (await request('/api/admin/accounts?search=crash-player', { cookie: adminLogin.cookie })).body.accounts[0];
-  for (let index = 0; index < 3; index += 1) {
-    const balanceAdjustment = await request(`/api/admin/accounts/${crashPlayer.id}/chips`, {
-      cookie: adminLogin.cookie,
-      method: 'POST',
-      body: JSON.stringify({ delta: 1_000_000_000, reason: 'High-balance cashout test' })
-    });
-    assert.equal(balanceAdjustment.response.status, 200, balanceAdjustment.body.error);
-  }
-
-  await waitForState(playerCookie, (state) => state.round.status === 'running');
+  const runningState = await waitForState(playerCookie, (state) => state.round.status === 'running');
+  const refreshedDuringFlight = await request('/api/crash/state', { cookie: playerCookie });
+  assert.equal(refreshedDuringFlight.response.status, 200, refreshedDuringFlight.body.error);
+  assert.equal(refreshedDuringFlight.body.round.id, runningState.round.id);
+  assert.equal(refreshedDuringFlight.body.round.status, 'running');
+  assert.ok(refreshedDuringFlight.body.round.multiplier <= 2);
   const withdrawn = await request(`/api/crash/bets/${placed.body.bet.id}/cashout`, {
     cookie: playerCookie,
     method: 'POST'
@@ -240,11 +261,14 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
     state.round.id === losingBet.body.round.id && state.round.status === 'crashed'
   );
   assert.equal(crashed.round.crashMultiplier, 2);
+  assert.equal(crashed.round.multiplier, crashed.round.crashMultiplier);
+  assert.equal(crashed.ownBet.status, 'lost');
   const lateCashout = await request(`/api/crash/bets/${losingBet.body.bet.id}/cashout`, {
     cookie: observerCookie,
     method: 'POST'
   });
   assert.equal(lateCashout.response.status, 409);
+  assert.match(lateCashout.body.error, /ta mise est perdue/i);
 
   const historyBeforeRestart = await request('/api/history', { cookie: observerCookie });
   assert.equal(historyBeforeRestart.response.status, 200);

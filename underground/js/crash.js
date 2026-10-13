@@ -37,6 +37,15 @@ const crashModule = (() => {
       });
     });
     document.getElementById('crashStake')?.addEventListener('input', renderControls);
+    document.querySelectorAll('[data-crash-adjust]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (state.ownBet?.status === 'active' || state.requestPending) return;
+        const input = document.getElementById('crashStake');
+        const limits = window.casinoGameSettings?.crash || { minBet: 1, maxBet: 1000000 };
+        input.value = Math.max(limits.minBet, Math.min(limits.maxBet, state.balance, Math.floor(Number(input.value || limits.minBet) * Number(button.dataset.crashAdjust))));
+        renderControls();
+      });
+    });
     document.addEventListener('visibilitychange', updateAnimation);
 
     if (window.io) {
@@ -73,12 +82,19 @@ const crashModule = (() => {
 
   function updateState(payload) {
     if (!Object.prototype.hasOwnProperty.call(payload, 'round')) return;
+    const incomingRound = payload.round;
+    if (state.round && incomingRound && state.round.id === incomingRound.id) {
+      if (Number(incomingRound.serverNow) < Number(state.round.serverNow)) return;
+      if (getRoundStatus(state.round) === 'crashed' && incomingRound.status !== 'crashed') return;
+    }
     if (state.ownBet && state.ownBet.status !== 'active' &&
         (!payload.ownBet || payload.ownBet.id !== state.ownBet.id)) {
       state.lastOutcome = { ...state.ownBet, roundId: state.round?.id };
     }
-    state.round = payload.round || null;
-    state.ownBet = payload.ownBet || null;
+    state.round = incomingRound || null;
+    const confirmedCashout = state.ownBet?.status === 'cashed_out' &&
+      state.ownBet.id === payload.ownBet?.id;
+    state.ownBet = confirmedCashout ? state.ownBet : payload.ownBet || null;
     state.bets = payload.bets || [];
     state.history = payload.history || [];
     state.serverOffset = Number(payload.round?.serverNow || Date.now()) - Date.now();
@@ -102,14 +118,42 @@ const crashModule = (() => {
   }
 
   function currentMultiplier(now = Date.now()) {
-    if (!state.round || state.round.status !== 'running') {
-      return Number(state.round?.multiplier || 1);
+    if (state.ownBet?.status === 'cashed_out') return Number(state.ownBet.cashoutMultiplier);
+    if (!state.round) return 1;
+    const status = getRoundStatus(state.round, now);
+    if (status === 'crashed') {
+      return Number(state.round.crashMultiplier || state.round.multiplier || 1);
     }
-    const elapsed = Math.max(0, now + state.serverOffset - Number(state.round.startedAt));
-    return Math.floor(Math.exp(elapsed / 12000) * 100) / 100;
+    return Number(state.round.multiplier || 1);
+  }
+
+  function getRoundStatus(round, now = Date.now()) {
+    if (!round) return null;
+    const serverNow = now + state.serverOffset;
+    if (round.status === 'crashed' || (Number(round.crashAt) > 0 && serverNow >= Number(round.crashAt))) {
+      return 'crashed';
+    }
+    if (round.status === 'betting' && serverNow >= Number(round.startedAt)) return 'running';
+    return round.status;
+  }
+
+  function synchronizeRoundDeadline() {
+    if (state.ownBet?.status === 'cashed_out') return;
+    if (!state.round || state.round.status === 'crashed' || getRoundStatus(state.round) !== 'crashed') return;
+    state.round = {
+      ...state.round,
+      status: 'crashed',
+      crashedAt: state.round.crashedAt || state.round.crashAt
+    };
+    if (state.ownBet?.status === 'active') {
+      state.ownBet = { ...state.ownBet, status: 'lost' };
+      state.bets = state.bets.map((bet) => ({ ...bet, status: 'lost' }));
+    }
+    refreshState();
   }
 
   function render() {
+    synchronizeRoundDeadline();
     renderRound();
     renderControls();
     renderBets();
@@ -123,6 +167,16 @@ const crashModule = (() => {
     const phaseLabel = document.getElementById('crashPhaseLabel');
     const message = document.getElementById('crashStatusMessage');
     const stage = document.getElementById('crashSky');
+    const cashedOut = state.ownBet?.status === 'cashed_out';
+    stage.classList.toggle('is-cashed-out', cashedOut);
+    if (cashedOut) {
+      label.textContent = `Partie ${round?.id.slice(0, 8) || ''}`;
+      phaseLabel.textContent = 'Gains retirés';
+      document.getElementById('crashMultiplier').textContent = `${currentMultiplier().toFixed(2)}x`;
+      message.textContent = `Vol terminé : ${formatChips(state.ownBet.payout)} jetons récupérés. Prêt pour le prochain décollage ?`;
+      stage.classList.remove('is-flying', 'is-crashed');
+      return;
+    }
     if (!round) {
       label.textContent = 'Prêt à jouer';
       phaseLabel.textContent = 'Au sol';
@@ -131,24 +185,31 @@ const crashModule = (() => {
       stage.classList.remove('is-flying', 'is-crashed');
       return;
     }
-    const multiplier = round.status === 'running' ? currentMultiplier() : Number(round.multiplier || 1);
+    const status = getRoundStatus(round);
+    const multiplier = currentMultiplier();
     document.getElementById('crashMultiplier').textContent = `${multiplier.toFixed(2)}x`;
     label.textContent = `Partie ${round.id.slice(0, 8)}`;
-    stage.classList.toggle('is-flying', round.status === 'running');
-    stage.classList.toggle('is-crashed', round.status === 'crashed');
+    stage.classList.toggle('is-flying', status === 'running');
+    stage.classList.toggle('is-crashed', status === 'crashed');
+    if (status === 'betting') {
+      document.getElementById('crashFlightPath').setAttribute('d', 'M 55 428');
+      document.getElementById('crashAircraft').setAttribute('transform', 'translate(15 413) rotate(-18)');
+    }
 
-    if (round.status === 'betting') {
+    if (status === 'betting') {
       const seconds = Math.max(0, Math.ceil((Number(round.bettingEndsAt) - (Date.now() + state.serverOffset)) / 1000));
       phaseLabel.textContent = 'Mise acceptée';
       message.textContent = `Décollage dans ${seconds} seconde${seconds === 1 ? '' : 's'}.`;
-    } else if (round.status === 'running') {
+    } else if (status === 'running') {
       phaseLabel.textContent = 'En vol';
       message.textContent = state.ownBet?.status === 'active'
         ? 'Retire tes gains avant le crash.'
         : 'Le vol continue jusqu’au crash.';
     } else {
       phaseLabel.textContent = 'Vol terminé';
-      message.textContent = `Crash à ${Number(round.crashMultiplier || 1).toFixed(2)}x. Lance une nouvelle partie quand tu veux.`;
+      message.textContent = state.ownBet?.status === 'lost'
+        ? `Crash à ${Number(round.crashMultiplier || round.multiplier || 1).toFixed(2)}x. Ta mise est perdue.`
+        : `Crash à ${Number(round.crashMultiplier || round.multiplier || 1).toFixed(2)}x. Lance une nouvelle partie quand tu veux.`;
     }
   }
 
@@ -160,9 +221,12 @@ const crashModule = (() => {
     const limits = window.casinoGameSettings?.crash || { minBet: 1, maxBet: 1_000_000 };
     const validStake = Number.isSafeInteger(stake) && stake >= limits.minBet && stake <= limits.maxBet;
     const ownBet = state.ownBet;
+    input.disabled = ownBet?.status === 'active' || state.requestPending;
+    document.querySelectorAll('[data-crash-stake], [data-crash-adjust]').forEach((control) => { control.disabled = input.disabled; });
+    const roundStatus = getRoundStatus(state.round);
     const canPlace = ownBet?.status !== 'active' && validStake &&
       stake <= state.balance && !state.requestPending;
-    const canCashout = state.round?.status === 'running' && ownBet?.status === 'active' &&
+    const canCashout = roundStatus === 'running' && ownBet?.status === 'active' &&
       !state.requestPending;
 
     if (ownBet?.status === 'active') {
@@ -175,15 +239,19 @@ const crashModule = (() => {
       button.disabled = !canPlace;
     }
 
-    const estimate = validStake ? Math.floor(stake * currentMultiplier()) : 0;
+    const estimate = ownBet?.status === 'cashed_out' ? ownBet.payout : validStake ? Math.floor((ownBet?.status === 'active' ? ownBet.stake : stake) * currentMultiplier()) : 0;
     potential.textContent = `${formatChips(estimate)} jetons`;
     document.getElementById('crashBalance').textContent = formatChips(state.balance);
+    if (!state.round && !state.requestPending) {
+      setFeedback(validStake && stake <= state.balance ? 'Prêt au décollage. Lance ta partie quand tu veux.' : 'Choisis une mise valide adaptée à ton solde.', false);
+    }
+    if (state.requestPending) button.textContent = 'Traitement en cours…';
     if (ownBet?.status === 'cashed_out') {
       setFeedback(`Retrait réussi à ${Number(ownBet.cashoutMultiplier).toFixed(2)}x : ${formatChips(ownBet.payout)} jetons crédités.`, false);
     } else if (ownBet?.status === 'lost') {
       setFeedback(`Crash : ta mise de ${formatChips(ownBet.stake)} jetons est perdue.`, true);
     } else if (ownBet?.status === 'active') {
-      setFeedback(state.round.status === 'running' ? 'Ta partie est en jeu. Tu peux retirer à tout moment.' : 'Mise acceptée. Décollage imminent.', false);
+      setFeedback(roundStatus === 'running' ? 'Ta partie est en jeu. Tu peux retirer à tout moment.' : 'Mise acceptée. Décollage imminent.', false);
     }
   }
 
@@ -239,7 +307,7 @@ const crashModule = (() => {
   async function submitAction() {
     if (state.requestPending) return;
     const bet = state.ownBet;
-    if (bet?.status === 'active' && state.round?.status === 'running') {
+    if (bet?.status === 'active' && getRoundStatus(state.round) === 'running') {
       await cashout(bet.id);
       return;
     }
@@ -287,6 +355,7 @@ const crashModule = (() => {
       if (!response.ok) throw new Error(payload.error || 'Le retrait a été refusé.');
       state.balance = Number(payload.balance);
       state.ownBet = payload.bet;
+      render();
       syncBalance(state.balance);
       setFeedback(
         `${payload.duplicate ? 'Retrait déjà enregistré' : 'Retrait réussi'} à ${Number(payload.bet.cashoutMultiplier).toFixed(2)}x : ${formatChips(payload.bet.payout)} jetons.`,
@@ -305,12 +374,18 @@ const crashModule = (() => {
 
   function animate() {
     state.animationFrame = null;
-    if (!state.active || document.hidden || !state.round) return;
+    if (state.ownBet?.status === 'cashed_out') return;
+    synchronizeRoundDeadline();
+    if (!state.active || document.hidden || !state.round || !['betting', 'running'].includes(getRoundStatus(state.round))) return;
+    if (getRoundStatus(state.round) === 'betting') {
+      renderRound();
+      renderControls();
+      state.animationFrame = requestAnimationFrame(animate);
+      return;
+    }
     const round = state.round;
-    const elapsed = round.status === 'running'
-      ? Math.max(0, Date.now() + state.serverOffset - Number(round.startedAt))
-      : 0;
-    const multiplier = round.status === 'running' ? currentMultiplier() : Number(round.multiplier || 1);
+    const elapsed = Math.max(0, Date.now() + state.serverOffset - Number(round.startedAt));
+    const multiplier = currentMultiplier();
     const graphProgress = Math.min(1, elapsed / 18000);
     const x = 55 + graphProgress * 875;
     const y = Math.max(68, 428 - Math.log(multiplier) * 115);
@@ -320,7 +395,7 @@ const crashModule = (() => {
     aircraft.setAttribute('transform', `translate(${x - 40} ${y - 15}) rotate(-18)`);
     document.getElementById('crashMultiplier').textContent = `${multiplier.toFixed(2)}x`;
     document.getElementById('crashPotential').textContent = `${formatChips(Math.floor(Number(document.getElementById('crashStake').value || 0) * multiplier))} jetons`;
-    if (state.ownBet?.status === 'active' && round.status === 'running' && !state.requestPending) {
+    if (state.ownBet?.status === 'active' && getRoundStatus(round) === 'running' && !state.requestPending) {
       const button = document.getElementById('crashBetButton');
       button.textContent = `Retirer ${formatChips(Math.floor(state.ownBet.stake * multiplier))}`;
     }
@@ -328,7 +403,8 @@ const crashModule = (() => {
   }
 
   function updateAnimation() {
-    const shouldAnimate = state.active && !document.hidden && state.round?.status === 'running';
+    synchronizeRoundDeadline();
+    const shouldAnimate = state.active && !document.hidden && state.ownBet?.status !== 'cashed_out' && ['betting', 'running'].includes(getRoundStatus(state.round));
     if (!shouldAnimate && state.animationFrame !== null) {
       cancelAnimationFrame(state.animationFrame);
       state.animationFrame = null;

@@ -124,6 +124,9 @@ function updateTopbar() {
 
 function setAvatarContent(container, emoji, image) {
   container.replaceChildren();
+  const design = getPlayer().design || {};
+  container.style.setProperty("--avatar-fit", design.fit || "cover");
+  container.style.setProperty("--avatar-position", `${design.position ?? 50}%`);
   if (image) {
     const photo = document.createElement("img");
     photo.src = image;
@@ -187,7 +190,17 @@ async function openPlayerProfile(playerId) {
       stat.append(caption, result);
       stats.append(stat);
     }
-    content.replaceChildren(avatar, name, stats);
+    const design = JSON.parse(profile.profile_design || '{}');
+    const banner = document.createElement('div');
+    banner.className = 'profile-banner';
+    content.dataset.style = design.style || 'aurora';
+    content.style.setProperty('--profile-accent', design.accent || '#6ee7c7');
+    if (design.banner) banner.style.backgroundImage = `url("${design.banner}")`;
+    avatar.style.setProperty('--avatar-fit', design.fit || 'cover');
+    avatar.style.setProperty('--avatar-position', `${design.position ?? 50}%`);
+    const bio = document.createElement('p');
+    bio.textContent = design.bio || '';
+    content.replaceChildren(banner, avatar, name, bio, stats);
   } catch (error) {
     content.textContent = error.message || "Profil indisponible.";
   }
@@ -390,12 +403,14 @@ function renderProfileView() {
   const avatarChoices = document.getElementById("avatarChoices");
   const historyFilter = document.getElementById("historyFilter");
 
+  initializeProfileDesign(player);
   nameInput.value = player.name;
   nameInput.readOnly = true;
   soundToggle.checked = !!player.soundEnabled;
   const profileImage = document.getElementById("profileAvatarImage");
   profileImage.hidden = !player.avatarImage;
   profileImage.src = player.avatarImage || "";
+  document.getElementById("profileAvatarFallback").hidden = !!player.avatarImage;
   document.getElementById("profileAvatarFallback").textContent = player.avatar || "🎲";
   document.getElementById("removeAvatarImageBtn").hidden = !player.avatarImage;
 
@@ -496,3 +511,61 @@ window.savePlayer = savePlayer;
 window.showToast = showToast;
 window.updateTopbar = updateTopbar;
 window.renderHomeView = renderHomeView;
+
+function initializeProfileDesign(player) {
+  const saved = { accent: '#6ee7c7', style: 'aurora', banner: null, fit: 'cover', position: 50, bio: '', ...player.design };
+  let banner = saved.banner;
+  const form = document.getElementById('profileDesignForm');
+  const field = (name) => document.getElementById(`profile${name}`);
+  for (const key of ['Accent', 'Style', 'Fit', 'Position', 'Bio']) field(key).value = saved[key.toLowerCase()];
+  const read = () => ({ accent: field('Accent').value, style: field('Style').value, fit: field('Fit').value, position: Number(field('Position').value), bio: field('Bio').value, banner });
+  const preview = () => {
+    const design = read();
+    const hero = document.getElementById('profileHero');
+    hero.dataset.style = design.style;
+    hero.style.setProperty('--profile-accent', design.accent);
+    document.getElementById('profileBanner').style.backgroundImage = banner ? `url("${banner}")` : '';
+    document.getElementById('profileHeroName').textContent = player.name;
+    document.getElementById('profileHeroBio').textContent = design.bio || 'Écris ton histoire. Affirme ton style.';
+    const avatar = document.getElementById('profileHeroAvatar');
+    setAvatarContent(avatar, player.avatar, player.avatarImage);
+    for (const frame of [avatar, document.getElementById('profileAvatarPreview')]) {
+      frame.style.setProperty('--avatar-fit', design.fit);
+      frame.style.setProperty('--avatar-position', `${design.position}%`);
+    }
+  };
+  form.oninput = preview;
+  field('BannerInput').onchange = async (event) => {
+    const file = event.target.files[0];
+    const status = field('DesignStatus');
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 1000000) {
+      status.textContent = 'Choisis une image PNG, JPEG ou WebP de 1 Mo maximum.';
+      event.target.value = ''; return;
+    }
+    try {
+      banner = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
+      status.textContent = 'Aperçu mis à jour. Enregistre pour conserver ta bannière.';
+      preview();
+    } catch { status.textContent = 'Lecture de la bannière impossible.'; }
+    event.target.value = '';
+  };
+  document.getElementById('removeProfileBanner').onclick = () => { banner = null; preview(); };
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const button = form.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/profile/design', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(read()) });
+      if (response.status === 404) {
+        throw new Error('Le serveur ne dispose pas de la personnalisation du profil. Redémarre le serveur avec la dernière version ; avec Docker, reconstruis l’image avec docker compose up -d --build. Ta bannière reste dans l’aperçu pour réessayer.');
+      }
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Enregistrement impossible.');
+      const current = getPlayer(); current.design = payload.design; savePlayer(current);
+      updateTopbar(); field('DesignStatus').textContent = 'Ton style est enregistré.';
+    } catch (error) { field('DesignStatus').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  preview();
+}

@@ -363,13 +363,15 @@
             <div class="panel crash-main-panel">
               <div class="section-heading crash-heading">
                 <div>
-                  <p class="eyebrow">UNDERGROUND FLIGHT DECK</p>
-                  <h2>Jet Crash</h2>
+                  <p class="eyebrow">UNDERGROUND / FLIGHT CLUB</p>
+                  <h2>Crash <span class="crash-live-tag">LIVE</span></h2>
                 </div>
                 <span id="crashRoundLabel" class="status-box subtle crash-round-label">Connexion à la tour...</span>
               </div>
 
               <div class="crash-sky" id="crashSky">
+                <div class="crash-stage-caption">FLIGHT MONITOR <span>● SERVEUR EN DIRECT</span></div>
+                <div class="crash-axis-labels"><span>10×</span><span>5×</span><span>2×</span><span>1×</span></div>
                 <div class="crash-sun"></div>
                 <div class="crash-cloud crash-cloud-one"></div>
                 <div class="crash-cloud crash-cloud-two"></div>
@@ -379,8 +381,12 @@
                 <svg class="crash-flight-svg" viewBox="0 0 1000 500" role="img" aria-label="Trajectoire du vol">
                   <path id="crashFlightPath" class="crash-flight-path" d="M 50 430" />
                   <g id="crashAircraft" class="crash-aircraft" transform="translate(50 430) rotate(-18)">
-                    <path d="M4 20 52 8 74 1 82 4 72 13 56 18 48 29 40 29 43 19 18 25 10 33 5 32 8 24 0 24Z" />
-                    <path class="crash-aircraft-window" d="m55 11 12-4-5 6-9 3Z" />
+                    <path class="crash-rocket-flame" d="M 17 10 Q -12 15 -24 20 Q -10 25 17 30 L 24 20 Z" />
+                    <path class="crash-rocket-fin" d="M 30 10 L 15 0 L 14 13 M 30 30 L 15 40 L 14 27" />
+                    <path class="crash-rocket-body" d="M 16 12 Q 48 2 76 20 Q 48 38 16 28 Z" />
+                    <path class="crash-rocket-nose" d="M 57 10 Q 70 14 76 20 Q 70 26 57 30 Z" />
+                    <circle class="crash-rocket-window" cx="44" cy="20" r="7" />
+                    <path class="crash-rocket-engine" d="M 16 12 L 22 13 L 22 27 L 16 28 Z" />
                   </g>
                 </svg>
                 <div class="crash-center-readout" aria-live="polite">
@@ -404,6 +410,8 @@
                   </div>
                 </div>
                 <div class="crash-quick-stakes" aria-label="Montants rapides">
+                  <button type="button" data-crash-adjust="0.5">½ mise</button>
+                  <button type="button" data-crash-adjust="2">×2 mise</button>
                   <button type="button" data-crash-stake="25">25</button>
                   <button type="button" data-crash-stake="50">50</button>
                   <button type="button" data-crash-stake="100">100</button>
@@ -411,7 +419,7 @@
                 </div>
                 <div class="crash-action-row">
                   <div class="crash-potential">
-                    <span>Retour estimé</span>
+                    <span>Retour brut · mise incluse</span>
                     <strong id="crashPotential">25 jetons</strong>
                   </div>
                   <button id="crashBetButton" class="gold-button" type="button" disabled>Lancer ma partie</button>
@@ -421,6 +429,7 @@
             </div>
 
             <aside class="crash-sidebar">
+              <section class="panel crash-side-panel crash-guide"><p class="eyebrow">LE PRINCIPE</p><h3>Prends de la hauteur.</h3><p>Choisis ta mise, lance ton vol et retire tes jetons avant le crash.</p><ol><li>Mise avant le décollage.</li><li>Le multiplicateur augmente en vol.</li><li>Retire à temps : mise × multiplicateur.</li></ol><small>Si le vol s’arrête avant ton retrait, tu perds ta mise.</small></section>
               <section class="panel crash-side-panel">
                 <div class="section-heading compact"><h3>Ta mise</h3></div>
                 <div id="crashBetsList" class="crash-bets-list">
@@ -532,6 +541,10 @@
         </section>
 
         <section id="profileView" class="view" aria-label="Profil et réglages">
+          <div id="profileHero" class="profile-hero" data-style="aurora">
+            <div id="profileBanner" class="profile-banner"></div>
+            <div class="profile-hero-identity"><div id="profileHeroAvatar" class="player-profile-avatar"></div><div><p class="eyebrow">TON ESPACE UNDERGROUND</p><h2 id="profileHeroName"></h2><p id="profileHeroBio"></p></div></div>
+          </div>
           <div class="panel profile-layout">
             <div class="profile-block">
               <div class="section-heading">
@@ -558,6 +571,20 @@
                 <div id="avatarChoices" class="avatar-grid"></div>
               </div>
 
+              <form id="profileDesignForm" class="profile-design-form">
+                <h3>Un profil à ton image</h3>
+                <label class="input-group"><span>Bio</span><textarea id="profileBio" maxlength="160" rows="2" placeholder="Quelques mots sur toi…"></textarea></label>
+                <div class="profile-design-grid">
+                  <label class="input-group"><span>Couleur signature</span><input id="profileAccent" type="color" value="#6ee7c7" /></label>
+                  <label class="input-group"><span>Ambiance</span><select id="profileStyle"><option value="aurora">Aurore</option><option value="midnight">Minuit</option><option value="sunset">Coucher de soleil</option></select></label>
+                  <label class="input-group"><span>Cadrage de la photo</span><select id="profileFit"><option value="cover">Remplir le cadre</option><option value="contain">Photo entière</option></select></label>
+                  <label class="input-group"><span>Position verticale</span><input id="profilePosition" type="range" min="0" max="100" value="50" /></label>
+                </div>
+                <label class="input-group"><span>Bannière personnelle · 1 Mo maximum</span><input id="profileBannerInput" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+                <button id="removeProfileBanner" class="secondary-button" type="button">Retirer la bannière</button>
+                <button class="primary-button" type="submit">Enregistrer mon style</button>
+                <p id="profileDesignStatus" role="status"></p>
+              </form>
               <label class="toggle-row">
                 <span>Son</span>
                 <input id="soundToggle" type="checkbox" />
