@@ -6,7 +6,7 @@
     <title>UNDERGROUND</title>
     <meta
       name="description"
-      content="Casino clandestin local avec roulette, blackjack et machine à sous."
+      content="Casino clandestin avec roulette, blackjack, poker, machine à sous et Crash."
     />
     <link rel="stylesheet" href="css/style.css" />
   </head>
@@ -46,6 +46,7 @@
         <button class="nav-item" data-view="blackjack" type="button">Blackjack</button>
         <button class="nav-item" data-view="poker" type="button">Poker</button>
         <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
+        <button class="nav-item" data-view="crash" type="button">Crash</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
@@ -357,6 +358,86 @@
           </div>
         </section>
 
+        <section id="crashView" class="view" aria-label="Crash">
+          <div class="crash-layout">
+            <div class="panel crash-main-panel">
+              <div class="section-heading crash-heading">
+                <div>
+                  <p class="eyebrow">UNDERGROUND FLIGHT DECK</p>
+                  <h2>Jet Crash</h2>
+                </div>
+                <span id="crashRoundLabel" class="status-box subtle crash-round-label">Connexion à la tour...</span>
+              </div>
+
+              <div class="crash-sky" id="crashSky">
+                <div class="crash-sun"></div>
+                <div class="crash-cloud crash-cloud-one"></div>
+                <div class="crash-cloud crash-cloud-two"></div>
+                <div class="crash-city crash-city-far"></div>
+                <div class="crash-city crash-city-near"></div>
+                <div class="crash-runway"></div>
+                <svg class="crash-flight-svg" viewBox="0 0 1000 500" role="img" aria-label="Trajectoire du vol">
+                  <path id="crashFlightPath" class="crash-flight-path" d="M 50 430" />
+                  <g id="crashAircraft" class="crash-aircraft" transform="translate(50 430) rotate(-18)">
+                    <path d="M4 20 52 8 74 1 82 4 72 13 56 18 48 29 40 29 43 19 18 25 10 33 5 32 8 24 0 24Z" />
+                    <path class="crash-aircraft-window" d="m55 11 12-4-5 6-9 3Z" />
+                  </g>
+                </svg>
+                <div class="crash-center-readout" aria-live="polite">
+                  <span id="crashPhaseLabel">Prochaine manche</span>
+                  <strong id="crashMultiplier">1.00x</strong>
+                  <span id="crashStatusMessage">Prépare ta mise avant le décollage.</span>
+                </div>
+                <div class="crash-scanline"></div>
+              </div>
+
+              <div class="crash-controls">
+                <div class="crash-balance-line">
+                  <span>Ton solde</span>
+                  <strong><span id="crashBalance">0</span> jetons</strong>
+                </div>
+                <div class="crash-stake-row">
+                  <label for="crashStake">Mise de la manche</label>
+                  <div class="crash-stake-input">
+                    <input id="crashStake" type="number" min="1" max="1000000" step="1" value="25" inputmode="numeric" />
+                    <span>jetons</span>
+                  </div>
+                </div>
+                <div class="crash-quick-stakes" aria-label="Montants rapides">
+                  <button type="button" data-crash-stake="25">25</button>
+                  <button type="button" data-crash-stake="50">50</button>
+                  <button type="button" data-crash-stake="100">100</button>
+                  <button type="button" data-crash-stake="250">250</button>
+                </div>
+                <div class="crash-action-row">
+                  <div class="crash-potential">
+                    <span>Retour estimé</span>
+                    <strong id="crashPotential">25 jetons</strong>
+                  </div>
+                  <button id="crashBetButton" class="gold-button" type="button" disabled>Placer la mise</button>
+                </div>
+                <p id="crashFeedback" class="crash-feedback" role="status" aria-live="polite">Connexion au serveur de jeu...</p>
+              </div>
+            </div>
+
+            <aside class="crash-sidebar">
+              <section class="panel crash-side-panel">
+                <div class="section-heading compact"><h3>Mises de la manche</h3></div>
+                <div id="crashBetsList" class="crash-bets-list">
+                  <div class="status-box subtle">En attente des mises réelles des joueurs.</div>
+                </div>
+              </section>
+              <section class="panel crash-side-panel">
+                <div class="section-heading compact"><h3>Derniers crashs</h3></div>
+                <div id="crashHistory" class="crash-history">
+                  <div class="status-box subtle">L’historique sera chargé depuis le serveur.</div>
+                </div>
+              </section>
+              <p class="crash-disclaimer">Jeu de démonstration à jetons virtuels uniquement. Les résultats ne sont pas présentés comme provably fair.</p>
+            </aside>
+          </div>
+        </section>
+
         <section id="leaderboardView" class="view" aria-label="Classement">
           <div class="panel">
             <div class="section-heading">
@@ -457,6 +538,7 @@
                   <option value="roulette">Roulette</option>
                   <option value="blackjack">Blackjack</option>
                   <option value="slots">Machine à sous</option>
+                  <option value="crash">Crash</option>
                 </select>
               </label>
 
@@ -469,9 +551,11 @@
 
     <div id="toast" class="toast" aria-live="polite"></div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/roulette.js"></script>
+    <script src="js/crash.js"></script>
     <script src="js/blackjack.js"></script>
     <script src="js/poker.js"></script>
     <script src="js/slots.js"></script>

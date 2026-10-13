@@ -23,6 +23,7 @@ async function initializeApp() {
   blackjackModule.initialize();
   pokerModule.initialize();
   slotsModule.initialize();
+  crashModule.initialize();
   adminModule.initialize(accountUser.isAdmin, accountUser.supportMode, accountUser.username);
 }
 
@@ -57,6 +58,7 @@ function showView(viewName) {
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === viewName);
   });
+  crashModule.setActive(viewName === "crash");
 }
 
 function updateTopbar() {
@@ -98,6 +100,13 @@ function renderHomeView() {
       description: "Trois rouleaux. Une combinaison gagnante.",
       action: "LANCER LES ROULEAUX",
       view: "slots"
+    },
+    {
+      name: "Jet Crash",
+      icon: "✈",
+      description: "Retire tes gains avant que le vol ne s’arrête.",
+      action: "PRENDRE SON ENVOL",
+      view: "crash"
     }
   ];
 

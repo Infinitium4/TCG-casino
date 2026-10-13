@@ -2217,6 +2217,480 @@ select {
   }
 }
 
+.crash-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 310px);
+  align-items: start;
+  gap: 16px;
+}
+
+.crash-main-panel,
+.crash-side-panel {
+  min-width: 0;
+  padding: 18px;
+}
+
+.crash-heading {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.crash-heading h2 {
+  margin: 0;
+  color: var(--gold-soft);
+}
+
+.crash-heading .eyebrow {
+  margin: 0 0 4px;
+}
+
+.crash-round-label {
+  overflow-wrap: anywhere;
+}
+
+.crash-sky {
+  position: relative;
+  min-height: 420px;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(232, 169, 190, 0.32);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(20, 17, 37, 0.08) 0%, rgba(39, 24, 56, 0.12) 48%, rgba(17, 14, 24, 0.84) 100%),
+    linear-gradient(180deg, #39264d 0%, #96506c 42%, #e17d75 69%, #58344a 100%);
+}
+
+.crash-sun {
+  position: absolute;
+  top: 13%;
+  right: 15%;
+  width: clamp(74px, 12vw, 128px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ffd69b, #f5a17d);
+  box-shadow: 0 0 56px rgba(255, 178, 151, 0.38);
+  image-rendering: pixelated;
+}
+
+.crash-cloud {
+  position: absolute;
+  z-index: 1;
+  width: 145px;
+  height: 24px;
+  opacity: 0.4;
+  background:
+    linear-gradient(#d7a6b0, #d7a6b0) 24px 0 / 48px 13px no-repeat,
+    linear-gradient(#d7a6b0, #d7a6b0) 10px 11px / 100px 13px no-repeat,
+    linear-gradient(#d7a6b0, #d7a6b0) 0 18px / 130px 6px no-repeat;
+  image-rendering: pixelated;
+  animation: crash-cloud-drift 28s linear infinite;
+}
+
+.crash-cloud-one {
+  top: 26%;
+  left: 3%;
+}
+
+.crash-cloud-two {
+  top: 44%;
+  left: 57%;
+  transform: scale(0.72);
+  animation-delay: -13s;
+}
+
+.crash-city {
+  position: absolute;
+  right: 0;
+  bottom: 19%;
+  left: 0;
+  height: 100px;
+  background-repeat: repeat-x;
+  image-rendering: pixelated;
+}
+
+.crash-city-far {
+  opacity: 0.53;
+  background:
+    linear-gradient(#603e5c, #603e5c) 0 42px / 100% 58px,
+    linear-gradient(#694262, #694262) 7% 19px / 8% 81px,
+    linear-gradient(#553655, #553655) 21% 35px / 13% 65px,
+    linear-gradient(#704665, #704665) 40% 12px / 10% 88px,
+    linear-gradient(#5b3b5d, #5b3b5d) 61% 27px / 16% 73px,
+    linear-gradient(#704665, #704665) 83% 7px / 9% 93px;
+}
+
+.crash-city-near {
+  bottom: 15%;
+  height: 70px;
+  opacity: 0.82;
+  background:
+    linear-gradient(#261f32, #261f32) 0 45px / 100% 25px,
+    linear-gradient(#30243a, #30243a) 14% 17px / 16% 53px,
+    linear-gradient(#39273e, #39273e) 46% 28px / 20% 42px,
+    linear-gradient(#2b2237, #2b2237) 76% 9px / 13% 61px;
+}
+
+.crash-runway {
+  position: absolute;
+  z-index: 1;
+  right: -10%;
+  bottom: -17%;
+  left: -10%;
+  height: 37%;
+  transform: perspective(150px) rotateX(18deg);
+  transform-origin: top;
+  border-top: 3px solid rgba(232, 221, 201, 0.55);
+  background:
+    linear-gradient(90deg, transparent 49.5%, rgba(232, 221, 201, 0.75) 49.5% 50.5%, transparent 50.5%) center 28px / 100% 3px no-repeat,
+    repeating-linear-gradient(90deg, transparent 0 12%, rgba(232, 221, 201, 0.45) 12% 13%, transparent 13% 25%),
+    linear-gradient(180deg, #332735, #17171c);
+}
+
+.crash-flight-svg {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.crash-flight-path {
+  fill: none;
+  stroke: rgba(255, 220, 167, 0.76);
+  stroke-width: 3;
+  stroke-dasharray: 8 8;
+  filter: drop-shadow(0 0 8px rgba(255, 211, 164, 0.6));
+}
+
+.crash-aircraft {
+  fill: #fff0d1;
+  filter: drop-shadow(0 0 8px rgba(255, 199, 146, 0.9));
+}
+
+.crash-aircraft-window {
+  fill: #6f4264;
+}
+
+.crash-center-readout {
+  position: absolute;
+  z-index: 4;
+  top: 41%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  width: min(82%, 360px);
+  padding: 12px 18px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(255, 223, 190, 0.15);
+  border-radius: 15px;
+  background: rgba(22, 16, 34, 0.62);
+  box-shadow: 0 12px 40px rgba(15, 10, 25, 0.18);
+  text-align: center;
+  backdrop-filter: blur(5px);
+}
+
+.crash-center-readout > span:first-child {
+  color: #ead8d1;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.crash-center-readout strong {
+  color: #a8f0ac;
+  font-size: clamp(2.7rem, 7vw, 5rem);
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 22px rgba(99, 249, 137, 0.42);
+}
+
+.crash-center-readout > span:last-child {
+  color: #f6e3d6;
+  font-size: 0.82rem;
+}
+
+.crash-scanline {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background: repeating-linear-gradient(0deg, transparent 0 4px, rgba(21, 12, 33, 0.55) 4px 5px);
+}
+
+.crash-sky.is-crashed {
+  animation: crash-stage-flash 450ms ease-out 1;
+}
+
+.crash-sky.is-crashed .crash-aircraft {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.crash-controls {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.crash-balance-line,
+.crash-action-row,
+.crash-bet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.crash-balance-line {
+  padding: 0 2px 8px;
+  border-bottom: 1px solid rgba(197, 161, 90, 0.2);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.crash-balance-line strong {
+  color: var(--gold-soft);
+}
+
+.crash-stake-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(150px, 230px);
+  align-items: center;
+  gap: 14px;
+  color: var(--gold-soft);
+}
+
+.crash-stake-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(197, 161, 90, 0.27);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.crash-stake-input input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.crash-stake-input span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.crash-quick-stakes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.crash-quick-stakes button {
+  min-height: 36px;
+  border: 1px solid rgba(197, 161, 90, 0.22);
+  border-radius: 8px;
+  background: rgba(197, 161, 90, 0.08);
+  color: var(--gold-soft);
+}
+
+.crash-quick-stakes button:hover {
+  border-color: var(--gold);
+  background: rgba(197, 161, 90, 0.17);
+}
+
+.crash-action-row {
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.crash-potential {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.crash-potential strong {
+  color: var(--success);
+  font-size: 1rem;
+}
+
+.crash-action-row button {
+  min-width: 190px;
+}
+
+.crash-action-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.crash-action-row .crash-cashout-button {
+  border-color: rgba(150, 213, 154, 0.65);
+  background: linear-gradient(135deg, #247651, #165339);
+  color: white;
+}
+
+.crash-feedback {
+  min-height: 1.25em;
+  margin: 0;
+  color: var(--success);
+  font-size: 0.82rem;
+}
+
+.crash-feedback.is-error {
+  color: var(--danger);
+}
+
+.crash-sidebar {
+  display: grid;
+  gap: 16px;
+}
+
+.crash-side-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.crash-side-panel h3 {
+  margin: 0;
+  color: var(--gold-soft);
+}
+
+.crash-bets-list {
+  display: grid;
+  gap: 8px;
+  max-height: 330px;
+  overflow: auto;
+}
+
+.crash-bet-row {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(197, 161, 90, 0.12);
+  font-size: 0.77rem;
+}
+
+.crash-bet-name {
+  max-width: 44%;
+  overflow: hidden;
+  color: var(--gold-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crash-bet-result {
+  color: var(--muted);
+  text-align: right;
+}
+
+.crash-bet-cashed_out {
+  color: var(--success);
+}
+
+.crash-bet-lost {
+  color: var(--danger);
+}
+
+.crash-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.crash-history-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.crash-history-low {
+  color: #e48e7e;
+  background: rgba(184, 64, 53, 0.1);
+}
+
+.crash-history-mid {
+  color: #d7bb7c;
+  background: rgba(197, 161, 90, 0.1);
+}
+
+.crash-history-high {
+  color: #a8e1ad;
+  background: rgba(29, 123, 83, 0.13);
+}
+
+.crash-disclaimer {
+  margin: 0;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 0.73rem;
+  line-height: 1.5;
+}
+
+@keyframes crash-cloud-drift {
+  from { translate: 0 0; }
+  to { translate: 160px 0; }
+}
+
+@keyframes crash-stage-flash {
+  0% { filter: brightness(1.6) saturate(0.6); }
+  100% { filter: brightness(1) saturate(1); }
+}
+
+@media (max-width: 900px) {
+  .crash-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .crash-sidebar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .crash-main-panel,
+  .crash-side-panel {
+    padding: 13px;
+  }
+
+  .crash-sky {
+    min-height: 340px;
+  }
+
+  .crash-center-readout {
+    top: 42%;
+    padding: 10px 12px;
+  }
+
+  .crash-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .crash-stake-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .crash-action-row {
+    align-items: stretch;
+  }
+
+  .crash-action-row button {
+    width: 100%;
+  }
+}
+
 @media (max-width: 900px) {
   .game-cards,
   .dashboard-grid,

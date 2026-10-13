@@ -25,6 +25,12 @@ Au démarrage, le serveur ajoute automatiquement les colonnes de rôle et de ban
 
 Un compte interne `casino-bank` (modifiable avec `BANK_USERNAME`) est provisionné automatiquement. Il n'a pas de mot de passe utilisable, ne peut pas se connecter ni jouer, et apparaît dans l'administration avec le solde de la banque ainsi que ses derniers règlements. Les pertes des joueurs aux jeux contre la maison augmentent ce solde; les gains le diminuent, sans plancher à zéro. Le journal conserve aussi les égalités. Le poker est joueur contre joueur et sans commission (« rake ») : ses mises ne constituent donc pas un revenu de la banque.
 
+## Jeu Crash
+
+Le jeu **Jet Crash** est disponible dans la navigation. Les manches, mises, crashs et retraits sont pilotés par le serveur et enregistrés dans SQLite; la mise est débitée une seule fois et le retrait est protégé contre les répétitions. Les résultats crédités sont aussi ajoutés à l'historique de compte et au journal de la banque. Les tables `crash_rounds` et `crash_bets` sont créées automatiquement au démarrage, y compris pour une base déjà utilisée : aucune migration manuelle n'est requise.
+
+Le navigateur n'envoie jamais de multiplicateur de retrait au serveur. Le jeu utilise des jetons virtuels uniquement et ne prétend pas fournir un système provably fair.
+
 Dans `.env` de production, définis un mot de passe long et unique pour le deuxième administrateur, par exemple :
 
 ```ini
