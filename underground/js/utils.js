@@ -29,12 +29,16 @@ function randomInt(min, max) {
 }
 
 function getRouletteColor(number) {
-  if (number === 0) return "green";
-  return number % 2 === 0 ? "black" : "red";
+  const value = String(number);
+  if (value === "00" || Number(value) === 0) return "green";
+  return [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36].includes(Number(value))
+    ? "red"
+    : "black";
 }
 
 function getRouletteColorName(number) {
-  return getRouletteColor(number) === "red" ? "Rouge" : "Noir";
+  const color = getRouletteColor(number);
+  return color === "green" ? "Vert" : color === "red" ? "Rouge" : "Noir";
 }
 
 function calculateHandValue(cards) {
