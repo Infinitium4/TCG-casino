@@ -1,257 +1,203 @@
 const blackjackModule = (() => {
   const state = {
-    deck: [],
-    dealerCards: [],
-    playerCards: [],
-    currentBet: 0,
-    roundActive: false,
-    playerTurn: false,
-    dealerRevealed: false
+    tables: [],
+    currentTableId: null,
+    poller: null
   };
 
+  function getCurrentUserId() {
+    return Number(accountUser?.id ?? getPlayer()?.id ?? 0);
+  }
+
+  function getCurrentTable() {
+    return state.tables.find((table) => String(table.id) === String(state.currentTableId)) || null;
+  }
+
   function initialize() {
-    document.getElementById("blackjackDealBtn").addEventListener("click", startRound);
-    document.getElementById("blackjackHitBtn").addEventListener("click", hitCard);
-    document.getElementById("blackjackStandBtn").addEventListener("click", stand);
-    document.getElementById("blackjackStake").addEventListener("input", updateBlackjackHud);
-    resetBoard();
+    document.getElementById('blackjackCreateTableBtn')?.addEventListener('click', createTable);
+    document.getElementById('blackjackHostStartBtn')?.addEventListener('click', startRound);
+    document.getElementById('blackjackLeaveTableBtn')?.addEventListener('click', leaveTable);
+
+    refreshTables();
+    if (state.poller) clearInterval(state.poller);
+    state.poller = setInterval(refreshTables, 2500);
   }
 
-  function updateBlackjackHud() {
-    const player = getPlayer();
-    document.getElementById("blackjackBalance").textContent = formatChips(player.chips);
-    document.getElementById("blackjackBet").textContent = formatChips(Number(document.getElementById("blackjackStake").value || 0));
-  }
+  async function refreshTables() {
+    const statusNode = document.getElementById('blackjackStatus');
+    const listNode = document.getElementById('blackjackTableList');
+    const roomNode = document.getElementById('blackjackWaitingRoom');
+    if (!statusNode || !listNode || !roomNode) return;
 
-  function resetBoard() {
-    state.deck = [];
-    state.dealerCards = [];
-    state.playerCards = [];
-    state.currentBet = 0;
-    state.roundActive = false;
-    state.playerTurn = false;
-    state.dealerRevealed = false;
-    document.getElementById("dealerCards").innerHTML = "";
-    document.getElementById("playerCards").innerHTML = "";
-    document.getElementById("dealerTotal").textContent = "0";
-    document.getElementById("playerTotal").textContent = "0";
-    document.getElementById("blackjackStatus").textContent = "Choisis une mise et commence une manche.";
-    document.getElementById("blackjackHitBtn").disabled = true;
-    document.getElementById("blackjackStandBtn").disabled = true;
-    updateBlackjackHud();
-  }
+    try {
+      const response = await fetch('/api/blackjack/tables');
+      if (!response.ok) throw new Error('Impossible de charger les tables.');
+      const payload = await response.json();
+      state.tables = payload.tables || [];
 
-  function startRound() {
-    const player = getPlayer();
-    const stake = Number(document.getElementById("blackjackStake").value);
-
-    if (!Number.isFinite(stake) || stake <= 0 || !Number.isInteger(stake)) {
-      showToast("La mise du blackjack doit être un entier positif.");
-      return;
-    }
-
-    if (stake > player.chips) {
-      showToast("Tu n'as pas assez de jetons pour cette mise.");
-      return;
-    }
-
-    if (state.roundActive) {
-      return;
-    }
-
-    player.chips -= stake;
-    savePlayer(player);
-    updateTopbar();
-    updateBlackjackHud();
-
-    state.currentBet = stake;
-    state.roundActive = true;
-    state.playerTurn = true;
-    state.dealerRevealed = false;
-    state.deck = shuffleDeck(buildDeck());
-    state.dealerCards = [drawCard(), drawCard()];
-    state.playerCards = [drawCard(), drawCard()];
-
-    document.getElementById("blackjackHitBtn").disabled = false;
-    document.getElementById("blackjackStandBtn").disabled = false;
-
-    renderHands();
-
-    if (checkInitialBlackjacks()) {
-      return;
-    }
-
-    document.getElementById("blackjackStatus").textContent = "Ton tour. Choisis de tirer ou de rester.";
-  }
-
-  function drawCard() {
-    return state.deck.pop();
-  }
-
-  function hitCard() {
-    if (!state.roundActive || !state.playerTurn) {
-      return;
-    }
-
-    state.playerCards.push(drawCard());
-    const playerTotal = calculateHandValue(state.playerCards).total;
-    renderHands();
-
-    if (playerTotal > 21) {
-      finishRound("loss", "Tu as dépassé 21. La main est perdue.");
-      return;
-    }
-
-    if (playerTotal === 21) {
-      stand();
-      return;
-    }
-
-    document.getElementById("blackjackStatus").textContent = "Tu as tiré une carte. Décide encore de rester ou de prendre une autre.";
-  }
-
-  function stand() {
-    if (!state.roundActive || !state.playerTurn) {
-      return;
-    }
-
-    state.playerTurn = false;
-    state.dealerRevealed = true;
-    const dealerTotal = calculateHandValue(state.dealerCards).total;
-
-    while (dealerTotal < 17) {
-      state.dealerCards.push(drawCard());
-      const nextTotal = calculateHandValue(state.dealerCards).total;
-      if (nextTotal > 21) {
-        break;
+      const userId = getCurrentUserId();
+      const joinedTable = state.tables.find((table) => table.players.some((player) => Number(player.id) === userId));
+      if (joinedTable) {
+        state.currentTableId = String(joinedTable.id);
+        if (joinedTable.status === 'in-progress') {
+          window.location.href = `/blackjack/game/${joinedTable.id}`;
+          return;
+        }
+      } else if (!state.tables.some((table) => String(table.id) === String(state.currentTableId))) {
+        state.currentTableId = null;
       }
+
+      renderTables();
+      renderWaitingRoom();
+      statusNode.textContent = state.tables.length
+        ? `${state.tables.length} table(s) ouverte(s). Jusqu’à ${state.tables[0].maxPlayers} joueurs par table.`
+        : 'Aucune table ouverte. Crée la première.';
+    } catch (error) {
+      statusNode.textContent = 'Le lobby blackjack est temporairement indisponible.';
+      console.error(error);
     }
-
-    renderHands();
-
-    const playerTotal = calculateHandValue(state.playerCards).total;
-    const newDealerTotal = calculateHandValue(state.dealerCards).total;
-
-    if (newDealerTotal > 21) {
-      finishRound("win", "Le croupier a dépassé 21. Tu gagnes.");
-      return;
-    }
-
-    if (playerTotal > newDealerTotal) {
-      finishRound("win", "Tu as le meilleur score. Victoire.");
-      return;
-    }
-
-    if (playerTotal < newDealerTotal) {
-      finishRound("loss", "Le croupier a le meilleur score. Défaite.");
-      return;
-    }
-
-    finishRound("push", "Égalité. La mise est rendue.");
   }
 
-  function checkInitialBlackjacks() {
-    const playerScore = calculateHandValue(state.playerCards).total;
-    const dealerScore = calculateHandValue(state.dealerCards).total;
+  function renderTables() {
+    const listNode = document.getElementById('blackjackTableList');
+    const roomNode = document.getElementById('blackjackWaitingRoom');
+    if (!listNode || !roomNode) return;
 
-    if (playerScore === 21 && dealerScore === 21) {
-      finishRound("push", "Les deux mains possèdent un blackjack naturel. Égalité.");
-      return true;
+    const currentTable = getCurrentTable();
+    const inRoom = !!state.currentTableId && currentTable?.status === 'waiting';
+    listNode.style.display = inRoom ? 'none' : 'block';
+    roomNode.style.display = inRoom ? 'block' : 'none';
+    if (inRoom) return;
+
+    if (!state.tables.length) {
+      listNode.innerHTML = '<div class="status-box subtle">Aucune table actuellement ouverte.</div>';
+      return;
     }
 
-    if (playerScore === 21) {
-      finishRound("blackjack", "Blackjack naturel ! Tu gagnes 2,5 fois la mise.");
-      return true;
-    }
+    const userId = getCurrentUserId();
+    listNode.innerHTML = state.tables.map((table) => {
+      const joined = table.players.some((player) => Number(player.id) === userId);
+      const unavailable = joined || table.status !== 'waiting' || table.players.length >= table.maxPlayers;
+      return `
+        <div class="history-item">
+          <div>
+            <strong>${sanitizeText(table.name || table.id, 24)}</strong><br />
+            <small>${table.players.length}/${table.maxPlayers} joueurs</small>
+          </div>
+          <small>${table.status === 'in-progress' ? 'En cours' : 'En attente'}</small>
+          <button class="primary-button" type="button" data-blackjack-table="${table.id}" ${unavailable ? 'disabled' : ''}>
+            ${joined ? 'Déjà présent' : 'Rejoindre'}
+          </button>
+        </div>
+      `;
+    }).join('');
 
-    if (dealerScore === 21) {
-      finishRound("loss", "Le croupier a un blackjack naturel. Défaite.");
-      return true;
-    }
-
-    return false;
-  }
-
-  function finishRound(result, message) {
-    const player = getPlayer();
-    let payoutTotal = 0;
-    let finalResult = "Défaite";
-
-    if (result === "win") {
-      payoutTotal = state.currentBet * 2;
-      finalResult = "Victoire";
-    } else if (result === "blackjack") {
-      payoutTotal = state.currentBet * 2.5;
-      finalResult = "Blackjack";
-    } else if (result === "push") {
-      payoutTotal = state.currentBet;
-      finalResult = "Égalité";
-    }
-
-    if (payoutTotal > 0) {
-      player.chips += payoutTotal;
-    }
-
-    player.stats.gamesPlayed = Number(player.stats.gamesPlayed || 0) + 1;
-    if (result === "win" || result === "blackjack") {
-      player.stats.wins = Number(player.stats.wins || 0) + 1;
-    }
-    player.stats.bestWin = Math.max(Number(player.stats.bestWin || 0), payoutTotal);
-    player.stats.lastPlayed = new Date().toISOString();
-    savePlayer(player);
-    updateTopbar();
-    updateBlackjackHud();
-    renderHomeView();
-    renderLeaderboard();
-    renderProfileView();
-
-    addHistoryEntry({
-      game: "blackjack",
-      bet: state.currentBet,
-      result: finalResult,
-      payout: payoutTotal,
-      net: payoutTotal - state.currentBet,
-      date: new Date().toISOString()
+    listNode.querySelectorAll('[data-blackjack-table]').forEach((button) => {
+      button.addEventListener('click', () => joinTable(button.dataset.blackjackTable));
     });
-
-    state.roundActive = false;
-    state.playerTurn = false;
-    state.dealerRevealed = true;
-    document.getElementById("blackjackHitBtn").disabled = true;
-    document.getElementById("blackjackStandBtn").disabled = true;
-    renderHands();
-    document.getElementById("blackjackStatus").textContent = `${message} ${result === "push" ? "La mise est rendue." : `Payout total : ${payoutTotal} jetons.`}`;
   }
 
-  function renderHands() {
-    const dealerCards = document.getElementById("dealerCards");
-    const playerCards = document.getElementById("playerCards");
-    const dealerTotal = calculateHandValue(state.dealerCards).total;
-    const playerTotal = calculateHandValue(state.playerCards).total;
+  function renderWaitingRoom() {
+    const roomNode = document.getElementById('blackjackWaitingRoom');
+    const metaNode = document.getElementById('blackjackWaitingMeta');
+    const playersNode = document.getElementById('blackjackWaitingPlayers');
+    const boardNode = document.getElementById('blackjackWaitingBoard');
+    const stakeInput = document.getElementById('blackjackTableStake');
+    const startButton = document.getElementById('blackjackHostStartBtn');
+    const leaveButton = document.getElementById('blackjackLeaveTableBtn');
+    const table = getCurrentTable();
+    if (!roomNode || !metaNode || !playersNode || !boardNode || !table) return;
 
-    document.getElementById("dealerTotal").textContent = state.dealerRevealed || !state.roundActive ? String(dealerTotal) : "?";
-    document.getElementById("playerTotal").textContent = String(playerTotal);
+    const userId = getCurrentUserId();
+    const isHost = Number(table.hostId) === userId;
+    metaNode.textContent = `${sanitizeText(table.name, 30)} • ${table.players.length}/${table.maxPlayers} joueurs • Salle d’attente`;
+    playersNode.innerHTML = table.players.map((player) => `
+      <div class="history-item">
+        <div>
+          <strong>${sanitizeText(player.username || 'Joueur', 18)}</strong>
+          <small>${Number(player.id) === Number(table.hostId) ? ' • Hôte' : ''}</small>
+        </div>
+        <small>${formatChips(player.chips)} jetons</small>
+      </div>
+    `).join('');
 
-    dealerCards.innerHTML = state.dealerCards
-      .map((card, index) => {
-        const hidden = !state.dealerRevealed && state.roundActive && index === 1;
-        return renderCard(card, hidden);
-      })
-      .join("");
-
-    playerCards.innerHTML = state.playerCards.map((card) => renderCard(card)).join("");
+    boardNode.textContent = `L’hôte choisit la mise commune. Chaque joueur doit avoir assez de jetons (${table.players.length}/${table.maxPlayers} places).`;
+    stakeInput.disabled = !isHost;
+    stakeInput.value = String(table.betAmount || stakeInput.value || 25);
+    startButton.disabled = !isHost;
+    startButton.textContent = isHost ? (table.round === 'finished' ? 'Rejouer la manche' : 'Lancer la manche') : 'En attente de l’hôte';
+    leaveButton.disabled = false;
   }
 
-  function renderCard(card, hidden = false) {
-    if (hidden) {
-      return '<div class="card back">?</div>';
+  async function createTable() {
+    try {
+      const response = await fetch('/api/blackjack/tables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableName: `Table Blackjack ${Date.now()}` })
+      });
+      if (!response.ok) throw new Error('Impossible de créer une table.');
+      const payload = await response.json();
+      state.currentTableId = String(payload.table.id);
+      showToast('Table créée. Invite les autres joueurs avant de lancer la manche.');
+      await refreshTables();
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || 'La création de la table a échoué.');
+    }
+  }
+
+  async function joinTable(tableId) {
+    try {
+      const response = await fetch(`/api/blackjack/tables/${tableId}/join`, { method: 'POST' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Impossible de rejoindre la table.');
+      state.currentTableId = String(payload.table.id);
+      showToast(`Tu as rejoint ${payload.table.name}.`);
+      await refreshTables();
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || 'Tu ne peux pas rejoindre cette table.');
+    }
+  }
+
+  async function leaveTable() {
+    if (!state.currentTableId) return;
+    try {
+      const response = await fetch(`/api/blackjack/tables/${state.currentTableId}/leave`, { method: 'POST' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Impossible de quitter la table.');
+      state.currentTableId = null;
+      await refreshTables();
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || 'Impossible de quitter la table.');
+    }
+  }
+
+  async function startRound() {
+    if (!state.currentTableId) return;
+    const betAmount = Number(document.getElementById('blackjackTableStake')?.value || 0);
+    if (!Number.isInteger(betAmount) || betAmount <= 0) {
+      showToast('La mise commune doit être un entier positif.');
+      return;
     }
 
-    const suitDisplay = card.suit;
-    const symbol = card.color === "red" ? "red" : "black";
-    return `<div class="card ${symbol}"><span>${card.label}</span><span>${suitDisplay}</span></div>`;
+    try {
+      const response = await fetch(`/api/blackjack/tables/${state.currentTableId}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ betAmount })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Impossible de lancer la manche.');
+      window.location.href = `/blackjack/game/${payload.table.id}`;
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || 'Le lancement de la manche a échoué.');
+    }
   }
 
-  window.blackjackModule = { initialize };
-  return { initialize };
+  window.blackjackModule = { initialize, refreshTables };
+  return { initialize, refreshTables };
 })();

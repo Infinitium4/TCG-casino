@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UNDERGROUND — Blackjack</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <div class="page-noise"></div>
+    <div class="app-shell poker-table-page">
+      <header class="poker-game-header panel">
+        <div class="brand-block">
+          <div class="brand-mark">U</div>
+          <div class="brand-copy">
+            <div class="brand-name">UNDERGROUND</div>
+            <div class="brand-tag">BLACKJACK TABLE</div>
+          </div>
+        </div>
+        <button id="goLobbyBtn" class="secondary-button" type="button">Quitter la table</button>
+      </header>
+
+      <div id="tableBanner" class="status-box" style="margin: 1rem 0;">Chargement de la table...</div>
+
+      <main class="poker-game-layout">
+        <section class="poker-table-surface panel" aria-label="Table de blackjack">
+          <div id="blackjackTableSeats" class="poker-table-seats" aria-label="Joueurs autour de la table"></div>
+          <div class="poker-table-center blackjack-table-center">
+            <div id="dealerStatus" class="pot-badge">Croupier</div>
+            <div id="dealerCards" class="board-cards" aria-label="Main du croupier"></div>
+            <strong id="dealerTotal" class="blackjack-total">Score : ?</strong>
+          </div>
+        </section>
+
+        <aside class="poker-side-panel">
+          <div class="panel poker-side-block">
+            <h3>Ma main</h3>
+            <div id="myHand" class="owned-cards"></div>
+            <div id="myHandTotal" class="blackjack-total"></div>
+          </div>
+          <div class="panel poker-side-block">
+            <h3>Actions</h3>
+            <div id="turnInfo" class="status-box subtle" aria-live="polite">Chargement...</div>
+            <div id="actionControls" class="action-controls"></div>
+          </div>
+          <div class="panel poker-side-block">
+            <h3>Historique</h3>
+            <div id="historyLog" class="history-list compact"></div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/utils.js"></script>
+    <script src="/js/storage.js"></script>
+    <script src="/js/blackjack-game.js"></script>
+  </body>
+</html>
