@@ -15,6 +15,42 @@ namespace crsModule {
   let initialized = false;
   const node = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
   const number = (value: number): string => value.toLocaleString('fr-FR');
+  const assetRoot = '/games/crs-vs-manifestants/assets/';
+  function sprite(file: string, sheetWidth: number, x: number, y: number, width: number, height: number, label: string): HTMLElement {
+    const frame = document.createElement('span');
+    frame.className = 'crs-sprite';
+    frame.style.aspectRatio = `${width} / ${height}`;
+    frame.setAttribute('role', 'img'); frame.setAttribute('aria-label', label);
+    const image = document.createElement('img');
+    image.src = assetRoot + file; image.alt = ''; image.loading = 'lazy'; image.draggable = false;
+    image.style.width = `${sheetWidth / width * 100}%`;
+    image.style.left = `${-x / width * 100}%`; image.style.top = `${-y / height * 100}%`;
+    frame.append(image); return frame;
+  }
+  function building(faction: FactionId, level: number, label: string): HTMLElement {
+    const width = faction === 'crs' ? 756 : 763;
+    const index = Math.max(0, Math.min(9, level - 1));
+    return sprite(`buildings/${faction}/evolutions.png`, width, 6 + (index % 5) * (width / 5), index < 5 ? 26 : 188, 140, 128, label);
+  }
+  function renderArtwork(faction: FactionId, info: FactionInfo, level: number): void {
+    node('crsHeadquartersArt').replaceChildren(building(faction, level, info.headquarters[level - 1]));
+    const map = node('crsCitadelScene');
+    map.dataset.faction = faction;
+    const headquarters = node('crsMapHeadquarters');
+    const position = data?.buildings.find(entry => entry.kind === 'headquarters');
+    headquarters.style.left = `${((position?.x ?? 5) + .5) / (data?.citadel?.grid_width || 12) * 100}%`;
+    headquarters.style.top = `${((position?.y ?? 5) + .5) / (data?.citadel?.grid_height || 12) * 100}%`;
+    headquarters.replaceChildren(building(faction, level, info.headquarters[level - 1]));
+    headquarters.setAttribute('aria-label', `Inspecter ${info.headquarters[level - 1]}`);
+    const names = faction === 'crs' ? ['Police municipale', 'Police nationale', 'CRS', 'Gendarmerie', 'Unités d’élite'] : ['Lycéens', 'Étudiants', 'Militants', 'Hacktivistes', 'Élite'];
+    const width = faction === 'crs' ? 557 : 627;
+    node('crsUnitGallery').replaceChildren(...names.map((name, index) => {
+      const card = document.createElement('div'); card.className = 'crs-unit-preview';
+      card.append(sprite(`units/${faction}/planche.png`, width, 8 + index * ((width - 16) / 5), 25, (width - 16) / 5, 126, name));
+      const title = document.createElement('strong'); title.textContent = name;
+      card.append(title); return card;
+    }));
+  }
 
   async function request(method: string, body?: object): Promise<GameState> {
     const response = await fetch(method === 'GET' ? '/api/crs/state' : '/api/crs/faction', {
@@ -44,6 +80,7 @@ namespace crsModule {
     selection = null;
     node('crsSelectionConfirm').hidden = true;
     const faction = data.factions[data.player.faction];
+    renderArtwork(data.player.faction, faction, data.citadel.headquarters_level);
     node('crsDashboard').dataset.faction = data.player.faction;
     node('crsFactionName').textContent = faction.name;
     node('crsCommander').textContent = data.account.username;
@@ -58,7 +95,10 @@ namespace crsModule {
     const progression = node('crsProgression');
     progression.replaceChildren(...faction.headquarters.map((name, index) => {
       const item = document.createElement('li');
-      item.textContent = `${index + 1}. ${name}`;
+      item.append(building(data!.player!.faction, index + 1, name));
+      const caption = document.createElement('span'); caption.textContent = `${index + 1}. ${name}`;
+      const status = document.createElement('small'); status.textContent = index + 1 === data!.citadel!.headquarters_level ? 'QG actuel' : 'Évolution future';
+      item.append(caption, status);
       if (index + 1 === data!.citadel!.headquarters_level) {
         item.className = 'is-current'; item.setAttribute('aria-current', 'step');
       }
@@ -76,6 +116,26 @@ namespace crsModule {
   export function initialize(): void {
     if (initialized) return;
     initialized = true;
+    for (const faction of ['crs', 'manifestants'] as const) {
+      node(`crsChoiceArt-${faction}`).replaceChildren(building(faction, 1, faction === 'crs' ? 'Poste de police municipale' : 'Lycée révolté'));
+    }
+    node('crsSuppliesIcon').replaceChildren(sprite('ui/icones.png', 238, 1, 10, 39, 39, 'Provisions'));
+    node('crsLevelIcon').replaceChildren(sprite('ui/icones.png', 238, 44, 10, 40, 39, 'Bâtiments'));
+    node('crsRatingIcon').replaceChildren(sprite('ui/icones.png', 238, 138, 10, 40, 39, 'Progression'));
+    node<HTMLInputElement>('crsMapZoom').addEventListener('input', event => {
+      const zoom = Number((event.target as HTMLInputElement).value);
+      node('crsCitadelScene').style.transform = `scale(${zoom / 100})`;
+      node('crsZoomValue').textContent = `${zoom}%`;
+    });
+    node('crsGridToggle').addEventListener('click', event => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const enabled = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', String(enabled)); node('crsCitadelScene').classList.toggle('show-grid', enabled);
+    });
+    node('crsMapHeadquarters').addEventListener('click', () => {
+      node('crsHeadquartersDetails').hidden = !node('crsHeadquartersDetails').hidden;
+      node('crsMapHeadquarters').setAttribute('aria-expanded', String(!node('crsHeadquartersDetails').hidden));
+    });
     node('crsRefresh').addEventListener('click', refresh);
     document.querySelectorAll<HTMLButtonElement>('[data-crs-faction]').forEach(button => {
       button.addEventListener('click', () => {

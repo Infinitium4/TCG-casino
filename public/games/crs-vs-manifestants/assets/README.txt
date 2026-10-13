@@ -1,0 +1,1 @@
+Decoupes automatiques de la planche de reference. Ces images contiennent encore fonds et textes. Elles ne sont PAS des sprites PNG transparents ou des spritesheets animees directement exploitables. Pour Phaser, isoler chaque sprite, enlever son fond, definir ses dimensions et creer de vraies animations.

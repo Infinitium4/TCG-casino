@@ -163,6 +163,13 @@ test('CRS phase 1 uses existing accounts, creates factions atomically and persis
   const asset = await fetch(baseUrl + '/js/crs.js');
   assert.equal(asset.status, 200);
   assert.match(await asset.text(), /crsModule/);
+  for (const imagePath of ['buildings/crs/evolutions.png', 'buildings/manifestants/evolutions.png', 'units/crs/planche.png', 'units/manifestants/planche.png', 'maps/examples/cartes.png', 'ui/icones.png']) {
+    const image = await fetch(baseUrl + '/games/crs-vs-manifestants/assets/' + imagePath);
+    assert.equal(image.status, 200, imagePath);
+    assert.match(image.headers.get('content-type'), /image\/png/);
+    const bytes = Buffer.from(await image.arrayBuffer());
+    assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
+  }
   await stopServer();
   await startServer();
   const login = await request('/api/login', { method: 'POST', body: JSON.stringify({ username: 'crs-alice', password: 'player-password' }) });

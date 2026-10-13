@@ -2380,6 +2380,7 @@
 
   app.use(express.static(GAME_DIR, { index: false }));
   app.use('/auth-assets', express.static(AUTH_DIR));
+  app.use('/games/crs-vs-manifestants/assets', express.static(path.join(AUTH_DIR, 'games', 'crs-vs-manifestants', 'assets'), { index: false, maxAge: '1h' }));
 
   app.get('/', handleAsync(async (req, res) => {
     if (req.session.userId) {
