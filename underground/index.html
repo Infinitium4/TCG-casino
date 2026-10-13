@@ -471,7 +471,7 @@
               Chaque action administrative est journalisée.
             </p>
             <section class="admin-detail-panel">
-              <h3>Supervision en direct</h3>
+              <h3 id="adminSupervision">Vue d’ensemble</h3>
               <div id="adminOverviewStats" class="admin-overview-stats"></div>
               <h4>Joueurs connectés</h4>
               <div id="adminOnlinePlayers" class="admin-live-list"></div>
@@ -479,7 +479,7 @@
               <div id="adminActiveGames" class="admin-live-list"></div>
             </section>
             <section class="admin-detail-panel">
-              <h3>Commandes rapides</h3>
+              <h3 id="adminQuickActions">Commandes rapides</h3>
               <form id="adminDistributionForm" class="admin-search">
                 <label class="input-group" for="adminDistributionAmount">
                   <span>Jetons à distribuer par joueur</span>
@@ -496,19 +496,19 @@
             </section>
             <section id="adminRootPanel" class="admin-detail-panel" hidden>
               <h3>Contrôles de l’admin principal</h3>
+              <div class="admin-wallet-control"><div><strong>Argent infini</strong><p id="adminInfiniteStatus" class="admin-note">Mode réservé à admin1. Les jetons sont réapprovisionnés automatiquement.</p></div><button id="adminInfiniteMoneyBtn" class="primary-button" type="button">Activer sur mon compte</button></div>
               <h4>Jeux, limites et maintenance</h4>
               <div id="adminGameSettings" class="admin-game-settings"></div>
-              <h4>Journal de sécurité</h4>
-              <ul id="adminGlobalAudit" class="admin-detail-list"></ul>
+              <details class="admin-log"><summary>Journal de sécurité</summary><ul id="adminGlobalAudit" class="admin-detail-list"></ul></details>
             </section>
             <section class="admin-detail-panel">
               <h3>Banque du casino</h3>
               <p id="adminBankSummary" class="admin-note">Chargement du compte banque...</p>
-              <h4>Derniers règlements</h4>
-              <ul id="adminBankLedger" class="admin-detail-list"></ul>
+              <details class="admin-log"><summary>Derniers règlements de la banque</summary><ul id="adminBankLedger" class="admin-detail-list"></ul></details>
               <p class="admin-note">Les pertes des joueurs augmentent le solde de la banque; leurs gains le diminuent. La banque peut donc être négative. Le poker entre joueurs ne génère pas de revenu casino sans rake.</p>
             </section>
             <form id="adminSearchForm" class="admin-search">
+              <h3>Gestion des comptes</h3>
               <label class="input-group">
                 <span>Rechercher un pseudo</span>
                 <input id="adminSearchInput" type="search" maxlength="40" autocomplete="off" />

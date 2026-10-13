@@ -117,7 +117,7 @@ function showView(viewName) {
 
 function updateTopbar() {
   const player = getPlayer();
-  document.getElementById("topbarBalance").textContent = formatChips(player.chips);
+  document.getElementById("topbarBalance").textContent = player.infiniteMoney ? '∞' : formatChips(player.chips);
   document.getElementById("topbarName").textContent = sanitizeText(player.name, 14);
   setAvatarContent(document.getElementById("topbarAvatar"), player.avatar, player.avatarImage);
 }

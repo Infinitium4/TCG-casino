@@ -7,13 +7,20 @@ const adminModule = (() => {
     if (text !== undefined) node.textContent = text;
     return node;
   }
+  function updateInfiniteControl() {
+    const enabled = Boolean(getPlayer().infiniteMoney);
+    document.getElementById('adminInfiniteMoneyBtn').textContent = enabled ? 'Désactiver l’argent infini' : 'Activer sur mon compte';
+    document.getElementById('adminInfiniteStatus').textContent = enabled
+      ? 'Actif : tes jetons se rechargent automatiquement. La désactivation restaure ton solde précédent.'
+      : 'Réservé à admin1. Active un solde automatiquement réapprovisionné pour jouer.';
+  }
 
   function actionButton(label, action, account, className = 'secondary-button') {
     const button = element('button', className, label);
     button.type = 'button';
     button.dataset.adminAction = action;
     button.dataset.accountId = String(account.id);
-    button.disabled = Boolean(account.is_bank || (account.is_primary_admin && action !== 'details') ||
+    button.disabled = Boolean(account.is_bank || (account.is_primary_admin && !['details', 'reset'].includes(action)) ||
       (account.is_admin && !state.isPrimaryAdmin && action !== 'details'));
     return button;
   }
@@ -235,7 +242,7 @@ const adminModule = (() => {
       identity.append(element('strong', '', `${account.avatar || '🎲'} ${account.username}`));
       identity.append(element('small', 'admin-meta', `ID ${account.id} · Créé le ${account.created_at || 'inconnu'}`));
       row.append(identity);
-      row.append(element('td', '', formatChips(account.chips)));
+      row.append(element('td', '', account.infinite_money ? '∞ · Illimité' : formatChips(account.chips)));
       row.append(element('td', '', String(account.games_played)));
       const statusText = account.is_bank ? 'Banque interne' : account.is_primary_admin ? 'Admin principal'
         : account.is_banned ? 'Banni' : account.is_suspended ? 'Suspendu temporairement'
@@ -246,6 +253,7 @@ const adminModule = (() => {
 
       const actions = element('td', 'admin-actions');
       actions.append(actionButton('Détails', 'details', account));
+      if (state.isPrimaryAdmin && !account.is_bank) actions.append(actionButton('Réinitialiser', 'reset', account, 'danger-button'));
       if (state.isPrimaryAdmin && !account.is_primary_admin && !account.is_bank) {
         actions.append(actionButton(account.is_admin ? 'Retirer admin' : 'Nommer admin', 'adminRole', account));
       }
@@ -259,6 +267,13 @@ const adminModule = (() => {
         actions.append(actionButton('Supprimer', 'delete', account, 'danger-button'));
       }
       if (account.is_online && !account.is_primary_admin) actions.append(actionButton('Déconnecter', 'disconnect', account, 'danger-button'));
+      if (actions.children.length > 1) {
+        const menu = element('details', 'admin-account-menu');
+        menu.append(element('summary', '', 'Gérer le compte'));
+        const buttons = element('div', 'admin-account-menu-buttons');
+        [...actions.children].slice(1).forEach(button => buttons.append(button));
+        menu.append(buttons); actions.append(menu);
+      }
       row.append(actions);
       body.append(row);
     }
@@ -286,7 +301,8 @@ const adminModule = (() => {
       if (!payload.history.length) historyList.append(element('li', '', 'Aucune partie enregistrée.'));
       content.append(historyList);
 
-      content.append(element('h4', '', 'Journal administratif'));
+      const auditSection = element('details', 'admin-log');
+      auditSection.append(element('summary', '', 'Journal administratif'));
       const auditList = element('ul', 'admin-detail-list');
       for (const entry of payload.audit) {
         const amount = entry.amount === null ? '' : ` (${entry.amount > 0 ? '+' : ''}${formatChips(entry.amount)})`;
@@ -297,7 +313,8 @@ const adminModule = (() => {
         ));
       }
       if (!payload.audit.length) auditList.append(element('li', '', 'Aucune action administrative enregistrée.'));
-      content.append(auditList);
+      auditSection.append(auditList);
+      content.append(auditSection);
     } catch (error) {
       console.error(error);
       title.textContent = 'Détails indisponibles';
@@ -312,6 +329,15 @@ const adminModule = (() => {
 
     if (button.dataset.adminAction === 'details') {
       await showDetails(accountId);
+      return;
+    }
+    if (button.dataset.adminAction === 'reset') {
+      if (!window.confirm(`Réinitialiser ${account.username} ? Solde remis à 1 000, historique et personnalisation effacés. Pseudo, mot de passe et droits conservés. Cette action est irréversible.`)) return;
+      const reason = window.prompt('Motif de réinitialisation :');
+      if (!reason?.trim()) return;
+      await request(`/api/admin/accounts/${accountId}/reset`, { method: 'POST', body: JSON.stringify({ reason }) });
+      await loadAccounts(); await loadOverview(); await loadAudit(); await showDetails(accountId);
+      if (account.username === state.username) { await loadAccountData(); updateTopbar(); renderProfileView(); updateInfiniteControl(); }
       return;
     }
 
@@ -440,6 +466,33 @@ const adminModule = (() => {
     }
 
     navButton.hidden = false;
+    const panel = document.querySelector('#adminView .admin-panel');
+    const navigation = element('nav', 'admin-section-nav');
+    navigation.setAttribute('aria-label', 'Sections administrateur');
+    for (const [target, label] of [['adminSupervision', 'Vue d’ensemble'], ['adminQuickActions', 'Commandes'], ['adminRootPanel', 'Admin1'], ['adminSearchForm', 'Comptes']]) {
+      if (target === 'adminRootPanel' && !state.isPrimaryAdmin) continue;
+      const link = element('a', '', label); link.href = `#${target}`; navigation.append(link);
+    }
+    const logsButton = element('button', 'secondary-button', 'Afficher les logs');
+    logsButton.type = 'button';
+    logsButton.addEventListener('click', () => {
+      const open = logsButton.getAttribute('aria-expanded') !== 'true';
+      panel.querySelectorAll('details.admin-log').forEach(log => { log.open = open; });
+      logsButton.setAttribute('aria-expanded', String(open));
+      logsButton.textContent = open ? 'Cacher les logs' : 'Afficher les logs';
+    });
+    logsButton.setAttribute('aria-expanded', 'false');
+    navigation.append(logsButton); panel.querySelector('.section-heading').after(navigation);
+    updateInfiniteControl();
+    document.getElementById('adminInfiniteMoneyBtn').addEventListener('click', async (event) => {
+      if (!state.isPrimaryAdmin) return;
+      event.target.disabled = true;
+      try {
+        await request('/api/admin/infinite-money', { method: 'POST', body: JSON.stringify({ enabled: !getPlayer().infiniteMoney }) });
+        await loadAccountData(); updateTopbar(); updateInfiniteControl(); await loadAccounts(); await loadAudit();
+      } catch (error) { window.alert(error.message); }
+      finally { event.target.disabled = false; }
+    });
     document.getElementById('adminSearchForm').addEventListener('submit', (event) => {
       event.preventDefault();
       loadAccounts();

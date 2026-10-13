@@ -115,6 +115,7 @@ async function loadAccountData() {
     name: user.username,
     avatar: user.avatar || "🎲",
     avatarImage: user.avatar_image || null,
+    infiniteMoney: Boolean(user.infinite_money),
     design: JSON.parse(user.profile_design || "{}"),
     chips: Number(user.chips),
     createdAt: user.created_at,

@@ -203,6 +203,10 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   assert.equal(duplicateBet.response.status, 200, duplicateBet.body.error);
   assert.equal(duplicateBet.body.duplicate, true);
   assert.equal(duplicateBet.body.bet.id, placed.body.bet.id);
+  const activeReset = await request(`/api/admin/accounts/${crashPlayer.id}/reset`, {
+    cookie: adminLogin.cookie, method: 'POST', body: JSON.stringify({ reason: 'Reject reset during active Crash' })
+  });
+  assert.equal(activeReset.response.status, 409);
   const changedDuplicate = await request('/api/crash/bets', {
     cookie: playerCookie,
     method: 'POST',

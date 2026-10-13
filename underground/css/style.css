@@ -3394,3 +3394,21 @@ select {
 .blackjack-split-hand.is-active-hand { border-color: #e5c178; box-shadow: 0 0 12px #e5c17825; }
 .blackjack-seat-cards[hidden] { display: none; }
 .blackjack-action-controls > small { display: block; max-width: 440px; color: #b7c4ba; line-height: 1.5; font-size: .72rem; }
+.admin-section-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 0 22px; border-bottom: 1px solid #ffffff15; margin-bottom: 22px; }
+.admin-section-nav a { color: #ead9b1; text-decoration: none; padding: 10px 14px; background: #ffffff06; border: 1px solid #ffffff12; border-radius: 10px; font-size: .82rem; }
+.admin-section-nav a:hover { background: #c5a15a20; }
+.admin-section-nav button { margin-left: auto; }
+.admin-panel .admin-detail-panel { padding: 22px; margin-bottom: 22px; border-radius: 16px; background: #ffffff03; border: 1px solid #ffffff10; }
+.admin-panel .admin-detail-panel h3 { margin-top: 0; }
+.admin-panel [id] { scroll-margin-top: 24px; }
+.admin-wallet-control { display: flex; align-items: center; gap: 20px; justify-content: space-between; padding: 18px; border: 1px solid #c5a15a35; border-radius: 12px; margin: 18px 0; background: #c5a15a08; }
+.admin-wallet-control p { margin-bottom: 0; max-width: 540px; }
+.admin-log { border: 1px solid #ffffff15; border-radius: 10px; margin-top: 18px; }
+.admin-log summary, .admin-account-menu summary { cursor: pointer; padding: 12px; color: #ead9b1; font-weight: 600; font-size: .82rem; }
+.admin-log[open] summary { border-bottom: 1px solid #ffffff15; }
+.admin-log .admin-detail-list { max-height: 300px; overflow: auto; padding: 14px 18px; margin: 0; }
+.admin-account-menu { min-width: 140px; border: 1px solid #ffffff15; border-radius: 8px; }
+.admin-account-menu-buttons { display: grid; gap: 7px; padding: 8px; }
+.admin-account-menu-buttons button { width: 100%; text-align: left; }
+#adminSearchForm h3 { width: 100%; margin: 0; }
+@media (max-width: 600px) { .admin-wallet-control { align-items: stretch; flex-direction: column; } .admin-section-nav button { margin-left: 0; } .admin-panel .admin-detail-panel { padding: 14px; } }

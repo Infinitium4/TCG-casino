@@ -1990,6 +1990,15 @@
     if (!userColumns.some((column) => column.name === 'profile_design')) {
       await run("ALTER TABLE users ADD COLUMN profile_design TEXT DEFAULT '{}'");
     }
+    if (!userColumns.some((column) => column.name === 'infinite_money')) {
+      await run('ALTER TABLE users ADD COLUMN infinite_money INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!userColumns.some((column) => column.name === 'finite_chips')) {
+      await run('ALTER TABLE users ADD COLUMN finite_chips INTEGER');
+    }
+    await run(`CREATE TRIGGER IF NOT EXISTS refill_infinite_money AFTER UPDATE OF chips ON users
+      WHEN NEW.infinite_money = 1 AND NEW.is_admin = 1 AND NEW.is_bank = 0 AND NEW.chips < 1000000000000
+      BEGIN UPDATE users SET chips = 1000000000000 WHERE id = NEW.id; END`);
     if (!userColumns.some((column) => column.name === 'is_bank')) {
       await run('ALTER TABLE users ADD COLUMN is_bank INTEGER NOT NULL DEFAULT 0');
     }
@@ -2353,7 +2362,7 @@
   }
 
   async function getUserById(userId) {
-    return get('SELECT id, username, avatar, avatar_image, profile_design, chips, created_at FROM users WHERE id = ?', [userId]);
+    return get('SELECT id, username, avatar, avatar_image, profile_design, infinite_money, chips, created_at FROM users WHERE id = ?', [userId]);
   }
 
   function validateAvatarImage(dataUrl) {
@@ -2733,7 +2742,7 @@
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
     const searchPattern = `%${search}%`;
     const accounts = await all(`
-      SELECT u.id, u.username, u.avatar, u.chips, u.created_at,
+      SELECT u.id, u.username, u.avatar, u.chips, u.infinite_money, u.created_at,
         u.is_admin, u.is_banned, u.suspended_until, u.is_bank, COUNT(h.id) AS games_played,
         COALESCE(SUM(h.net), 0) AS net_total
       FROM users u
@@ -2807,6 +2816,56 @@
       ORDER BY a.id DESC LIMIT 25
     `, [targetId]);
     res.json({ account: user, history, audit });
+  }));
+
+  app.post('/api/admin/infinite-money', requireAuth, requireAdmin, requirePrimaryAdmin, handleAsync(async (req, res) => {
+    const enabled = req.body?.enabled;
+    if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'Choisis activer ou désactiver.' });
+    const outcome = await withDatabaseTransaction(async () => {
+      if (isUserInActiveTable(req.adminUserId) || await hasActiveCrashBet(req.adminUserId)) return false;
+      const user = await get('SELECT chips, finite_chips, infinite_money, username FROM users WHERE id = ?', [req.adminUserId]);
+      if (Boolean(user.infinite_money) !== enabled) {
+        await run('UPDATE users SET infinite_money = ?, finite_chips = ?, chips = ? WHERE id = ?',
+          [enabled ? 1 : 0, enabled ? user.chips : null, enabled ? Math.max(Number(user.chips), 1000000000000) : Number(user.finite_chips ?? 1500), req.adminUserId]);
+        await recordAdminAction(req.adminUserId, enabled ? 'infinite_money_enabled' : 'infinite_money_disabled', 'Mode argent infini du compte principal', { userId: req.adminUserId, username: user.username });
+      }
+      return true;
+    });
+    if (!outcome) return res.status(409).json({ error: 'Termine ta partie avant de changer ce mode.' });
+    res.json({ ok: true, user: await getUserById(req.adminUserId) });
+  }));
+
+  app.post('/api/admin/accounts/:id/reset', requireAuth, requireAdmin, requirePrimaryAdmin, handleAsync(async (req, res) => {
+    const targetId = Number(req.params.id);
+    const reason = String(req.body?.reason || '').trim().slice(0, 240);
+    if (!Number.isSafeInteger(targetId) || targetId <= 0 || !reason) return res.status(400).json({ error: 'Compte et motif obligatoires.' });
+    const result = await withDatabaseTransaction(async () => {
+      const target = await get('SELECT id, username, is_bank FROM users WHERE id = ?', [targetId]);
+      if (!target) return { status: 404, error: 'Compte introuvable.' };
+      if (target.is_bank) return { status: 403, error: 'Le compte banque ne peut pas être réinitialisé.' };
+      if (isUserInActiveTable(targetId) || await hasActiveCrashBet(targetId)) return { status: 409, error: 'Ce compte joue une partie. Réessaie à la fin de la manche.' };
+      await run("UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 1000, avatar = '🎲', avatar_image = NULL, profile_design = '{}' WHERE id = ?", [targetId]);
+      await run('DELETE FROM game_history WHERE user_id = ?', [targetId]);
+      await run('DELETE FROM crash_bets WHERE user_id = ?', [targetId]);
+      await recordAdminAction(req.adminUserId, 'account_reset', reason, { userId: targetId, username: target.username });
+      return { status: 200 };
+    });
+    if (result.status !== 200) return res.status(result.status).json({ error: result.error });
+    for (const tables of [blackjackTables, pokerTables]) {
+      for (const [tableId, table] of tables) {
+        if (table.status === 'in-progress' || !table.players.some(player => Number(player.id) === targetId)) continue;
+        table.removePlayer(targetId);
+        if (!table.players.length) tables.delete(tableId);
+        else io.to(`${table.type}:${tableId}`).emit(`${table.type}:table:update`, tableToPublicState(table));
+      }
+    }
+    if (targetId !== req.adminUserId) {
+      await invalidateUserSessions(targetId);
+      for (const socket of io.sockets.sockets.values()) {
+        if (Number(socket.data.user?.id) === targetId) socket.disconnect(true);
+      }
+    }
+    res.json({ ok: true });
   }));
 
   app.post('/api/admin/accounts/:id/chips', requireAuth, requireAdmin, async (req, res) => {
@@ -3551,7 +3610,7 @@
         [req.session.userId]
       );
       if (activeCrashBet) return false;
-      await run('UPDATE users SET chips = 1000, avatar = ? WHERE id = ?', ['🎲', req.session.userId]);
+      await run('UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 1000, avatar = ? WHERE id = ?', ['🎲', req.session.userId]);
       await run('DELETE FROM game_history WHERE user_id = ?', [req.session.userId]);
       return true;
     });

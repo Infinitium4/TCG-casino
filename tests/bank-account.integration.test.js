@@ -344,4 +344,36 @@ test('internal bank settles solo game results and stays protected from account m
   assert.ok(actions.includes('suspension'));
   assert.ok(actions.includes('admin_promoted'));
   assert.ok(actions.includes('admin_demoted'));
+
+  for (const cookie of [admin2Cookie, await login('bank-test-player', 'player-pass')]) {
+    const deniedReset = await request(`/api/admin/accounts/${playerId}/reset`, { cookie, method: 'POST', body: JSON.stringify({ reason: 'Permission test' }) });
+    assert.equal(deniedReset.response.status, 403);
+    const deniedInfinite = await request('/api/admin/infinite-money', { cookie, method: 'POST', body: JSON.stringify({ enabled: true }) });
+    assert.equal(deniedInfinite.response.status, 403);
+  }
+  const deniedBankReset = await request(`/api/admin/accounts/${bankAccount.id}/reset`, { cookie: adminCookie, method: 'POST', body: JSON.stringify({ reason: 'Protected bank' }) });
+  assert.equal(deniedBankReset.response.status, 403);
+  const adminBefore = (await request('/api/me', { cookie: adminCookie })).body.user.chips;
+  const infinite = await request('/api/admin/infinite-money', { cookie: adminCookie, method: 'POST', body: JSON.stringify({ enabled: true }) });
+  assert.equal(infinite.response.status, 200, infinite.body.error);
+  assert.equal(infinite.body.user.infinite_money, 1);
+  const infiniteLoss = await request('/api/result', { cookie: adminCookie, method: 'POST', body: JSON.stringify({ game: 'roulette', bet: 100, result: 'Défaite', payout: 0, net: -100 }) });
+  assert.equal(infiniteLoss.response.status, 200, infiniteLoss.body.error);
+  assert.equal(infiniteLoss.body.user.chips, 1000000000000);
+  const finite = await request('/api/admin/infinite-money', { cookie: adminCookie, method: 'POST', body: JSON.stringify({ enabled: false }) });
+  assert.equal(finite.response.status, 200);
+  assert.equal(finite.body.user.chips, adminBefore);
+  assert.equal(finite.body.user.infinite_money, 0);
+  const bankBeforeReset = (await request('/api/admin/bank', { cookie: adminCookie })).body.bank.chips;
+  const reset = await request(`/api/admin/accounts/${playerId}/reset`, { cookie: adminCookie, method: 'POST', body: JSON.stringify({ reason: 'Reset test account' }) });
+  assert.equal(reset.response.status, 200, reset.body.error);
+  const resetCookie = await login('bank-test-player', 'player-pass');
+  const resetAccount = (await request('/api/me', { cookie: resetCookie })).body;
+  assert.equal(resetAccount.user.chips, 1000);
+  assert.equal(resetAccount.user.avatar_image, null);
+  assert.equal(resetAccount.stats.gamesPlayed, 0);
+  assert.equal(resetAccount.isAdmin, false);
+  assert.equal((await request('/api/admin/bank', { cookie: adminCookie })).body.bank.chips, bankBeforeReset);
+  const resetAudit = (await request('/api/admin/audit?limit=100', { cookie: adminCookie })).body.entries;
+  assert.ok(resetAudit.some(entry => entry.action === 'account_reset' && entry.target_username === 'bank-test-player'));
 });
