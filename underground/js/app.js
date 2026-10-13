@@ -23,6 +23,7 @@ async function initializeApp() {
   blackjackModule.initialize();
   pokerModule.initialize();
   slotsModule.initialize();
+  adminModule.initialize(accountUser.isAdmin, accountUser.supportMode, accountUser.username);
 }
 
 function bindNavigation() {

@@ -67,6 +67,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(sessionMiddleware);
 
+let resolveDatabaseReady;
+let rejectDatabaseReady;
+const databaseReady = new Promise((resolve, reject) => {
+  resolveDatabaseReady = resolve;
+  rejectDatabaseReady = reject;
+});
+databaseReady.catch(() => {});
+
+app.use((req, res, next) => {
+  databaseReady.then(() => next()).catch((error) => {
+    console.error('Initialisation de la base de données impossible :', error);
+    res.status(500).json({ error: 'Le service de comptes est indisponible.' });
+  });
+});
+
 const io = new Server(server, {
   cors: { origin: true, credentials: true },
   transports: ['websocket', 'polling']
@@ -82,17 +97,29 @@ io.use((socket, next) => {
       return next(new Error('AUTH_REQUIRED'));
     }
 
-    next();
+    databaseReady
+      .then(() => get('SELECT is_banned FROM users WHERE id = ?', [socket.request.session.userId]))
+      .then((user) => {
+        if (!user || user.is_banned) {
+          return next(new Error('AUTH_REQUIRED'));
+        }
+        next();
+      })
+      .catch(next);
   });
 });
 
 const db = new sqlite3.Database(DB_PATH, (error) => {
   if (error) {
     console.error('Erreur SQLite :', error.message);
+    rejectDatabaseReady(error);
     process.exit(1);
   }
   console.log('Base SQLite connectée');
-  initDatabase();
+  initDatabase().then(resolveDatabaseReady, (initializationError) => {
+    console.error('Initialisation de la base de données impossible :', initializationError);
+    rejectDatabaseReady(initializationError);
+  });
 });
 
 function run(sql, params = []) {
@@ -1338,9 +1365,19 @@ async function initDatabase() {
       password_hash TEXT NOT NULL,
       avatar TEXT DEFAULT '🎲',
       chips INTEGER DEFAULT 1000,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      is_banned INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  const userColumns = await all('PRAGMA table_info(users)');
+  if (!userColumns.some((column) => column.name === 'is_admin')) {
+    await run('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!userColumns.some((column) => column.name === 'is_banned')) {
+    await run('ALTER TABLE users ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0');
+  }
 
   await run(`
     CREATE TABLE IF NOT EXISTS game_history (
@@ -1356,29 +1393,97 @@ async function initDatabase() {
     )
   `);
 
+  await run(`
+    CREATE TABLE IF NOT EXISTS admin_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      admin_user_id INTEGER NOT NULL,
+      target_user_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      amount INTEGER,
+      reason TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(admin_user_id) REFERENCES users(id),
+      FOREIGN KEY(target_user_id) REFERENCES users(id)
+    )
+  `);
+
+  const adminUsername = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
   const count = await get('SELECT COUNT(*) AS total FROM users');
   if ((count?.total || 0) === 0) {
-    const adminUsername = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
     const adminPassword = process.env.ADMIN_PASSWORD || (IS_PRODUCTION ? '' : 'admin123');
     if (!adminUsername || !adminPassword) {
-      console.log('Aucun administrateur initial défini; crée le premier compte depuis le site.');
+      console.log('Aucun compte utilisateur. Définis ADMIN_USERNAME et ADMIN_PASSWORD pour créer le compte administrateur initial.');
       return;
     }
 
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     await run(
-      'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, 1500)',
+      'INSERT INTO users (username, password_hash, avatar, chips, is_admin) VALUES (?, ?, ?, 1500, 1)',
       [adminUsername, passwordHash, '🕶️']
     );
     console.log(`Compte administrateur initial créé : ${adminUsername}`);
+  } else if (adminUsername) {
+    await run('UPDATE users SET is_admin = 1 WHERE username = ?', [adminUsername]);
   }
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   if (!req.session.userId) {
     return res.status(401).json({ error: 'Connexion requise.' });
   }
-  next();
+  try {
+    const user = await get('SELECT is_banned FROM users WHERE id = ?', [req.session.userId]);
+    if (!user) {
+      return res.status(401).json({ error: 'Compte introuvable.' });
+    }
+    if (user.is_banned) {
+      req.session.destroy(() => {});
+      return res.status(403).json({ error: 'Ce compte est banni.' });
+    }
+    next();
+  } catch (error) {
+    console.error('Erreur de vérification du compte :', error);
+    return res.status(500).json({ error: 'Vérification du compte impossible.' });
+  }
+}
+
+async function requireAdmin(req, res, next) {
+  if (req.session.supportOriginalUserId) {
+    return res.status(403).json({ error: 'Quitte la vue support avant de gérer les comptes.' });
+  }
+  try {
+    const admin = await get('SELECT is_admin FROM users WHERE id = ?', [req.session.userId]);
+    if (!admin?.is_admin) {
+      return res.status(403).json({ error: 'Accès administrateur requis.' });
+    }
+    req.adminUserId = Number(req.session.userId);
+    next();
+  } catch (error) {
+    console.error('Erreur de vérification des droits administrateur :', error);
+    return res.status(500).json({ error: 'Vérification des droits impossible.' });
+  }
+}
+
+async function requireSupportAdmin(req, res, next) {
+  const adminUserId = req.session.adminUserId || req.session.userId;
+  if (!adminUserId) {
+    return res.status(401).json({ error: 'Connexion administrateur requise.' });
+  }
+  try {
+    const admin = await get('SELECT is_admin FROM users WHERE id = ?', [adminUserId]);
+    if (!admin?.is_admin) {
+      return res.status(403).json({ error: 'Accès administrateur requis.' });
+    }
+    req.adminUserId = Number(adminUserId);
+    next();
+  } catch (error) {
+    console.error('Erreur de vérification des droits administrateur :', error);
+    return res.status(500).json({ error: 'Vérification des droits impossible.' });
+  }
+}
+
+function handleAsync(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
 async function getUserById(userId) {
@@ -1461,6 +1566,8 @@ app.post('/api/register', async (req, res) => {
     );
 
     req.session.userId = created.id;
+    delete req.session.adminUserId;
+    delete req.session.supportOriginalUserId;
     const user = await getUserById(created.id);
     return res.status(201).json({ ok: true, user });
   } catch (error) {
@@ -1487,8 +1594,17 @@ app.post('/api/login', async (req, res) => {
     if (!valid) {
       return res.status(401).json({ error: 'Mot de passe incorrect.' });
     }
+    if (user.is_banned) {
+      return res.status(403).json({ error: 'Ce compte est banni.' });
+    }
 
     req.session.userId = user.id;
+    if (user.is_admin) {
+      req.session.adminUserId = user.id;
+    } else {
+      delete req.session.adminUserId;
+    }
+    delete req.session.supportOriginalUserId;
     return res.json({
       ok: true,
       user: {
@@ -1496,7 +1612,8 @@ app.post('/api/login', async (req, res) => {
         username: user.username,
         avatar: user.avatar,
         chips: user.chips,
-        created_at: user.created_at
+        created_at: user.created_at,
+        is_admin: Boolean(user.is_admin)
       }
     });
   } catch (error) {
@@ -1511,8 +1628,194 @@ app.post('/api/logout', (req, res) => {
   });
 });
 
+app.get('/api/admin/accounts', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const search = String(req.query.search || '').trim().slice(0, 40);
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 25, 1), 50);
+  const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+  const searchPattern = `%${search}%`;
+  const accounts = await all(`
+    SELECT u.id, u.username, u.avatar, u.chips, u.created_at,
+      u.is_admin, u.is_banned, COUNT(h.id) AS games_played,
+      COALESCE(SUM(h.net), 0) AS net_total
+    FROM users u
+    LEFT JOIN game_history h ON h.user_id = u.id
+    WHERE u.username LIKE ?
+    GROUP BY u.id
+    ORDER BY u.created_at DESC, u.id DESC
+    LIMIT ? OFFSET ?
+  `, [searchPattern, limit, offset]);
+  const count = await get('SELECT COUNT(*) AS total FROM users WHERE username LIKE ?', [searchPattern]);
+  res.json({ accounts, total: Number(count.total), limit, offset });
+}));
+
+app.get('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const targetId = Number(req.params.id);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0) {
+    return res.status(400).json({ error: 'Identifiant de compte invalide.' });
+  }
+  const user = await get(`
+    SELECT id, username, avatar, chips, is_admin, is_banned, created_at
+    FROM users WHERE id = ?
+  `, [targetId]);
+  if (!user) {
+    return res.status(404).json({ error: 'Compte introuvable.' });
+  }
+  const history = await all(`
+    SELECT game_name, bet, result, payout, net, created_at
+    FROM game_history WHERE user_id = ? ORDER BY id DESC LIMIT 25
+  `, [targetId]);
+  const audit = await all(`
+    SELECT a.action, a.amount, a.reason, a.created_at, u.username AS admin_username
+    FROM admin_audit a
+    JOIN users u ON u.id = a.admin_user_id
+    WHERE a.target_user_id = ?
+    ORDER BY a.id DESC LIMIT 25
+  `, [targetId]);
+  res.json({ account: user, history, audit });
+}));
+
+app.post('/api/admin/accounts/:id/chips', requireAuth, requireAdmin, async (req, res) => {
+  const targetId = Number(req.params.id);
+  const delta = Number(req.body?.delta);
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0 ||
+      !Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta) > 1_000_000_000 ||
+      !reason) {
+    return res.status(400).json({ error: 'Montant ou motif invalide.' });
+  }
+  if (targetId === req.adminUserId) {
+    return res.status(400).json({ error: 'Tu ne peux pas modifier ton propre solde.' });
+  }
+
+  try {
+    await run('BEGIN IMMEDIATE');
+    const target = await get('SELECT id, chips, is_admin FROM users WHERE id = ?', [targetId]);
+    if (!target) {
+      await run('ROLLBACK');
+      return res.status(404).json({ error: 'Compte introuvable.' });
+    }
+    if (target.is_admin) {
+      await run('ROLLBACK');
+      return res.status(400).json({ error: 'Le solde d’un compte administrateur ne peut pas être modifié ici.' });
+    }
+    const newBalance = Number(target.chips) + delta;
+    if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > 2_147_483_647) {
+      await run('ROLLBACK');
+      return res.status(400).json({ error: 'Le solde résultant doit être compris entre 0 et 2 147 483 647.' });
+    }
+    await run('UPDATE users SET chips = ? WHERE id = ?', [newBalance, targetId]);
+    await run(`
+      INSERT INTO admin_audit (admin_user_id, target_user_id, action, amount, reason)
+      VALUES (?, ?, 'chips_adjustment', ?, ?)
+    `, [req.adminUserId, targetId, delta, reason]);
+    await run('COMMIT');
+    return res.json({ ok: true, chips: newBalance });
+  } catch (error) {
+    await run('ROLLBACK').catch((rollbackError) => {
+      console.error('Annulation de la modification du solde impossible :', rollbackError);
+    });
+    console.error('Erreur de modification du solde :', error);
+    return res.status(500).json({ error: 'La modification du solde a échoué.' });
+  }
+});
+
+app.post('/api/admin/accounts/:id/ban', requireAuth, requireAdmin, async (req, res) => {
+  const targetId = Number(req.params.id);
+  const banned = req.body?.banned;
+  const reason = String(req.body?.reason || '').trim().slice(0, 240);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0 ||
+      typeof banned !== 'boolean' || !reason) {
+    return res.status(400).json({ error: 'Statut de bannissement ou motif invalide.' });
+  }
+  if (targetId === req.adminUserId) {
+    return res.status(400).json({ error: 'Tu ne peux pas bannir ton propre compte.' });
+  }
+
+  try {
+    await run('BEGIN IMMEDIATE');
+    const target = await get('SELECT id, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
+    if (!target) {
+      await run('ROLLBACK');
+      return res.status(404).json({ error: 'Compte introuvable.' });
+    }
+    if (target.is_admin) {
+      await run('ROLLBACK');
+      return res.status(400).json({ error: 'Un compte administrateur ne peut pas être banni ici.' });
+    }
+    if (Boolean(target.is_banned) === banned) {
+      await run('ROLLBACK');
+      return res.status(400).json({ error: banned ? 'Ce compte est déjà banni.' : 'Ce compte n’est pas banni.' });
+    }
+    await run('UPDATE users SET is_banned = ? WHERE id = ?', [banned ? 1 : 0, targetId]);
+    await run(`
+      INSERT INTO admin_audit (admin_user_id, target_user_id, action, reason)
+      VALUES (?, ?, ?, ?)
+    `, [req.adminUserId, targetId, banned ? 'ban' : 'unban', reason]);
+    await run('COMMIT');
+  } catch (error) {
+    await run('ROLLBACK').catch((rollbackError) => {
+      console.error('Annulation du changement de bannissement impossible :', rollbackError);
+    });
+    console.error('Erreur de modification du bannissement :', error);
+    return res.status(500).json({ error: 'Le changement de bannissement a échoué.' });
+  }
+
+  if (banned) {
+    for (const socket of io.sockets.sockets.values()) {
+      if (Number(socket.data.user?.id) === targetId) {
+        socket.disconnect(true);
+      }
+    }
+  }
+  return res.json({ ok: true, banned });
+});
+
+app.post('/api/admin/support/:id/start', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  const targetId = Number(req.params.id);
+  if (!Number.isSafeInteger(targetId) || targetId <= 0 || targetId === req.adminUserId) {
+    return res.status(400).json({ error: 'Compte cible invalide.' });
+  }
+  const target = await get('SELECT id, is_admin, is_banned FROM users WHERE id = ?', [targetId]);
+  if (!target) {
+    return res.status(404).json({ error: 'Compte introuvable.' });
+  }
+  if (target.is_admin || target.is_banned) {
+    return res.status(400).json({ error: 'La vue support est indisponible pour ce compte.' });
+  }
+  await run(`
+    INSERT INTO admin_audit (admin_user_id, target_user_id, action, reason)
+    VALUES (?, ?, 'support_start', 'Ouverture de la vue support temporaire')
+  `, [req.adminUserId, targetId]);
+  req.session.adminUserId = req.adminUserId;
+  req.session.supportOriginalUserId = req.session.userId;
+  req.session.userId = targetId;
+  res.json({ ok: true });
+}));
+
+app.post('/api/admin/support/end', requireSupportAdmin, handleAsync(async (req, res) => {
+  if (!req.session.supportOriginalUserId) {
+    return res.status(400).json({ error: 'Aucune vue support active.' });
+  }
+  await run(`
+    INSERT INTO admin_audit (admin_user_id, target_user_id, action, reason)
+    VALUES (?, ?, 'support_end', 'Fermeture de la vue support temporaire')
+  `, [req.adminUserId, req.session.userId]);
+  req.session.userId = req.session.adminUserId;
+  delete req.session.adminUserId;
+  delete req.session.supportOriginalUserId;
+  req.session.save((error) => {
+    if (error) {
+      console.error('Erreur de fermeture de la vue support :', error);
+      return res.status(500).json({ error: 'Impossible de revenir au compte administrateur.' });
+    }
+    res.json({ ok: true });
+  });
+}));
+
 app.get('/api/me', requireAuth, async (req, res) => {
   const user = await getUserById(req.session.userId);
+  const adminUserId = req.session.adminUserId || req.session.userId;
+  const admin = await get('SELECT is_admin FROM users WHERE id = ?', [adminUserId]);
   const stats = await get(`
     SELECT COUNT(*) AS gamesPlayed,
       SUM(CASE WHEN net > 0 THEN 1 ELSE 0 END) AS wins,
@@ -1522,6 +1825,8 @@ app.get('/api/me', requireAuth, async (req, res) => {
   `, [req.session.userId]);
   res.json({
     user,
+    isAdmin: Boolean(admin?.is_admin),
+    supportMode: Boolean(req.session.supportOriginalUserId),
     stats: {
       gamesPlayed: Number(stats.gamesPlayed || 0),
       wins: Number(stats.wins || 0),
@@ -1798,6 +2103,14 @@ app.post('/api/reset', requireAuth, async (req, res) => {
   await run('DELETE FROM game_history WHERE user_id = ?', [req.session.userId]);
   const updated = await getUserById(req.session.userId);
   res.json({ ok: true, user: updated });
+});
+
+app.use((error, req, res, next) => {
+  console.error('Erreur serveur API :', error);
+  if (res.headersSent) {
+    return next(error);
+  }
+  return res.status(500).json({ error: 'Une erreur serveur est survenue.' });
 });
 
 app.use((req, res) => {

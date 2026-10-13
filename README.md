@@ -13,6 +13,14 @@ npm start
 
 Ouvre `http://127.0.0.1:5500/`. Sur une base neuve en développement, le compte de démonstration est `admin` / `admin123`. Ne réutilise pas ce mot de passe en production.
 
+## Administration des comptes
+
+Connecte-toi avec un compte administrateur pour afficher l’onglet **Administration**. Il permet de rechercher les comptes, consulter leur solde et leur historique, ajouter ou retirer des jetons, bannir ou débannir un compte et consulter le journal des actions.
+
+La **vue support** ouvre temporairement l’application comme le compte sélectionné, sans révéler ni modifier son mot de passe. Un bandeau reste visible pendant cette vue et son ouverture comme sa fermeture sont journalisées.
+
+Au démarrage, le serveur ajoute automatiquement les colonnes de rôle et de bannissement aux bases existantes. Sur une base locale neuve, le compte de démonstration `admin` reçoit le rôle administrateur. En production, une base neuve crée le compte indiqué par `ADMIN_USERNAME` et `ADMIN_PASSWORD`. Pour donner le rôle à un compte déjà présent en production, configure `ADMIN_USERNAME` avec son pseudo exact et redémarre le serveur. `ADMIN_PASSWORD` ne réinitialise pas le mot de passe d’un compte existant.
+
 ## Lancement avec Docker
 
 Prérequis : Docker Desktop sur Windows/macOS ou Docker Engine avec le plugin Compose sur Linux. Copie `.env.example` vers `.env`, puis remplace les valeurs par tes propres secrets. Génère `SESSION_SECRET` avec `openssl rand -hex 32`.
@@ -79,7 +87,7 @@ sudo chown root:root /etc/tcg-casino.env
 sudo chmod 600 /etc/tcg-casino.env
 ```
 
-Les identifiants `ADMIN_USERNAME` et `ADMIN_PASSWORD` servent uniquement à créer le compte initial si la base est vide. Si tu copies ta base locale vers `/var/lib/tcg-casino/database.sqlite`, conserve le compte et les données déjà présents. Arrête le serveur avant de copier la base, puis donne-la à l'utilisateur `tcgcasino`.
+Les identifiants `ADMIN_USERNAME` et `ADMIN_PASSWORD` créent le compte initial si la base est vide. Sur une base existante, `ADMIN_USERNAME` attribue le rôle administrateur au compte portant exactement ce pseudo; `ADMIN_PASSWORD` ne modifie pas son mot de passe. Si tu copies ta base locale vers `/var/lib/tcg-casino/database.sqlite`, conserve le compte et les données déjà présents. Arrête le serveur avant de copier la base, puis donne-la à l'utilisateur `tcgcasino`.
 
 ### Créer le service systemd
 

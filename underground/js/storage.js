@@ -105,7 +105,8 @@ async function loadAccountData() {
     throw new Error("Chargement des données du compte impossible.");
   }
 
-  const { user, stats } = await accountResponse.json();
+  const accountResponseData = await accountResponse.json();
+  const { user, stats } = accountResponseData;
   const { history } = await historyResponse.json();
   const player = {
     ...getDefaultPlayer(),
@@ -122,7 +123,11 @@ async function loadAccountData() {
     }
   };
 
-  accountUser = user;
+  accountUser = {
+    ...user,
+    isAdmin: Boolean(accountResponseData.isAdmin),
+    supportMode: Boolean(accountResponseData.supportMode)
+  };
   syncedAvatar = player.avatar;
   localStorage.setItem(STORAGE_KEYS.player, JSON.stringify(player));
   saveHistory(history.map((entry) => ({
