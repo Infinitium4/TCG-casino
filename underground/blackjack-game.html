@@ -8,8 +8,8 @@
   </head>
   <body>
     <div class="page-noise"></div>
-    <div class="app-shell poker-table-page">
-      <header class="poker-game-header panel">
+    <div class="app-shell blackjack-game-shell">
+      <header class="blackjack-game-header panel">
         <div class="brand-block">
           <div class="brand-mark">U</div>
           <div class="brand-copy">
@@ -17,37 +17,31 @@
             <div class="brand-tag">BLACKJACK TABLE</div>
           </div>
         </div>
-        <button id="goLobbyBtn" class="secondary-button" type="button">Quitter la table</button>
+        <button id="goLobbyBtn" class="secondary-button" type="button">Retour au casino</button>
       </header>
 
-      <div id="tableBanner" class="status-box" style="margin: 1rem 0;">Chargement de la table...</div>
-
-      <main class="poker-game-layout">
-        <section class="poker-table-surface panel" aria-label="Table de blackjack">
-          <div id="blackjackTableSeats" class="poker-table-seats" aria-label="Joueurs autour de la table"></div>
-          <div class="poker-table-center blackjack-table-center">
-            <div id="dealerStatus" class="pot-badge">Croupier</div>
+      <main class="blackjack-game-main">
+        <section class="blackjack-table-felt" aria-label="Table de blackjack">
+          <div class="blackjack-table-mark" aria-hidden="true">21</div>
+          <div id="tableBanner" class="blackjack-table-banner">Chargement de la table...</div>
+          <div class="blackjack-dealer-area">
+            <div id="dealerStatus" class="blackjack-role-label">Croupier</div>
             <div id="dealerCards" class="board-cards" aria-label="Main du croupier"></div>
             <strong id="dealerTotal" class="blackjack-total">Score : ?</strong>
           </div>
+          <div id="blackjackTableSeats" class="blackjack-seat-row" aria-label="Mains des joueurs"></div>
         </section>
 
-        <aside class="poker-side-panel">
-          <div class="panel poker-side-block">
-            <h3>Ma main</h3>
-            <div id="myHand" class="owned-cards"></div>
-            <div id="myHandTotal" class="blackjack-total"></div>
+        <section class="blackjack-table-footer">
+          <div class="blackjack-action-panel panel">
+            <div id="turnInfo" class="blackjack-turn-info" aria-live="polite">Chargement...</div>
+            <div id="actionControls" class="blackjack-action-controls"></div>
           </div>
-          <div class="panel poker-side-block">
-            <h3>Actions</h3>
-            <div id="turnInfo" class="status-box subtle" aria-live="polite">Chargement...</div>
-            <div id="actionControls" class="action-controls"></div>
-          </div>
-          <div class="panel poker-side-block">
-            <h3>Historique</h3>
+          <details class="blackjack-history panel">
+            <summary>Historique de la manche</summary>
             <div id="historyLog" class="history-list compact"></div>
-          </div>
-        </aside>
+          </details>
+        </section>
       </main>
     </div>
 

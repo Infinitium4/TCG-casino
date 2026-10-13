@@ -1133,7 +1133,7 @@ async function persistBlackjackTable(table) {
   table.recordedRound = table.roundNumber;
 }
 
-function tableToPublicState(table, viewerId = null) {
+function tableToPublicState(table, viewerId = null, revealBlackjackHands = false) {
   const viewer = viewerId ? Number(viewerId) : null;
 
   return {
@@ -1152,11 +1152,15 @@ function tableToPublicState(table, viewerId = null) {
         chips: player.chips,
         connected: player.connected,
         bet: player.bet,
+<<<<<<< Updated upstream
 <<<<<<< HEAD
         hand: isViewer || revealHand ? [...(player.hand || [])] : [],
         isWinner: (table.showdownWinnerIds || []).includes(Number(player.id)),
 =======
         hand: isViewer || (table.type === 'blackjack' && table.round === 'finished') ? [...(player.hand || [])] : [],
+=======
+        hand: isViewer || (table.type === 'blackjack' && revealBlackjackHands) ? [...(player.hand || [])] : [],
+>>>>>>> Stashed changes
         handCount: (player.hand || []).length,
         finished: !!player.finished,
         outcome: player.outcome || null,
@@ -1587,7 +1591,7 @@ app.get('/api/blackjack/tables/:id', requireAuth, (req, res) => {
   if (!table.players.some((player) => Number(player.id) === Number(req.session.userId))) {
     return res.status(403).json({ error: 'Tu n’as pas accès à cette table.' });
   }
-  res.json({ table: tableToPublicState(table, req.session.userId) });
+  res.json({ table: tableToPublicState(table, req.session.userId, true) });
 });
 
 app.get('/api/poker/tables', requireAuth, (req, res) => {
@@ -1643,7 +1647,7 @@ app.post('/api/blackjack/tables/:id/join', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Impossible de rejoindre cette table.' });
   }
   io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
-  res.json({ table: tableToPublicState(table, req.session.userId) });
+  res.json({ table: tableToPublicState(table, req.session.userId, true) });
 });
 
 app.post('/api/blackjack/tables/:id/start', requireAuth, async (req, res) => {
@@ -1670,7 +1674,7 @@ app.post('/api/blackjack/tables/:id/start', requireAuth, async (req, res) => {
 
   await persistBlackjackTable(table);
   io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
-  res.json({ table: tableToPublicState(table, req.session.userId) });
+  res.json({ table: tableToPublicState(table, req.session.userId, true) });
 });
 
 app.post('/api/blackjack/tables/:id/action', requireAuth, async (req, res) => {
@@ -1688,7 +1692,7 @@ app.post('/api/blackjack/tables/:id/action', requireAuth, async (req, res) => {
 
   await persistBlackjackTable(table);
   io.to(`blackjack:${table.id}`).emit('blackjack:table:update', tableToPublicState(table));
-  res.json({ table: tableToPublicState(table, req.session.userId) });
+  res.json({ table: tableToPublicState(table, req.session.userId, true) });
 });
 
 app.post('/api/blackjack/tables/:id/leave', requireAuth, (req, res) => {

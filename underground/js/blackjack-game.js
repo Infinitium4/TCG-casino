@@ -27,14 +27,6 @@ const blackjackGame = (() => {
     return total;
   }
 
-  function getSeatPosition(count, index) {
-    const angle = ((Math.PI * 2) / Math.max(count, 1)) * index - Math.PI / 2;
-    return {
-      x: Math.min(92, Math.max(8, 50 + Math.cos(angle) * 34)),
-      y: Math.min(88, Math.max(12, 50 + Math.sin(angle) * 27))
-    };
-  }
-
   function dealDelay(order) {
     return `${Math.min(Math.max(order, 0) * 105, 1575)}ms`;
   }
@@ -128,28 +120,26 @@ const blackjackGame = (() => {
     table.players.forEach((player, index) => {
       const isMe = Number(player.id) === currentUserId;
       const isTurn = table.status === 'in-progress' && Number(table.currentTurn) === index;
-      const position = getSeatPosition(table.players.length, index);
       const detail = player.outcome
         ? ({ blackjack: 'Blackjack', win: 'Gagné', push: 'Égalité', loss: 'Perdu' }[player.outcome] || '')
-        : isTurn ? 'À jouer' : player.finished ? 'Terminé' : 'En attente';
+        : isTurn ? 'À toi de jouer' : player.finished ? 'Terminé' : table.status === 'in-progress' ? 'En attente' : 'Prêt';
       let seat = existingSeats.get(String(player.id));
       if (!seat || !seat.isConnected) {
         seat = document.createElement('div');
-        seat.className = 'poker-seat';
+        seat.className = 'blackjack-player-seat';
         seat.dataset.playerId = String(player.id);
-        seat.innerHTML = '<div class="seat-badge"></div><div class="seat-player"><div class="seat-name"></div><div class="seat-chip"></div><div class="seat-bet"></div><div class="seat-bet"></div></div><div class="seat-cards"></div>';
+        seat.innerHTML = '<div class="blackjack-player-heading"><span class="blackjack-player-name"></span><span class="blackjack-player-status"></span></div><div class="seat-cards blackjack-seat-cards"></div><div class="blackjack-player-footer"><span class="blackjack-player-total"></span><span class="blackjack-player-balance"></span></div>';
         seatsNode.append(seat);
       }
 
-      seat.style.left = `${position.x}%`;
-      seat.style.top = `${position.y}%`;
-      const [badge, name, chips, bet, status] = seat.querySelectorAll('.seat-badge, .seat-name, .seat-chip, .seat-bet');
-      badge.textContent = isTurn ? 'À jouer' : isMe ? 'Toi' : '';
-      badge.classList.toggle('active', isTurn);
-      name.textContent = player.username || 'Joueur';
-      chips.textContent = `${formatChips(player.chips || 0)} jetons`;
-      bet.textContent = `Mise : ${formatChips(player.bet || 0)}`;
-      status.textContent = detail;
+      seat.classList.toggle('is-turn', isTurn);
+      seat.classList.toggle('is-current-player', isMe);
+      seat.querySelector('.blackjack-player-name').textContent = player.username || 'Joueur';
+      seat.querySelector('.blackjack-player-status').textContent = detail;
+      seat.querySelector('.blackjack-player-total').textContent = player.hand?.length
+        ? `Score ${calculateHandValue(player.hand)} · Mise ${formatChips(player.bet || 0)}`
+        : `Mise ${formatChips(player.bet || 0)}`;
+      seat.querySelector('.blackjack-player-balance').textContent = `${formatChips(player.chips || 0)} jetons`;
 
       const cardCount = player.hand?.length || player.handCount || 0;
       const cards = player.hand?.length ? player.hand : Array(cardCount).fill(null);
@@ -159,29 +149,6 @@ const blackjackGame = (() => {
         return 0;
       });
     });
-  }
-
-  function renderMyHand(table) {
-    const player = getCurrentPlayer(table);
-    const handNode = document.getElementById('myHand');
-    const totalNode = document.getElementById('myHandTotal');
-    if (!player?.hand?.length) {
-      if (handNode.dataset.round !== String(table.roundNumber || 0)) {
-        handNode.replaceChildren();
-        handNode.dataset.round = String(table.roundNumber || 0);
-      }
-      if (!handNode.children.length) {
-        handNode.innerHTML = '<div class="status-box subtle">Ta main sera distribuée au début de la manche.</div>';
-      }
-      totalNode.textContent = '';
-      return;
-    }
-    syncCardRow(handNode, player.hand, table.roundNumber, (index) => {
-      if (index === 0) return table.players.findIndex((entry) => Number(entry.id) === getCurrentUserId()) + 1;
-      if (index === 1) return table.players.length + table.players.findIndex((entry) => Number(entry.id) === getCurrentUserId()) + 2;
-      return 0;
-    });
-    totalNode.textContent = `Score : ${calculateHandValue(player.hand)}`;
   }
 
   function renderHistory(table) {
@@ -259,7 +226,6 @@ const blackjackGame = (() => {
     document.getElementById('tableBanner').textContent = `${sanitizeText(table.name, 30)} • Manche ${table.roundNumber || 0} • Mise ${formatChips(table.betAmount || 0)} jetons`;
     renderDealer(table);
     renderSeats(table);
-    renderMyHand(table);
     renderHistory(table);
     renderActions(table);
   }

@@ -467,6 +467,20 @@ test('blackjack tables debit each player and deal private hands', () => {
   assert.equal(table.betAmount, 25);
 });
 
+test('blackjack hands are visible to table players but hidden in public state', () => {
+  const table = createBlackjackTable('test-blackjack-visible-hands');
+  table.addPlayer({ id: 1, username: 'Alice', chips: 500 });
+  table.addPlayer({ id: 2, username: 'Bob', chips: 500 });
+  table.startRound(25);
+
+  const publicView = tableToPublicState(table);
+  const participantView = tableToPublicState(table, 1, true);
+  assert.equal(publicView.players[0].hand.length, 0);
+  assert.equal(publicView.players[1].hand.length, 0);
+  assert.equal(participantView.players[0].hand.length, 2);
+  assert.equal(participantView.players[1].hand.length, 2);
+});
+
 test('blackjack turns progress in order and settle each player against the dealer', () => {
   const table = createBlackjackTable('test-blackjack-turn-order');
   table.addPlayer({ id: 1, username: 'Alice', chips: 100 });
