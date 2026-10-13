@@ -92,8 +92,13 @@
           <div class="panel table-panel roulette-layout">
             <div class="roulette-stage">
               <div id="rouletteWheel" class="roulette-wheel" aria-live="polite">
+                <div id="rouletteRotor" class="roulette-rotor">
+                  <div id="rouletteNumbers" class="roulette-numbers"></div>
+                </div>
                 <div class="wheel-center"></div>
-                <div id="rouletteBall" class="roulette-ball"></div>
+                <div id="rouletteBallTrack" class="roulette-ball-track">
+                  <div id="rouletteBall" class="roulette-ball"></div>
+                </div>
               </div>
             </div>
 
@@ -102,24 +107,13 @@
                 <h2>Table de roulette</h2>
               </div>
 
-              <div id="rouletteBetTypes" class="bet-types" aria-label="Types de paris">
-                <button class="bet-choice active" type="button" data-bet="red">Rouge</button>
-                <button class="bet-choice" type="button" data-bet="black">Noir</button>
-                <button class="bet-choice" type="button" data-bet="even">Pair</button>
-                <button class="bet-choice" type="button" data-bet="odd">Impair</button>
-                <button class="bet-choice" type="button" data-bet="manque">Manque</button>
-                <button class="bet-choice" type="button" data-bet="passe">Passe</button>
-                <button class="bet-choice" type="button" data-bet="exact">Numéro exact</button>
-              </div>
-
               <div class="stake-row">
-                <label for="rouletteExactNumber">Numéro exact</label>
-                <input id="rouletteExactNumber" type="number" min="0" max="36" value="7" />
-              </div>
-
-              <div class="stake-row">
-                <label for="rouletteCustomStake">Mise</label>
+                <label for="rouletteCustomStake">Montant de la mise</label>
                 <input id="rouletteCustomStake" type="number" min="1" step="5" value="10" />
+              </div>
+
+              <div id="rouletteHelp" class="status-box subtle">
+                Cliquez sur un numéro de la table pour placer votre pari. Les numéros rouges, noirs et verts sont directement visibles.
               </div>
 
               <div class="chip-row">
@@ -130,13 +124,84 @@
                 <button class="chip-option" type="button" data-stake="250">250</button>
               </div>
 
+              <input id="rouletteExactNumber" type="text" value="7" hidden />
+
+              <div class="roulette-board-wrap">
+                <div class="roulette-board" aria-label="Table de roulette américaine">
+                  <div class="board-top">
+                    <button class="board-cell board-green" type="button" data-board-number="0">0</button>
+                    <button class="board-cell board-green" type="button" data-board-number="00">00</button>
+                  </div>
+
+                  <div class="board-grid">
+                    <div class="board-side board-side-left">
+                      <div class="board-zone-label">1<small>er</small> Douzaine</div>
+                      <div class="board-zone-label">2<small>e</small> Douzaine</div>
+                      <div class="board-zone-label">3<small>e</small> Douzaine</div>
+                    </div>
+
+                    <div class="board-numbers">
+                      <div class="board-row">
+                        <button class="board-cell board-red" type="button" data-board-number="3">3</button>
+                        <button class="board-cell board-black" type="button" data-board-number="6">6</button>
+                        <button class="board-cell board-red" type="button" data-board-number="9">9</button>
+                        <button class="board-cell board-black" type="button" data-board-number="12">12</button>
+                        <button class="board-cell board-red" type="button" data-board-number="15">15</button>
+                        <button class="board-cell board-black" type="button" data-board-number="18">18</button>
+                        <button class="board-cell board-red" type="button" data-board-number="21">21</button>
+                        <button class="board-cell board-black" type="button" data-board-number="24">24</button>
+                        <button class="board-cell board-red" type="button" data-board-number="27">27</button>
+                        <button class="board-cell board-black" type="button" data-board-number="30">30</button>
+                        <button class="board-cell board-red" type="button" data-board-number="33">33</button>
+                        <button class="board-cell board-black" type="button" data-board-number="36">36</button>
+                      </div>
+                      <div class="board-row">
+                        <button class="board-cell board-black" type="button" data-board-number="2">2</button>
+                        <button class="board-cell board-red" type="button" data-board-number="5">5</button>
+                        <button class="board-cell board-black" type="button" data-board-number="8">8</button>
+                        <button class="board-cell board-red" type="button" data-board-number="11">11</button>
+                        <button class="board-cell board-black" type="button" data-board-number="14">14</button>
+                        <button class="board-cell board-red" type="button" data-board-number="17">17</button>
+                        <button class="board-cell board-black" type="button" data-board-number="20">20</button>
+                        <button class="board-cell board-red" type="button" data-board-number="23">23</button>
+                        <button class="board-cell board-black" type="button" data-board-number="26">26</button>
+                        <button class="board-cell board-red" type="button" data-board-number="29">29</button>
+                        <button class="board-cell board-black" type="button" data-board-number="32">32</button>
+                        <button class="board-cell board-red" type="button" data-board-number="35">35</button>
+                      </div>
+                      <div class="board-row">
+                        <button class="board-cell board-red" type="button" data-board-number="1">1</button>
+                        <button class="board-cell board-black" type="button" data-board-number="4">4</button>
+                        <button class="board-cell board-red" type="button" data-board-number="7">7</button>
+                        <button class="board-cell board-black" type="button" data-board-number="10">10</button>
+                        <button class="board-cell board-red" type="button" data-board-number="13">13</button>
+                        <button class="board-cell board-black" type="button" data-board-number="16">16</button>
+                        <button class="board-cell board-red" type="button" data-board-number="19">19</button>
+                        <button class="board-cell board-black" type="button" data-board-number="22">22</button>
+                        <button class="board-cell board-red" type="button" data-board-number="25">25</button>
+                        <button class="board-cell board-black" type="button" data-board-number="28">28</button>
+                        <button class="board-cell board-red" type="button" data-board-number="31">31</button>
+                        <button class="board-cell board-black" type="button" data-board-number="34">34</button>
+                      </div>
+                    </div>
+
+                  </div>
+                  <div class="board-side board-side-right">
+                    <button class="board-zone-label board-zone-even bet-choice" type="button" data-bet="even">Pair</button>
+                    <button class="board-zone-label board-zone-red bet-choice" type="button" data-bet="red">Rouge</button>
+                    <button class="board-zone-label board-zone-black bet-choice" type="button" data-bet="black">Noir</button>
+                    <button class="board-zone-label board-zone-odd bet-choice" type="button" data-bet="odd">Impair</button>
+                  </div>
+                </div>
+              </div>
+
               <div class="action-row">
                 <button id="roulettePlaceBet" class="primary-button" type="button">Confirmer le pari</button>
                 <button id="rouletteSpinBtn" class="gold-button" type="button">Lancer la roulette</button>
               </div>
 
-              <div id="rouletteStatus" class="status-box">Aucun pari actif.</div>
-              <div id="roulettePayout" class="status-box subtle">Dernier résultat : aucun.</div>
+              <div id="rouletteStatus" class="status-box">Aucun pari actif. Choisis une couleur, une zone ou un numéro exact.</div>
+              <div id="roulettePayout" class="status-box subtle">Dernier résultat : aucun. Les chances les plus simples sont rouge/noir, pair/impair ou 1 à 18 / 19 à 36.</div>
 
               <div class="history-panel">
                 <div class="section-heading compact">
