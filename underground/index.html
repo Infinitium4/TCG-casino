@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="css/plinko.css" />
     <link rel="stylesheet" href="css/dice.css" />
+    <link rel="stylesheet" href="css/tower.css" />
     <link rel="stylesheet" href="css/horses.css" />
     <link rel="stylesheet" href="/css/bunker.css" />
   </head>
@@ -54,6 +55,7 @@
         <button class="nav-item" data-view="crash" type="button">Crash</button>
         <button class="nav-item" data-view="plinko" type="button">PLINKO</button>
         <button class="nav-item" data-view="dice" type="button">DICE</button>
+        <button class="nav-item" data-view="tower" type="button">TOWER RUSH</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
         <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
@@ -543,6 +545,33 @@
           <section class="panel dice-history-panel"><div class="section-heading compact"><h3>Tes derniers lancers</h3></div><div class="dice-table-wrap"><table class="dice-history-table"><thead><tr><th>Date</th><th>Mise</th><th>Mode / Seuil</th><th>Résultat</th><th>Multiplicateur</th><th>Gain net</th></tr></thead><tbody id="diceHistory"></tbody></table></div><p id="diceEmpty">Ton premier lancer t’attend.</p></section>
         </section>
 
+        <section id="towerView" class="view" aria-label="Tower Rush">
+          <div class="section-heading"><div><p class="eyebrow">CONSTRUIS. PRENDS LE RISQUE. ENCAISSE.</p><h1>TOWER RUSH</h1></div><span class="status-box subtle">8 étages · jusqu’à 3,65x</span></div>
+          <div class="tower-layout">
+            <aside class="panel tower-controls">
+              <p class="eyebrow">TON SOLDE</p><strong id="towerBalance" class="tower-balance">—</strong><small>jetons virtuels</small>
+              <label class="input-group" for="towerStake">Mise<input id="towerStake" type="number" min="1" max="1000000" step="1" value="100" inputmode="numeric" /></label>
+              <div class="tower-adjust"><button class="secondary-button" type="button" data-tower-adjust="0.5">½</button><button class="secondary-button" type="button" data-tower-adjust="2">×2</button><button class="secondary-button" type="button" data-tower-adjust="max">MAX</button></div>
+              <button id="towerRetry" class="secondary-button" type="button" hidden>R?CUP?RER MON ACTION</button>
+              <button id="towerStart" class="gold-button" type="button" disabled>DÉMARRER</button>
+              <button id="towerPlace" class="primary-button" type="button" disabled>PLACER · ESPACE</button>
+              <button id="towerCashout" class="gold-button" type="button" disabled>ENCAISSER</button>
+              <p id="towerFeedback" class="tower-feedback" role="status" aria-live="polite">Chargement de la ville…</p>
+              <p id="towerExpiry" class="tower-note"></p>
+              <small>Place au bon moment. Les morceaux qui dépassent tombent. Après un étage réussi, tu peux encaisser.</small>
+              <small>Le serveur évalue la position à la réception du clic. Une connexion rapide aide à bien viser.</small>
+            </aside>
+            <div class="panel tower-stage">
+              <div class="tower-hud"><div><span>ÉTAGES</span><strong id="towerFloor">0 / 8</strong></div><div><span>MULTIPLICATEUR</span><strong id="towerMultiplier">1,00x</strong></div><div><span>PROCHAIN</span><strong id="towerNext">1,08x</strong></div></div>
+              <canvas id="towerCanvas" width="600" height="560" aria-label="Tour en construction, plateforme mobile et ville de nuit">Utilise PLACER ou Espace pour construire, puis ENCAISSER pour récupérer ton gain.</canvas>
+              <div id="towerResult" class="tower-result" hidden><p class="eyebrow" id="towerResultTitle"></p><strong id="towerResultValue"></strong><span id="towerResultDetail"></span></div>
+              <div class="tower-stage-footer"><span>Placement parfait : bonus de score</span><strong id="towerScore">0 pts</strong></div>
+            </div>
+          </div>
+          <section class="panel tower-ladder-panel"><div class="section-heading compact"><h3>L’échelle des gains</h3><small>Gain total = mise × multiplicateur</small></div><div id="towerLadder" class="tower-ladder"></div></section>
+          <section class="panel tower-history-panel"><div class="section-heading compact"><h3>Tes dernières tours</h3></div><div id="towerHistory" class="tower-history"></div></section>
+        </section>
+
         <section id="leaderboardView" class="view" aria-label="Classement">
           <div class="panel">
             <div class="section-heading">
@@ -705,6 +734,7 @@
                   <option value="crash">Crash</option>
                   <option value="plinko">Plinko</option>
                   <option value="dice">Dice</option>
+                  <option value="tower">Tower Rush</option>
                 </select>
               </label>
 
@@ -734,6 +764,8 @@
     <script src="js/crash.js"></script>
     <script src="js/plinko.js"></script>
     <script src="js/dice.js"></script>
+    <script src="js/tower-motion.js"></script>
+    <script src="js/tower.js"></script>
     <script src="js/blackjack.js"></script>
     <script src="js/poker.js"></script>
     <script src="js/slots.js"></script>

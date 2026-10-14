@@ -16,6 +16,7 @@ services:
       SECOND_ADMIN_PASSWORD: "${SECOND_ADMIN_PASSWORD:?Set SECOND_ADMIN_PASSWORD in .env}"
       BANK_USERNAME: "${BANK_USERNAME:-casino-bank}"
       CRASH_ENABLED: "${CRASH_ENABLED:-true}"
+      TOWER_MULTIPLIERS: "${TOWER_MULTIPLIERS:-[1.08,1.22,1.40,1.64,1.95,2.35,2.90,3.65]}"
     ports:
       - "5500:5500"
     volumes:

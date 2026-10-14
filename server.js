@@ -12,6 +12,7 @@
   const { initializePlinkoSchema, registerPlinkoRoutes } = require('./plinko');
   const { initializeDiceSchema, registerDiceRoutes } = require('./dice');
   const { initializeHorseRacingSchema, registerHorseRacingRoutes } = require('./horse-racing');
+  const { initializeTowerSchema, registerTowerRoutes } = require('./tower');
 
   const app = express();
   const server = http.createServer(app);
@@ -29,6 +30,7 @@
   const CRASH_MAX_BET = 1_000_000;
   const MAX_CHIPS = Number.MAX_SAFE_INTEGER;
   const GAME_DEFAULTS = {
+    tower: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     horses: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     plinko: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     dice: { enabled: true, minBet: 1, maxBet: 1_000_000 },
@@ -1385,10 +1387,17 @@
     ));
   }
 
+  async function hasActiveTowerGame(userId) {
+    return !!(await get("SELECT id FROM tower_games WHERE user_id = ? AND status IN ('PLAYING', 'PLACING')", [userId]));
+  }
+  async function hasOtherActiveBet(userId) {
+    return await hasActiveCrashBet(userId) || await hasActiveTowerGame(userId);
+  }
+
   async function startPokerRound(table) {
     return withDatabaseTransaction(async () => {
       for (const player of table.players) {
-        if (await hasActiveCrashBet(player.id)) return false;
+        if (await hasOtherActiveBet(player.id)) return false;
       }
       return table.startRound();
     });
@@ -1565,7 +1574,7 @@
     }
 
     const result = await withDatabaseTransaction(async () => {
-      if (isUserInActiveTable(userId)) {
+      if (isUserInActiveTable(userId) || await hasActiveTowerGame(userId)) {
         throw crashActionError(409, 'Termine ta partie en cours avant de miser au Crash.');
       }
       const existing = await get(`
@@ -2096,6 +2105,7 @@
     }
     await initializePlinkoSchema(run);
     await initializeDiceSchema(run);
+    await initializeTowerSchema(run);
     await initializeHorseRacingSchema(run);
     await run(`
       INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
@@ -2306,6 +2316,7 @@
         if (await isBettingPaused()) {
           return res.status(503).json({ error: 'Les mises sont temporairement suspendues.' });
         }
+        if (game !== 'tower' && await hasActiveTowerGame(req.session.userId)) return res.status(409).json({ error: 'Termine ou encaisse ta tour avant de jouer ailleurs.' });
         next();
       } catch (error) {
         next(error);
@@ -2833,7 +2844,7 @@
     const enabled = req.body?.enabled;
     if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'Choisis activer ou désactiver.' });
     const outcome = await withDatabaseTransaction(async () => {
-      if (isUserInActiveTable(req.adminUserId) || await hasActiveCrashBet(req.adminUserId)) return false;
+      if (isUserInActiveTable(req.adminUserId) || await hasOtherActiveBet(req.adminUserId)) return false;
       const user = await get('SELECT chips, finite_chips, infinite_money, username FROM users WHERE id = ?', [req.adminUserId]);
       if (Boolean(user.infinite_money) !== enabled) {
         await run('UPDATE users SET infinite_money = ?, finite_chips = ?, chips = ? WHERE id = ?',
@@ -2854,7 +2865,7 @@
       const target = await get('SELECT id, username, is_bank FROM users WHERE id = ?', [targetId]);
       if (!target) return { status: 404, error: 'Compte introuvable.' };
       if (target.is_bank) return { status: 403, error: 'Le compte banque ne peut pas être réinitialisé.' };
-      if (isUserInActiveTable(targetId) || await hasActiveCrashBet(targetId)) return { status: 409, error: 'Ce compte joue une partie. Réessaie à la fin de la manche.' };
+      if (isUserInActiveTable(targetId) || await hasOtherActiveBet(targetId)) return { status: 409, error: 'Ce compte joue une partie. Réessaie à la fin de la manche.' };
       await run("UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 1000, avatar = '🎲', avatar_image = NULL, profile_design = '{}' WHERE id = ?", [targetId]);
       await run('DELETE FROM game_history WHERE user_id = ?', [targetId]);
       await run('DELETE FROM crash_bets WHERE user_id = ?', [targetId]);
@@ -3049,7 +3060,7 @@
           "SELECT id FROM crash_bets WHERE user_id = ? AND status = 'active' LIMIT 1",
           [targetId]
         );
-        if (activeCrashBetInTransaction) {
+        if (activeCrashBetInTransaction || await hasActiveTowerGame(targetId)) {
           return { status: 409, error: 'Ce compte participe à une manche Crash en cours. Réessaie après le crash.' };
         }
         await run(`
@@ -3257,10 +3268,13 @@
   }));
 
   registerPlinkoRoutes({ app, io, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
-    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement });
+    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
-    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement });
+    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerHorseRacingRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
+    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement, databaseReady });
+
+  registerTowerRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement, databaseReady });
 
   app.get('/api/history', requireAuth, async (req, res) => {
@@ -3408,8 +3422,8 @@
     try {
       start = await withDatabaseTransaction(async () => {
         for (const player of table.players) {
-          if (await hasActiveCrashBet(player.id)) {
-            return { status: 409, error: 'Tous les joueurs doivent terminer leur mise Crash avant de jouer au blackjack.' };
+          if (await hasOtherActiveBet(player.id)) {
+            return { status: 409, error: 'Tous les joueurs doivent terminer leur partie en cours avant de jouer au blackjack.' };
           }
           const user = await getUserById(player.id);
           if (!user) return { status: 404, error: 'Un joueur de la table est introuvable.' };
@@ -3597,6 +3611,7 @@
 
     try {
       const outcome = await withDatabaseTransaction(async () => {
+        if (await hasActiveTowerGame(req.session.userId)) return { status: 409, error: 'Termine ou encaisse ta tour avant de jouer ailleurs.' };
         const user = await get('SELECT id, username, chips FROM users WHERE id = ?', [req.session.userId]);
         if (!user) return { status: 404, error: 'Utilisateur introuvable.' };
         if (normalizedBet > Number(user.chips)) {
@@ -3629,7 +3644,7 @@
         "SELECT id FROM crash_bets WHERE user_id = ? AND status = 'active' LIMIT 1",
         [req.session.userId]
       );
-      if (activeCrashBet) return false;
+      if (activeCrashBet || await hasActiveTowerGame(req.session.userId)) return false;
       await run('UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 1000, avatar = ? WHERE id = ?', ['🎲', req.session.userId]);
       await run('DELETE FROM game_history WHERE user_id = ?', [req.session.userId]);
       return true;

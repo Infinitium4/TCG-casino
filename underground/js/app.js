@@ -29,6 +29,7 @@ async function initializeApp() {
   await crashModule.initialize();
   plinkoModule.initialize();
   diceModule.initialize();
+  towerModule.initialize();
   horsesModule.initialize();
   bindNavigation();
   bindGlobalButtons();
@@ -118,6 +119,7 @@ function showView(viewName) {
   crashModule.setActive(viewName === "crash");
   plinkoModule.setActive(viewName === "plinko");
   diceModule.setActive(viewName === "dice");
+  towerModule.setActive(viewName === "tower");
   horsesModule.setActive(viewName === "horses");
 }
 
@@ -245,6 +247,7 @@ function renderHomeView() {
     { name: "Courses hippiques", icon: "🏇", description: "Cinq champions, une ligne d’arrivée. Choisis ton cheval et vise un gain ×4.", action: "ENTRER À L’HIPPODROME", view: "horses" },
     { name: "Plinko", icon: "◉", description: "16 rebonds. Une case. Jusqu’à 110 fois ta mise.", action: "LANCER UNE BILLE", view: "plinko" },
     { name: "Dice", icon: "⚄", description: "Choisis ton seuil. Roll Under ou Roll Over, à toi de décider.", action: "LANCER LES DÉS", view: "dice" },
+    { name: "Tower Rush", icon: "▥", description: "Aligne les étages et encaisse avant la chute.", action: "CONSTRUIRE MA TOUR", view: "tower" },
     {
       name: "Roulette",
       icon: "🎰",

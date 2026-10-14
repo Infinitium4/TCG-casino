@@ -199,7 +199,7 @@ test('main page loads every app module and has unique element IDs', () => {
   const html = fs.readFileSync(path.join(__dirname, '../underground/index.html'), 'utf8');
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
   assert.equal(ids.length, new Set(ids).size);
-  for (const name of ['roulette', 'crash', 'blackjack', 'poker', 'slots', 'admin', 'plinko', 'dice']) {
+  for (const name of ['roulette', 'crash', 'blackjack', 'poker', 'slots', 'admin', 'plinko', 'dice', 'tower']) {
     assert.ok(html.includes(`src="js/${name}.js"`), `missing ${name} module`);
   }
   for (const file of ['index.html', 'js/roulette.js', 'css/style.css']) {
