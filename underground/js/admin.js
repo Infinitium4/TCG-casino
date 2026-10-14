@@ -182,7 +182,7 @@ const adminModule = (() => {
         : 'Les mises sont ouvertes.';
       document.getElementById('adminRootPanel').hidden = !state.isPrimaryAdmin;
       if (!state.isPrimaryAdmin) return;
-      const labels = { roulette: 'Roulette', blackjack: 'Blackjack', poker: 'Poker', slots: 'Machine à sous', crash: 'Crash', crs: 'CRS VS Manifestants' };
+      const labels = { roulette: 'Roulette', blackjack: 'Blackjack', poker: 'Poker', slots: 'Machine à sous', crash: 'Crash' };
       container.replaceChildren(...payload.games.map((game) => {
         const row = element('div', 'admin-game-setting');
         row.append(element('strong', '', labels[game.game] || game.game));
@@ -226,7 +226,7 @@ const adminModule = (() => {
           window.location.reload();
         });
         row.append(enabledLabel, maintenanceLabel);
-        if (game.game !== 'crs') row.append(element('label', '', 'Min'), minBet, element('label', '', 'Max'), maxBet);
+        row.append(element('label', '', 'Min'), minBet, element('label', '', 'Max'), maxBet);
         row.append(save);
         return row;
       }));

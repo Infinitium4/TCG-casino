@@ -17,7 +17,7 @@ async function getFreePort() {
   return port;
 }
 
-test('CRS phase 1 uses existing accounts, creates factions atomically and persists after restart', async (t) => {
+test('removed CRS game is absent from settings and its API is unavailable', async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tcg-casino-crs-'));
   const root = path.resolve(__dirname, '..');
   let serverProcess = null;
@@ -119,86 +119,10 @@ test('CRS phase 1 uses existing accounts, creates factions atomically and persis
   });
 
   await startServer();
-  const anonymous = await request('/api/crs/state');
-  assert.equal(anonymous.response.status, 401);
-  const anonymousChoice = await request('/api/crs/faction', { method: 'POST', body: JSON.stringify({ faction: 'crs' }) });
-  assert.equal(anonymousChoice.response.status, 401);
-  const alice = await register('crs-alice');
-  const bob = await register('crs-bob');
-  const initial = await request('/api/crs/state', { cookie: alice });
-  assert.equal(initial.response.status, 200);
-  assert.equal(initial.body.player, null);
-  assert.equal(initial.body.citadel, null);
-  assert.deepEqual(initial.body.buildings, []);
-  assert.equal(initial.body.account.chips, 1000);
-  for (const faction of ['invalid', '', null, 1, { id: 'crs' }]) {
-    const invalid = await request('/api/crs/faction', { cookie: alice, method: 'POST', body: JSON.stringify({ faction }) });
-    assert.equal(invalid.response.status, 400);
+  const settings = await request('/api/game-settings');
+  assert.equal(Object.hasOwn(settings.body.games, 'crs'), false);
+  for (const [url, method] of [['/api/crs/state', 'GET'], ['/api/crs/faction', 'POST']]) {
+    const response = await fetch(`${baseUrl}${url}`, { method });
+    assert.equal(response.status, 404);
   }
-  const [one, two] = await Promise.all(['crs', 'manifestants'].map(faction => request('/api/crs/faction', {
-    cookie: alice, method: 'POST', body: JSON.stringify({ faction, supplies: 999999, chips: 999999, headquarters_level: 10, userId: 1234 })
-  })));
-  assert.deepEqual([one.response.status, two.response.status].sort(), [201, 409]);
-  const created = one.response.status === 201 ? one.body : two.body;
-  assert.equal(created.player.supplies, 250);
-  assert.equal(created.player.rating, 1000);
-  assert.equal(created.citadel.headquarters_level, 1);
-  assert.equal(created.buildings.length, 1);
-  assert.equal(created.buildings[0].level, 1);
-  assert.equal(created.buildings[0].x, 5);
-  assert.equal(created.account.chips, 1000);
-  const rejectedChange = await request('/api/crs/faction', { cookie: alice, method: 'POST', body: JSON.stringify({ faction: 'manifestants' }) });
-  assert.equal(rejectedChange.response.status, 409);
-  const otherBefore = await request('/api/crs/state?userId=' + created.player.user_id, { cookie: bob });
-  assert.equal(otherBefore.body.player, null, 'session controls identity even with a forged user ID');
-  const other = await request('/api/crs/faction', { cookie: bob, method: 'POST', body: JSON.stringify({ faction: 'manifestants' }) });
-  assert.equal(other.response.status, 201);
-  assert.equal(other.body.player.faction, 'manifestants');
-  assert.notEqual(other.body.player.user_id, created.player.user_id);
-  assert.equal(other.body.factions.manifestants.headquarters[0], 'Lycée révolté');
-  const me = await request('/api/me', { cookie: alice });
-  assert.equal(me.body.user.chips, 1000);
-  const casinoHistory = await request('/api/history', { cookie: alice });
-  assert.deepEqual(casinoHistory.body.history, []);
-  const asset = await fetch(baseUrl + '/js/crs.js');
-  assert.equal(asset.status, 200);
-  assert.match(await asset.text(), /crsModule/);
-  for (const imagePath of ['buildings/crs/evolutions.png', 'buildings/manifestants/evolutions.png', 'units/crs/planche.png', 'units/manifestants/planche.png', 'maps/examples/cartes.png', 'ui/icones.png']) {
-    const image = await fetch(baseUrl + '/games/crs-vs-manifestants/assets/' + imagePath);
-    assert.equal(image.status, 200, imagePath);
-    assert.match(image.headers.get('content-type'), /image\/png/);
-    const bytes = Buffer.from(await image.arrayBuffer());
-    assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
-  }
-  const adminLogin = await request('/api/login', { method: 'POST', body: JSON.stringify({ username: 'crash-admin', password: 'crash-admin-password' }) });
-  assert.equal(adminLogin.response.status, 200);
-  const secondaryLogin = await request('/api/login', { method: 'POST', body: JSON.stringify({ username: 'crash-admin-2', password: 'crash-admin-2-password' }) });
-  assert.equal(secondaryLogin.response.status, 200);
-  const maintenance = { enabled: true, maintenance: true, minBet: 1, maxBet: 1, reason: 'CRS maintenance test' };
-  for (const cookie of [alice, secondaryLogin.cookie]) {
-    const denied = await request('/api/admin/games/crs', { cookie, method: 'PATCH', body: JSON.stringify(maintenance) });
-    assert.equal(denied.response.status, 403);
-  }
-  const maintained = await request('/api/admin/games/crs', { cookie: adminLogin.cookie, method: 'PATCH', body: JSON.stringify(maintenance) });
-  assert.equal(maintained.response.status, 200, maintained.body.error);
-  const publicSettings = await request('/api/game-settings');
-  assert.equal(publicSettings.body.games.crs.maintenance, true);
-  const blockedState = await request('/api/crs/state', { cookie: alice });
-  assert.equal(blockedState.response.status, 503);
-  assert.match(blockedState.body.error, /maintenance/);
-  const blockedChoice = await request('/api/crs/faction', { cookie: bob, method: 'POST', body: JSON.stringify({ faction: 'crs' }) });
-  assert.equal(blockedChoice.response.status, 503);
-  await stopServer();
-  await startServer();
-  const login = await request('/api/login', { method: 'POST', body: JSON.stringify({ username: 'crs-alice', password: 'player-password' }) });
-  assert.equal(login.response.status, 200);
-  assert.equal((await request('/api/crs/state', { cookie: login.cookie })).response.status, 503, 'maintenance survives server restart');
-  const reopened = await request('/api/admin/games/crs', { cookie: adminLogin.cookie, method: 'PATCH', body: JSON.stringify({ ...maintenance, maintenance: false }) });
-  assert.equal(reopened.response.status, 200, reopened.body.error);
-  const persisted = await request('/api/crs/state', { cookie: login.cookie });
-  assert.deepEqual(persisted.body.player, created.player);
-  assert.deepEqual(persisted.body.citadel, created.citadel);
-  assert.deepEqual(persisted.body.buildings, created.buildings);
-  const afterRestart = await request('/api/crs/faction', { cookie: login.cookie, method: 'POST', body: JSON.stringify({ faction: 'crs' }) });
-  assert.equal(afterRestart.response.status, 409);
 });

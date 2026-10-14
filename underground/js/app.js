@@ -28,7 +28,6 @@ async function initializeApp() {
 
   await crashModule.initialize();
   bindNavigation();
-  crsModule.initialize();
   bindGlobalButtons();
   updateTopbar();
   renderHomeView();
@@ -45,7 +44,7 @@ function applyGameAvailability() {
   window.casinoGameSettings = publicGameSettings;
   for (const [game, settings] of Object.entries(publicGameSettings)) {
     const available = settings.enabled && !settings.maintenance;
-    document.querySelector(`.nav-item[data-view="${game}"]`)?.toggleAttribute("hidden", game === 'crs' ? !settings.enabled : !available);
+    document.querySelector(`.nav-item[data-view="${game}"]`)?.toggleAttribute("hidden", !available);
     for (const inputId of game === "roulette" ? ["rouletteCustomStake"]
       : game === "blackjack" ? ["blackjackTableStake"]
         : game === "slots" ? ["slotsStake"]
@@ -101,7 +100,7 @@ function bindGlobalButtons() {
 
 function showView(viewName) {
   const settings = publicGameSettings[viewName];
-  if ((settings && (!settings.enabled || (settings.maintenance && viewName !== 'crs'))) ||
+  if ((settings && (!settings.enabled || settings.maintenance)) ||
       (viewName === "crash" && !crashModule.isEnabled())) {
     viewName = "home";
   }
@@ -114,7 +113,6 @@ function showView(viewName) {
     button.classList.toggle("active", button.dataset.view === viewName);
   });
   crashModule.setActive(viewName === "crash");
-  crsModule.setActive(viewName === "crs");
 }
 
 function updateTopbar() {
@@ -238,7 +236,6 @@ function renderHomeView() {
   const summary = getPlayerSummary(player);
 
   const cards = [
-    { name: 'CRS VS Manifestants', icon: '⚑', description: 'Choisis ta faction et fonde une citadelle permanente.', action: 'FONDER MA FACTION', view: 'crs' },
     {
       name: "Roulette",
       icon: "🎰",

@@ -9,7 +9,6 @@
   const { AsyncLocalStorage } = require('async_hooks');
   const { Server } = require('socket.io');
   const SQLiteStore = require('connect-sqlite3')(session);
-  const { initializeCrsSchema, registerCrsRoutes } = require('./build-crs/server');
 
   const app = express();
   const server = http.createServer(app);
@@ -32,7 +31,6 @@
     poker: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     slots: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     crash: { enabled: CRASH_ENABLED, minBet: 1, maxBet: CRASH_MAX_BET },
-    crs: { enabled: true, minBet: 1, maxBet: 1 }
   };
 
   if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
@@ -558,7 +556,7 @@
         if (!hand || hand.finished) return false;
         if (action === 'double' || action === 'split') {
           if (hand.cards.length !== 2 || player.chips < hand.bet || hand.splitAces) return false;
-          if (action === 'split' && (player.hands.length !== 1 || getCardValue(hand.cards[0]) !== getCardValue(hand.cards[1]))) return false;
+          if (action === 'split' && (player.hands.length !== 1 || calculateBlackjackValue([hand.cards[0]]) !== calculateBlackjackValue([hand.cards[1]]))) return false;
           if (this.deck.length < (action === 'split' ? 2 : 1)) return false;
           player.chips -= hand.bet;
           player.bet += hand.bet;
@@ -1329,7 +1327,7 @@
               handCount: hand.cards.length
             })),
             canDouble: table.status === 'in-progress' && table.players[table.currentTurn] === player && !player.finished && player.hand.length === 2 && !player.hands?.[player.activeHand || 0]?.splitAces && player.chips >= (player.hands?.[player.activeHand || 0]?.bet || player.bet),
-            canSplit: table.status === 'in-progress' && table.players[table.currentTurn] === player && !player.finished && (player.hands?.length || 1) === 1 && player.hand.length === 2 && getCardValue(player.hand[0]) === getCardValue(player.hand[1]) && player.chips >= player.bet
+            canSplit: table.status === 'in-progress' && table.players[table.currentTurn] === player && !player.finished && (player.hands?.length || 1) === 1 && player.hand.length === 2 && calculateBlackjackValue([player.hand[0]]) === calculateBlackjackValue([player.hand[1]]) && player.chips >= player.bet
           } : {}),
           finished: !!player.finished,
           outcome: player.outcome || null,
@@ -1992,7 +1990,6 @@
     if (!userColumns.some((column) => column.name === 'profile_design')) {
       await run("ALTER TABLE users ADD COLUMN profile_design TEXT DEFAULT '{}'");
     }
-    await initializeCrsSchema(run);
     if (!userColumns.some((column) => column.name === 'infinite_money')) {
       await run('ALTER TABLE users ADD COLUMN infinite_money INTEGER NOT NULL DEFAULT 0');
     }
@@ -2381,7 +2378,6 @@
 
   app.use(express.static(GAME_DIR, { index: false }));
   app.use('/auth-assets', express.static(AUTH_DIR));
-  app.use('/games/crs-vs-manifestants/assets', express.static(path.join(AUTH_DIR, 'games', 'crs-vs-manifestants', 'assets'), { index: false, maxAge: '1h' }));
 
   app.get('/', handleAsync(async (req, res) => {
     if (req.session.userId) {
@@ -2537,7 +2533,7 @@
   app.get('/api/game-settings', handleAsync(async (req, res) => {
     const rows = await all('SELECT game, enabled, maintenance, min_bet, max_bet FROM casino_game_settings');
     res.json({
-      games: Object.fromEntries(rows.map((row) => [row.game, {
+      games: Object.fromEntries(rows.filter(row => Object.hasOwn(GAME_DEFAULTS, row.game)).map((row) => [row.game, {
         enabled: Boolean(row.enabled),
         maintenance: Boolean(row.maintenance),
         minBet: Number(row.min_bet),
@@ -2626,7 +2622,7 @@
   app.get('/api/admin/settings', requireAuth, requireAdmin, handleAsync(async (req, res) => {
     const rows = await all('SELECT game, enabled, maintenance, min_bet, max_bet, updated_at FROM casino_game_settings ORDER BY game');
     res.json({
-      games: rows.map((row) => ({
+      games: rows.filter(row => Object.hasOwn(GAME_DEFAULTS, row.game)).map((row) => ({
         game: row.game,
         enabled: Boolean(row.enabled),
         maintenance: Boolean(row.maintenance),
@@ -3160,7 +3156,6 @@
     });
   });
 
-  registerCrsRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction, getGameSettings });
 
   app.patch('/api/profile', requireAuth, async (req, res) => {
     const avatar = String(req.body.avatar || '');

@@ -1,6 +1,6 @@
 const blackjackGame = (() => {
   const tableId = window.location.pathname.split('/').filter(Boolean).pop();
-  const state = { table: null, socket: null, poller: null, actionPending: false };
+  const state = { table: null, socket: null, poller: null, actionPending: false, requestVersion: 0 };
 
   function getCurrentUserId() {
     return Number(accountUser?.id ?? getPlayer()?.id ?? 0);
@@ -271,6 +271,7 @@ const blackjackGame = (() => {
   async function sendAction(action) {
     if (state.actionPending) return;
     state.actionPending = true;
+    state.requestVersion += 1;
     renderActions(state.table);
     try {
       const response = await fetch(`/api/blackjack/tables/${tableId}/action`, {
@@ -314,8 +315,11 @@ const blackjackGame = (() => {
   }
 
   async function refreshTable() {
+    if (state.actionPending) return;
+    const requestVersion = ++state.requestVersion;
     try {
       const response = await fetch(`/api/blackjack/tables/${tableId}`);
+      if (state.actionPending || requestVersion !== state.requestVersion) return;
       if (!response.ok) {
         if (response.status === 401 || response.status === 403 || response.status === 404) {
           window.location.replace('/game');
@@ -324,6 +328,7 @@ const blackjackGame = (() => {
         throw new Error('Table inaccessible.');
       }
       const payload = await response.json();
+      if (state.actionPending || requestVersion !== state.requestVersion) return;
       const wasFinished = state.table?.round === 'finished';
       renderTable(payload.table);
       if (payload.table.round === 'finished' && !wasFinished) await loadAccountData();

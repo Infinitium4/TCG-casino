@@ -10,7 +10,6 @@
     />
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="/css/bunker.css" />
-    <link rel="stylesheet" href="/css/crs.css" />
   </head>
   <body>
     <div class="page-noise"></div>
@@ -49,7 +48,6 @@
         <button class="nav-item" data-view="poker" type="button">Poker</button>
         <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
         <button class="nav-item" data-view="crash" type="button">Crash</button>
-        <button class="nav-item" data-view="crs" type="button">CRS VS Manifestants</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
         <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
@@ -455,39 +453,6 @@
           </div>
         </section>
 
-        <section id="crsView" class="view" aria-label="CRS VS Manifestants">
-          <div class="panel crs-shell">
-            <div class="section-heading"><div><p class="eyebrow">STRATÉGIE / FACTIONS</p><h2>CRS VS MANIFESTANTS</h2></div><button id="crsRefresh" class="secondary-button" type="button">Actualiser</button></div>
-            <p class="crs-intro">Deux factions. Une citadelle permanente. Le début de ton histoire.</p>
-            <p class="crs-phase-note">Phase 1 · Choix de faction et sauvegarde disponibles. Construction et combat à venir.</p>
-            <p class="crs-balance">Solde du casino <strong id="crsCasinoBalance">—</strong><span>Le choix de faction est gratuit.</span></p>
-            <div id="crsContent" aria-busy="false">
-              <p id="crsLoading" role="status">Chargement de ta faction…</p>
-              <p id="crsError" role="alert"></p>
-              <div id="crsFactionChoice" hidden>
-                <h3>Choisis ton camp</h3><p>Ce choix est permanent : il restera enregistré sur ton compte.</p>
-                <div class="crs-faction-grid">
-                  <button class="crs-faction-card" type="button" data-crs-faction="crs" aria-pressed="false"><span id="crsChoiceArt-crs" class="crs-choice-art"></span><span class="eyebrow">ORDRE / RÉSISTANCE</span><strong>CRS / Gouvernement</strong><span>Un poste de police municipale comme point de départ.</span><span>Défenses, véhicules et unités équipées.</span><span class="crs-faction-action">Choisir cette faction →</span></button>
-                  <button class="crs-faction-card" type="button" data-crs-faction="manifestants" aria-pressed="false"><span id="crsChoiceArt-manifestants" class="crs-choice-art"></span><span class="eyebrow">MOBILITÉ / COORDINATION</span><strong>Manifestants / Insurgés</strong><span>Un lycée révolté comme point de départ.</span><span>Recrutement, nombre et organisation collective.</span><span class="crs-faction-action">Choisir cette faction →</span></button>
-                </div>
-                <div id="crsSelectionConfirm" class="crs-confirm" hidden><p>Tu vas rejoindre <strong id="crsSelectedFaction"></strong>. Tu ne pourras plus changer de faction.</p><button id="crsConfirmFaction" class="primary-button" type="button" disabled>Confirmer définitivement ma faction</button></div>
-              </div>
-              <div id="crsDashboard" hidden>
-                <div class="crs-identity"><p class="eyebrow" id="crsFactionName"></p><h3>Bienvenue, <span id="crsCommander"></span>.</h3><p id="crsSpecialty"></p><small>Faction fondée le <span id="crsCreatedAt"></span> · progression sauvegardée</small></div>
-                <div class="crs-stats"><div class="stat-tile"><span id="crsLevelIcon" class="crs-stat-icon"></span><span>Niveau du QG</span><strong id="crsHeadquartersLevel"></strong></div><div class="stat-tile"><span id="crsSuppliesIcon" class="crs-stat-icon"></span><span>Provisions gratuites</span><strong id="crsSupplies"></strong></div><div class="stat-tile"><span id="crsRatingIcon" class="crs-stat-icon"></span><span>Indice initial</span><strong id="crsRating"></strong></div></div>
-                <section class="crs-map-panel" aria-label="Aperçu de la citadelle">
-                  <div class="crs-map-toolbar"><div><p class="eyebrow">VUE DU QUARTIER</p><h3>Ta citadelle</h3></div><button id="crsGridToggle" class="secondary-button" type="button" aria-pressed="false">Grille</button><label for="crsMapZoom">Zoom <input id="crsMapZoom" type="range" min="100" max="180" step="10" value="100" /><output id="crsZoomValue" for="crsMapZoom">100%</output></label></div>
-                  <div class="crs-map-viewport"><div id="crsCitadelScene" class="crs-citadel-scene"><div class="crs-map-scenery" aria-hidden="true"></div><div class="crs-map-grid" aria-hidden="true"></div><button id="crsMapHeadquarters" class="crs-map-headquarters" type="button" aria-expanded="false" aria-controls="crsHeadquartersDetails"></button><span class="crs-map-coordinate">SECTEUR 05 / 05</span></div><span class="crs-map-label">APERÇU VISUEL · Clique sur ton QG</span></div>
-                  <div id="crsHeadquartersDetails" class="crs-map-detail" hidden><strong>QG permanent · Niveau 1</strong><p>Le bâtiment et sa position sont sauvegardés sur ton compte. Les constructions et déplacements seront disponibles à la prochaine phase.</p></div>
-                </section>
-                <div class="crs-overview"><div class="crs-headquarters"><div id="crsHeadquartersArt"></div><p class="eyebrow">TON QUARTIER GÉNÉRAL</p><h3 id="crsHeadquartersName"></h3><p>Terrain <strong id="crsGridSize"></strong></p><small id="crsBuildingPosition"></small><p class="crs-phase-note">Construction et déplacement disponibles à la phase 2.</p></div><div><h3>Parcours de ta faction</h3><ol id="crsProgression" class="crs-progression"></ol><small>Les niveaux suivants seront débloqués avec le système d’améliorations.</small></div></div>
-                <section class="crs-unit-section"><div class="section-heading"><h3>Unités de ta faction</h3><span class="crs-phase-note">Aperçu · recrutement à venir</span></div><div id="crsUnitGallery" class="crs-unit-gallery"></div></section>
-                <p class="crs-phase-note">Les provisions sont une ressource du jeu. Tes jetons restent ceux du casino ; aucun achat n’est disponible à cette phase.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
         <section id="leaderboardView" class="view" aria-label="Classement">
           <div class="panel">
             <div class="section-heading">
@@ -679,6 +644,5 @@
     <script src="js/slots.js"></script>
     <script src="js/admin.js"></script>
     <script src="js/app.js"></script>
-    <script src="js/crs.js"></script>
   </body>
 </html>

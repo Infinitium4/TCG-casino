@@ -109,3 +109,18 @@ test('split settles a losing hand and a pushing hand without paying the lost sta
   assert.equal(table.players[0].chips, 90);
   assert.equal(table.players[0].outcome, 'loss');
 });
+
+test('split accepts different ranks worth ten and double remains available on each split hand', () => {
+  const table = game(['10?', 'K?']);
+  table.deck = ['2?', '3?', '4?', '5?'];
+  assert.equal(tableToPublicState(table, 1).players[0].canSplit, true);
+  assert.equal(table.act(1, 'split'), true);
+  assert.equal(table.act(1, 'double'), true);
+  assert.equal(table.players[0].activeHand, 1);
+  assert.equal(tableToPublicState(table, 1).players[0].canDouble, true);
+  assert.equal(table.act(1, 'double'), true);
+  assert.equal(table.players[0].bet, 40);
+  assert.equal(table.players[0].chips, 60);
+  assert.deepEqual(table.players[0].hands.map(hand => hand.bet), [20, 20]);
+  assert.equal(table.currentTurn, 1);
+});
