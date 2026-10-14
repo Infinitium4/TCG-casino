@@ -27,6 +27,7 @@ async function initializeApp() {
   }
 
   await crashModule.initialize();
+  plinkoModule.initialize();
   bindNavigation();
   bindGlobalButtons();
   updateTopbar();
@@ -113,6 +114,7 @@ function showView(viewName) {
     button.classList.toggle("active", button.dataset.view === viewName);
   });
   crashModule.setActive(viewName === "crash");
+  plinkoModule.setActive(viewName === "plinko");
 }
 
 function updateTopbar() {
@@ -236,6 +238,7 @@ function renderHomeView() {
   const summary = getPlayerSummary(player);
 
   const cards = [
+    { name: "Plinko", icon: "◉", description: "16 rebonds. Une case. Jusqu’à 110 fois ta mise.", action: "LANCER UNE BILLE", view: "plinko" },
     {
       name: "Roulette",
       icon: "🎰",

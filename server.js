@@ -9,6 +9,7 @@
   const { AsyncLocalStorage } = require('async_hooks');
   const { Server } = require('socket.io');
   const SQLiteStore = require('connect-sqlite3')(session);
+  const { initializePlinkoSchema, registerPlinkoRoutes } = require('./plinko');
 
   const app = express();
   const server = http.createServer(app);
@@ -26,6 +27,7 @@
   const CRASH_MAX_BET = 1_000_000;
   const MAX_CHIPS = Number.MAX_SAFE_INTEGER;
   const GAME_DEFAULTS = {
+    plinko: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     roulette: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     blackjack: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     poker: { enabled: true, minBet: 1, maxBet: 1_000_000 },
@@ -91,7 +93,7 @@
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 7,
       sameSite: 'lax',
-      secure: IS_PRODUCTION
+      secure: false
     }
   });
 
@@ -1794,6 +1796,8 @@
     if (!user) return;
 
     socket.emit('session:ready', { user });
+    socket.on('plinko:subscribe', () => socket.join('plinko:feed'));
+    socket.on('plinko:unsubscribe', () => socket.leave('plinko:feed'));
     try {
       await databaseReady;
       const settings = await getGameSettings('crash');
@@ -2086,6 +2090,7 @@
         VALUES (?, ?, ?, ?)
       `, [game, defaults.enabled ? 1 : 0, defaults.minBet, defaults.maxBet]);
     }
+    await initializePlinkoSchema(run);
     await run(`
       INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
       VALUES ('betting_paused', '0')
@@ -3244,6 +3249,9 @@
       throw error;
     }
   }));
+
+  registerPlinkoRoutes({ app, io, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
+    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement });
 
   app.get('/api/history', requireAuth, async (req, res) => {
     const rows = await all(

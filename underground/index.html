@@ -9,6 +9,7 @@
       content="Casino clandestin avec roulette, blackjack, poker, machine à sous et Crash."
     />
     <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/plinko.css" />
     <link rel="stylesheet" href="/css/bunker.css" />
   </head>
   <body>
@@ -48,6 +49,7 @@
         <button class="nav-item" data-view="poker" type="button">Poker</button>
         <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
         <button class="nav-item" data-view="crash" type="button">Crash</button>
+        <button class="nav-item" data-view="plinko" type="button">PLINKO</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
         <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
@@ -453,6 +455,33 @@
           </div>
         </section>
 
+        <section id="plinkoView" class="view" aria-label="Plinko">
+          <div class="section-heading"><div><p class="eyebrow">UNE BILLE. 16 REBONDS.</p><h1>PLINKO</h1></div><span class="status-box subtle">Jusqu’à 110x</span></div>
+          <div class="plinko-layout">
+            <aside class="panel plinko-controls">
+              <p class="eyebrow">TON SOLDE</p><strong id="plinkoBalance" class="plinko-balance">—</strong><small>jetons virtuels</small>
+              <label class="input-group" for="plinkoStake">Mise<input id="plinkoStake" type="number" min="1" max="1000000" step="1" value="100" inputmode="numeric" /></label>
+              <div class="plinko-adjust"><button class="secondary-button" type="button" data-plinko-adjust="0.5">½</button><button class="secondary-button" type="button" data-plinko-adjust="2">×2</button><button class="secondary-button" type="button" data-plinko-adjust="max">MAX</button></div>
+              <label class="input-group" for="plinkoRows">Rangées<select id="plinkoRows" disabled><option>16</option></select></label>
+              <label class="input-group" for="plinkoRisk">Risque<select id="plinkoRisk"><option value="high">Élevé</option><option disabled>Faible · à venir</option><option disabled>Moyen · à venir</option></select></label>
+              <button id="plinkoLaunch" class="gold-button" type="button" disabled>LANCER UNE BILLE</button>
+              <p id="plinkoFeedback" class="plinko-feedback" role="status" aria-live="polite">Chargement du plateau…</p>
+              <div class="plinko-last"><span>Dernier multiplicateur<strong id="plinkoLastMultiplier">—</strong></span><span>Dernier gain<strong id="plinkoLastPayout">—</strong></span></div>
+              <small>Gain = mise × multiplicateur, arrondi au jeton inférieur. Le solde est réglé dès le lancer.</small>
+            </aside>
+            <div class="panel plinko-board-panel">
+              <div class="plinko-board-header"><span>RISQUE ÉLEVÉ</span><span><strong id="plinkoBallCount">0</strong> / 8 billes en cours</span></div>
+              <canvas id="plinkoCanvas" width="720" height="584" aria-label="Plateau triangulaire : 16 rangées de picots et 17 cases de 0,3x à 110x">Plateau Plinko. Le résultat de chaque bille est affiché dans l’historique ci-dessous.</canvas>
+              <div id="plinkoBins" class="plinko-bins" aria-label="Multiplicateurs"></div>
+              <div class="plinko-board-footer"><span>16 décisions · gauche / droite à 50 %</span><span>RTP théorique <strong id="plinkoRtp">98,9883 %</strong></span></div>
+            </div>
+          </div>
+          <div class="plinko-history-grid">
+            <section class="panel"><div class="section-heading compact"><h3>Tes dernières billes</h3></div><div id="plinkoHistory" class="plinko-history"></div></section>
+            <section class="panel"><div class="section-heading compact"><h3>Derniers lancers des joueurs</h3><span class="plinko-live">● EN DIRECT</span></div><div id="plinkoRecent" class="plinko-recent"></div></section>
+          </div>
+        </section>
+
         <section id="leaderboardView" class="view" aria-label="Classement">
           <div class="panel">
             <div class="section-heading">
@@ -612,6 +641,7 @@
                   <option value="blackjack">Blackjack</option>
                   <option value="slots">Machine à sous</option>
                   <option value="crash">Crash</option>
+                  <option value="plinko">Plinko</option>
                 </select>
               </label>
 
@@ -639,6 +669,7 @@
     <script src="js/storage.js"></script>
     <script src="js/roulette.js"></script>
     <script src="js/crash.js"></script>
+    <script src="js/plinko.js"></script>
     <script src="js/blackjack.js"></script>
     <script src="js/poker.js"></script>
     <script src="js/slots.js"></script>
