@@ -52,7 +52,13 @@
         <button class="nav-item" data-view="crs" type="button">CRS VS Manifestants</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
+        <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
       </nav>
+
+      <div id="supportModeBanner" class="support-mode-banner" hidden>
+        <span>Mode assistance : <strong id="supportModeUsername"></strong></span>
+        <button id="endSupportModeBtn" class="secondary-button" type="button">Revenir au compte administrateur</button>
+      </div>
 
       <main class="main-panel">
         <section id="homeView" class="view active" aria-label="Accueil">
