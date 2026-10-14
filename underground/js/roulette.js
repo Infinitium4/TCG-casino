@@ -6,6 +6,7 @@ const rouletteModule = (() => {
     bets: [],
     wheelLocked: false,
     rotation: 0,
+    trackPosition: 0,
     lastResults: []
   };
 
@@ -109,11 +110,6 @@ const rouletteModule = (() => {
       exactInput.disabled = type !== "exact";
     }
 
-    if (type !== "exact") {
-      document.querySelectorAll(".board-cell").forEach((cell) => {
-        cell.classList.remove("active");
-      });
-    }
 
     updateBetControls();
   }
@@ -152,12 +148,8 @@ const rouletteModule = (() => {
     const player = getPlayer();
     const betType = selectedType || document.querySelector(".bet-choice.active")?.dataset.bet || "red";
     const stake = Number(document.getElementById("rouletteCustomStake").value);
-<<<<<<< Updated upstream
     const limits = window.casinoGameSettings?.roulette || { minBet: 1, maxBet: 1_000_000 };
-    const exactValue = document.getElementById("rouletteExactNumber").value;
-=======
     const exactValue = selectedNumber ?? document.getElementById("rouletteExactNumber").value;
->>>>>>> Stashed changes
     const exactNumber = exactValue === "00" ? "00" : Number(exactValue);
 
     if (!Number.isFinite(stake) || stake < limits.minBet || stake > limits.maxBet || !Number.isInteger(stake)) {
@@ -213,6 +205,10 @@ const rouletteModule = (() => {
     spinButton.disabled = true;
     placeBetButton.disabled = true;
 
+    const stage = document.querySelector(".roulette-stage");
+    const visibleStage = stage.hidden ? document.getElementById("rouletteRacetrack") : stage;
+    visibleStage.scrollIntoView({ behavior: "smooth", block: "center" });
+
     const winningNumber = wheelNumbers[randomInt(0, wheelNumbers.length - 1)];
     const winningIndex = wheelNumbers.indexOf(winningNumber);
     const pocketAngle = 360 / wheelNumbers.length;
@@ -226,6 +222,7 @@ const rouletteModule = (() => {
     rotor.style.transform = `rotate(${finalRotation}deg)`;
     ballTrack.style.setProperty("--ball-spin-angle", `${-turns * 360}deg`);
     ballTrack.classList.add("is-spinning");
+    animateTrackBall(winningIndex);
 
     setTimeout(() => settleSpin(winningNumber), 3000);
   }
@@ -396,6 +393,35 @@ const rouletteModule = (() => {
     outline.setAttribute("d", path);
     lines.appendChild(outline);
     track.appendChild(lines);
+    const ball = document.createElement("div");
+    ball.id = "rouletteTrackBall";
+    ball.className = "roulette-track-ball";
+    ball.hidden = true;
+    ball.setAttribute("aria-hidden", "true");
+    track.appendChild(ball);
+  }
+
+  function getTrackPoint(position) {
+    const pocket = ((position + 0.5) % 38 + 38) % 38;
+    if (pocket < 16) return { left: 10 + pocket * 5, top: 15 };
+    if (pocket >= 19 && pocket < 35) return { left: 90 - (pocket - 19) * 5, top: 85 };
+    const right = pocket < 19;
+    const angle = ((right ? -90 : 90) + (pocket - (right ? 16 : 35)) * 60) * Math.PI / 180;
+    return { left: (right ? 90 : 10) + 7 * Math.cos(angle), top: 50 + 35 * Math.sin(angle) };
+  }
+
+  function animateTrackBall(winningIndex) {
+    const ball = document.getElementById("rouletteTrackBall");
+    const distance = 38 * 3 + (winningIndex - state.trackPosition + 38) % 38;
+    const frames = Array.from({ length: 301 }, (_, index) => {
+      const point = getTrackPoint(state.trackPosition + distance * index / 300);
+      return { left: `${point.left}%`, top: `${point.top}%`, offset: index / 300 };
+    });
+    ball.hidden = false;
+    ball.style.left = frames[300].left;
+    ball.style.top = frames[300].top;
+    ball.animate(frames, { duration: 3000, easing: "cubic-bezier(0.12, 0.82, 0.18, 1)" });
+    state.trackPosition = winningIndex;
   }
 
   function renderBets() {
