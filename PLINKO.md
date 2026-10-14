@@ -41,6 +41,10 @@ Une transaction `BEGIN IMMEDIATE` vérifie les conditions, débite, génère et 
 la trajectoire, crédite le retour, écrit l’historique et règle la banque. Toute
 erreur annule l’ensemble. Le gain est définitivement réglé avant l’animation :
 fermer l’onglet ou se déconnecter ne perd ni ne double le règlement.
+Pendant l’animation, l’interface affiche seulement le débit de la mise et masque
+les retours des billes encore en vol, y compris dans le solde de la barre supérieure,
+l’historique et le flux des lancers personnels. Chaque arrivée révèle son propre
+gain ; le compte est resynchronisé lorsque toutes les billes sont arrivées.
 
 La contrainte unique `(user_id, request_id)` rend une relance idempotente, même
 après redémarrage. Un identifiant réutilisé avec une autre mise est refusé.

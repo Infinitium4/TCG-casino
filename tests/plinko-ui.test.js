@@ -17,17 +17,18 @@ function harness() {
     return elements.get(id);
   };
   const storage = new Map(), requests = [];
+  let player = { chips: 1000 }, accountLoads = 0;
   const context = vm.createContext({
     document: { hidden: false, getElementById: element, querySelectorAll: () => [],
       createElement: tag => element(`new-${tag}-${elements.size}`), addEventListener() {} },
     window: { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) },
-    accountUser: { id: 7 }, getPlayer: () => ({ chips: 1000 }), formatChips: String,
+    accountUser: { id: 7, username: 'Alice' }, getPlayer: () => player, savePlayer: value => { player = value; }, formatChips: String,
     localStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     // Deliberately no randomUUID: plain HTTP VMs must still be able to launch.
     crypto: { getRandomValues: array => webcrypto.getRandomValues(array) },
     performance: { now: () => 0 }, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     AbortController, setTimeout, clearTimeout,
-    loadAccountData: async () => true, updateTopbar() {},
+    loadAccountData: async () => { accountLoads++; return true; }, updateTopbar() { element('topbarBalance').textContent = String(player.chips); },
     fetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject }))
   });
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/plinko.js'), 'utf8');
@@ -36,7 +37,7 @@ function harness() {
   context.game.state.config = { settings: { enabled: true, minBet: 1, maxBet: 1000000 }, maxBalls: 8 };
   element('plinkoBins').children = Array.from({ length: 17 }, (_, index) => element(`bin-${index}`));
   const drop = { id: 1, path: Array(16).fill(0), slot: 0, multiplier: 110, payout: 11000, stake: 100, createdAt: 0 };
-  return { game: context.game, elements, storage, requests, drop };
+  return { game: context.game, elements, storage, requests, drop, accountLoads: () => accountLoads };
 }
 
 test('double click sends one launch over HTTP and animates only the confirmed server result', async () => {
@@ -51,10 +52,17 @@ test('double click sends one launch over HTTP and animates only the confirmed se
   h.requests[0].resolve({ ok: true, json: async () => ({ drop: h.drop, balance: 11900 }) });
   await pending;
   assert.equal(h.game.state.pending, false);
-  assert.equal(h.game.state.balance, 11900);
+  assert.equal(h.game.state.balance, 900);
+  assert.equal(h.elements.get('topbarBalance').textContent, '900');
+  assert.equal(h.game.state.history.length, 0);
+  assert.equal(h.accountLoads(), 0);
   assert.equal(h.game.state.balls.length, 1);
   assert.equal(h.storage.size, 0);
   h.game.draw(3500);
+  assert.equal(h.game.state.balance, 11900);
+  assert.equal(h.elements.get('topbarBalance').textContent, '11900');
+  assert.equal(h.game.state.history.length, 1);
+  assert.equal(h.accountLoads(), 1);
   assert.equal(h.game.state.balls.length, 0);
   assert.equal(h.elements.get('plinkoLastMultiplier').textContent, '110x');
   assert.equal(h.elements.get('plinkoLastPayout').textContent, '11000 jetons');
@@ -92,5 +100,26 @@ test('an outdated state response cannot undo a confirmed balance', async () => {
   await launch;
   h.requests[0].resolve({ ok: true, json: async () => ({ balance: 1000 }) });
   await refresh;
-  assert.equal(h.game.state.balance, 11900);
+  assert.equal(h.game.state.balance, 900);
+});
+
+test('each concurrent ball reveals only its own gain on arrival', async () => {
+  const h = harness();
+  const first = h.game.launch();
+  h.requests[0].resolve({ ok: true, json: async () => ({ drop: h.drop, balance: 11900 }) });
+  await first;
+  const secondDrop = { ...h.drop, id: 2, payout: 300, multiplier: 3 };
+  const second = h.game.launch();
+  h.requests[1].resolve({ ok: true, json: async () => ({ drop: secondDrop, balance: 12100 }) });
+  await second;
+  h.game.state.balls[1].started = 1000;
+  assert.equal(h.game.state.balance, 800);
+  h.game.draw(3500);
+  assert.equal(h.game.state.balance, 11800);
+  assert.equal(h.game.state.history.length, 1);
+  assert.equal(h.accountLoads(), 0);
+  h.game.draw(4500);
+  assert.equal(h.game.state.balance, 12100);
+  assert.equal(h.game.state.history.length, 2);
+  assert.equal(h.accountLoads(), 1);
 });

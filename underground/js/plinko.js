@@ -1,6 +1,6 @@
 const plinkoModule = (() => {
   const state = { config: null, balance: 0, active: false, pending: false, retry: null,
-    balls: [], frame: null, socket: null, history: [], recent: [], flashes: [], seen: new Set(), requestVersion: 0 };
+    balls: [], frame: null, socket: null, history: [], recent: [], flashes: [], seen: new Set(), unrevealed: new Map(), syncing: false, requestVersion: 0 };
   const STEP = 32, GAP = 30, TOP = 38, CENTER = 360, DURATION = 3450;
   const COLORS = ['#ff084a', '#ff1643', '#ff3439', '#ff5430', '#ff7125', '#ff8e1c', '#ffa718', '#ffbb13', '#ffcb16', '#ffbb13', '#ffa718', '#ff8e1c', '#ff7125', '#ff5430', '#ff3439', '#ff1643', '#ff084a'];
   const el = id => document.getElementById(id);
@@ -85,7 +85,7 @@ const plinkoModule = (() => {
   }
   function updateControls() {
     const config = state.config;
-    const disabled = state.pending || !config;
+    const disabled = state.pending || state.syncing || !config;
     el('plinkoLaunch').disabled = disabled || (!state.retry && (state.balls.length >= (config?.maxBalls || 8) || !config?.settings?.enabled || config.settings.maintenance || config.paused));
     el('plinkoLaunch').textContent = state.pending ? 'ENVOI EN COURS…' : state.retry ? 'RÉCUPÉRER MON LANCER' : 'LANCER UNE BILLE';
     el('plinkoBallCount').textContent = state.balls.length;
@@ -104,7 +104,8 @@ const plinkoModule = (() => {
     if (!state.history.length) el('plinkoHistory').textContent = 'Ta première bille t’attend.';
   }
   function renderRecent() {
-    el('plinkoRecent').replaceChildren(...state.recent.slice(0, 20).map(drop => {
+    el('plinkoRecent').replaceChildren(...state.recent.filter(drop => !state.unrevealed.has(drop.id) &&
+      !(state.pending && drop.username === accountUser.username)).slice(0, 20).map(drop => {
       const row = document.createElement('div'); row.className = 'plinko-feed-row';
       for (const [tag, text] of [['span', drop.username], ['strong', formatMultiplier(drop.multiplier)], ['span', `${formatChips(drop.payout)} jetons`]]) {
         const node = document.createElement(tag); node.textContent = text; row.append(node);
@@ -114,22 +115,41 @@ const plinkoModule = (() => {
     if (!state.recent.length) el('plinkoRecent').textContent = 'Les prochains lancers apparaîtront ici.';
   }
   function finish(drop) {
+    if (state.unrevealed.delete(drop.id)) {
+      state.balance += drop.payout;
+      publishBalance();
+      state.history = [drop, ...state.history.filter(entry => entry.id !== drop.id)].slice(0, 20);
+      renderHistory(); renderRecent();
+    }
     el('plinkoLastMultiplier').textContent = formatMultiplier(drop.multiplier);
     el('plinkoLastPayout').textContent = `${formatChips(drop.payout)} jetons`;
     const bin = el('plinkoBins').children[drop.slot];
     bin.classList.remove('is-winner'); void bin.offsetWidth; bin.classList.add('is-winner');
     if (!state.pending && !state.retry) feedback(`${formatMultiplier(drop.multiplier)} · ${drop.payout >= drop.stake ? 'Gain' : 'Retour'} : ${formatChips(drop.payout)} jetons.`);
+    syncAccount();
+  }
+  function publishBalance() {
+    savePlayer({ ...getPlayer(), chips: state.balance });
+    updateTopbar();
+  }
+  async function syncAccount() {
+    if (state.unrevealed.size || state.pending || state.retry || state.syncing) return;
+    state.syncing = true; state.requestVersion += 1; updateControls();
+    try { await loadAccountData(); updateTopbar(); } catch { /* Retry through the next state refresh. */ }
+    finally { state.syncing = false; updateControls(); }
   }
   async function refresh() {
-    if (state.pending) return;
+    if (state.pending || state.syncing) return;
     const requestVersion = ++state.requestVersion;
     try {
       const response = await fetch('/api/plinko/state');
       if (!response.ok) throw new Error('Impossible de charger Plinko.');
       const config = await response.json();
       if (state.pending || requestVersion !== state.requestVersion) return;
-      state.config = config; state.balance = config.balance;
-      state.history = config.history; state.recent = config.recent;
+      state.config = config;
+      state.balance = config.balance - [...state.unrevealed.values()].reduce((sum, drop) => sum + drop.payout, 0);
+      publishBalance();
+      state.history = config.history.filter(drop => !state.unrevealed.has(drop.id)); state.recent = config.recent;
       el('plinkoStake').min = config.settings.minBet;
       el('plinkoStake').max = Math.min(config.settings.maxBet, 1_000_000);
       el('plinkoRtp').textContent = `${(config.rtp * 100).toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })} %`;
@@ -149,7 +169,7 @@ const plinkoModule = (() => {
     try { if (value) localStorage.setItem(key(), JSON.stringify(value)); else localStorage.removeItem(key()); } catch {}
   }
   async function launch() {
-    if (state.pending || !state.config || (!state.retry && state.balls.length >= state.config.maxBalls)) return;
+    if (state.pending || state.syncing || !state.config || (!state.retry && state.balls.length >= state.config.maxBalls)) return;
     const stake = Number(el('plinkoStake').value);
     if (!state.retry && (!Number.isSafeInteger(stake) || stake < state.config.settings.minBet || stake > Math.min(state.config.settings.maxBet, 1_000_000) || stake > state.balance)) {
       feedback('Choisis une mise entière autorisée et disponible dans ton solde.', true); return;
@@ -167,19 +187,19 @@ const plinkoModule = (() => {
         if (response.status >= 400 && response.status < 500) storeRetry(null);
         throw new Error(payload.error || 'Lancer non confirmé. Récupère-le pour vérifier son résultat.');
       }
-      storeRetry(null); state.balance = payload.balance;
-      state.history = [payload.drop, ...state.history.filter(drop => drop.id !== payload.drop.id)].slice(0, 20);
-      renderHistory();
+      storeRetry(null);
       if (!state.seen.has(payload.drop.id)) {
         state.seen.add(payload.drop.id);
+        state.unrevealed.set(payload.drop.id, payload.drop);
+        state.balance = payload.balance - [...state.unrevealed.values()].reduce((sum, drop) => sum + drop.payout, 0);
+        publishBalance(); renderRecent();
         if (state.seen.size > 100) state.seen.delete(state.seen.values().next().value);
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) finish(payload.drop);
         else { state.balls.push({ drop: payload.drop, started: performance.now(), lastRow: -1 }); startAnimation(); }
       }
-      feedback('Bille lancée · mise et gain enregistrés.');
-      try { await loadAccountData(); updateTopbar(); } catch { /* The confirmed drop remains authoritative. */ }
+      if (state.unrevealed.size) feedback('Bille lancée · attends son arrivée pour découvrir le gain.');
     } catch (error) { feedback(state.retry ? 'Connexion interrompue. Récupère ton lancer : aucune seconde mise ne sera débitée.' : error.message, true); }
-    finally { clearTimeout(timeout); state.pending = false; updateControls(); }
+    finally { clearTimeout(timeout); state.pending = false; updateControls(); renderRecent(); syncAccount(); }
   }
   function setActive(active) {
     state.active = active;
