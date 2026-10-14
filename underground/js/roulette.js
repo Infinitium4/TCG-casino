@@ -3,8 +3,7 @@ const rouletteModule = (() => {
     "0", "28", "9", "26", "30", "11", "7", "20", "32", "17", "5", "22", "34", "15", "3", "24", "36", "13", "1", "00", "27", "10", "25", "29", "12", "8", "19", "31", "18", "6", "21", "33", "16", "4", "23", "35", "14", "2"
   ];
   const state = {
-    currentBet: null,
-    selectedBetType: "red",
+    bets: [],
     wheelLocked: false,
     rotation: 0,
     lastResults: []
@@ -30,13 +29,7 @@ const rouletteModule = (() => {
 
     document.querySelectorAll(".board-cell").forEach((button) => {
       button.addEventListener("click", () => {
-        const number = button.dataset.boardNumber;
-        const exactInput = document.getElementById("rouletteExactNumber");
-        if (exactInput) {
-          exactInput.value = number;
-        }
-        selectBetType("exact");
-        document.querySelectorAll(".board-cell").forEach((cell) => cell.classList.toggle("active", cell === button));
+        placeBet("exact", button.dataset.boardNumber);
       });
     });
 
@@ -47,14 +40,25 @@ const rouletteModule = (() => {
       }
     });
 
-    placeBetButton.addEventListener("click", placeBet);
+    placeBetButton.addEventListener("click", () => placeBet());
+    renderRacetrack();
+    document.querySelectorAll("[data-roulette-view]").forEach(button => {
+      button.addEventListener("click", () => {
+        const track = button.dataset.rouletteView === "track";
+        document.querySelector(".roulette-stage").hidden = track;
+        document.getElementById("rouletteRacetrack").hidden = !track;
+        document.querySelectorAll("[data-roulette-view]").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+        if (!track) renderWheelNumbers();
+      });
+    });
+    renderBets();
     spinButton.addEventListener("click", spinWheel);
 
-    state.currentBet = null;
+    state.bets = [];
     rotor.style.transform = "rotate(0deg)";
     wheel.style.setProperty("--ball-radius", `${wheel.offsetWidth * 0.38}px`);
     renderHistory();
-    selectBetType(state.selectedBetType);
+    updateBetControls();
   }
 
   function renderWheelNumbers() {
@@ -96,7 +100,6 @@ const rouletteModule = (() => {
   }
 
   function selectBetType(type) {
-    state.selectedBetType = type;
     document.querySelectorAll(".bet-choice").forEach((button) => {
       button.classList.toggle("active", button.dataset.bet === type);
     });
@@ -126,7 +129,8 @@ const rouletteModule = (() => {
 
   function updateBetControls() {
     const exactInput = document.getElementById("rouletteExactNumber");
-    exactInput.disabled = state.selectedBetType !== "exact";
+    const activeType = document.querySelector(".bet-choice.active")?.dataset.bet || "red";
+    exactInput.disabled = activeType !== "exact";
   }
 
   function getBetLabel(type, exactNumber = null) {
@@ -143,12 +147,17 @@ const rouletteModule = (() => {
     return labels[type] || type;
   }
 
-  function placeBet() {
+  function placeBet(selectedType, selectedNumber) {
+    if (state.wheelLocked) return;
     const player = getPlayer();
-    const betType = state.selectedBetType;
+    const betType = selectedType || document.querySelector(".bet-choice.active")?.dataset.bet || "red";
     const stake = Number(document.getElementById("rouletteCustomStake").value);
+<<<<<<< Updated upstream
     const limits = window.casinoGameSettings?.roulette || { minBet: 1, maxBet: 1_000_000 };
     const exactValue = document.getElementById("rouletteExactNumber").value;
+=======
+    const exactValue = selectedNumber ?? document.getElementById("rouletteExactNumber").value;
+>>>>>>> Stashed changes
     const exactNumber = exactValue === "00" ? "00" : Number(exactValue);
 
     if (!Number.isFinite(stake) || stake < limits.minBet || stake > limits.maxBet || !Number.isInteger(stake)) {
@@ -162,7 +171,7 @@ const rouletteModule = (() => {
     }
 
     if (betType === "exact") {
-      if (exactNumber !== "00" && (!Number.isInteger(exactNumber) || exactNumber < 0 || exactNumber > 36)) {
+      if (exactValue.trim() === "" || exactNumber !== "00" && (!Number.isInteger(exactNumber) || exactNumber < 0 || exactNumber > 36)) {
         showToast("Le numéro exact doit être 00 ou compris entre 0 et 36.");
         return;
       }
@@ -172,11 +181,12 @@ const rouletteModule = (() => {
     savePlayer(player);
     updateTopbar();
 
-    state.currentBet = {
+    state.bets.push({
       type: betType,
       amount: stake,
       exactNumber
-    };
+    });
+    renderBets();
 
     const betText = getBetLabel(betType, exactNumber);
     document.getElementById("rouletteStatus").textContent = `Pari confirmé : ${betText} pour ${stake} jetons.`;
@@ -189,19 +199,17 @@ const rouletteModule = (() => {
       return;
     }
 
-    const wheel = document.getElementById("rouletteWheel");
-    const scrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-    wheel.closest(".roulette-stage").scrollIntoView({ behavior: scrollBehavior, block: "center" });
-
-    if (!state.currentBet) {
+    if (!state.bets.length) {
       showToast("Aucun pari n'a été confirmé.");
       return;
     }
 
+    const wheel = document.getElementById("rouletteWheel");
     const spinButton = document.getElementById("rouletteSpinBtn");
     const placeBetButton = document.getElementById("roulettePlaceBet");
 
     state.wheelLocked = true;
+    renderBets();
     spinButton.disabled = true;
     placeBetButton.disabled = true;
 
@@ -224,8 +232,10 @@ const rouletteModule = (() => {
 
   function settleSpin(winningNumber) {
     const player = getPlayer();
-    const bet = state.currentBet;
-    const result = evaluateRouletteBet(bet, winningNumber);
+    const totalStake = state.bets.reduce((sum, bet) => sum + bet.amount, 0);
+    const results = state.bets.map(bet => evaluateRouletteBet(bet, winningNumber));
+    const payoutTotal = results.reduce((sum, result) => sum + result.payoutTotal, 0);
+    const result = { won: payoutTotal > 0, payoutTotal, message: `${results.filter(result => result.won).length} pari(s) gagnant(s).` };
 
     if (result.won) {
       player.chips += result.payoutTotal;
@@ -245,22 +255,21 @@ const rouletteModule = (() => {
       number: winningNumber,
       color: getRouletteColor(winningNumber),
       outcome: result.won ? "Gagné" : "Perdu",
-      labels: result.won ? `+${result.payoutTotal} jetons` : `-${bet.amount} jetons`
+      labels: result.won ? `${result.payoutTotal} jetons` : "0"
     });
     state.lastResults = state.lastResults.slice(0, 10);
 
     document.getElementById("rouletteBallTrack").classList.remove("is-spinning");
 
-    const chosenType = getBetLabel(bet.type, bet.exactNumber);
     document.getElementById("rouletteStatus").textContent = `Le numéro gagnant est ${winningNumber}. ${result.message}`;
-    document.getElementById("roulettePayout").textContent = `Ton pari ${chosenType} : ${result.won ? `gagné, +${result.payoutTotal} jetons` : "perdu"}.`;
+    document.getElementById("roulettePayout").textContent = `Mises : ${totalStake} jetons | Retour : ${payoutTotal} jetons | Bilan : ${payoutTotal - totalStake} jetons.`;
 
     addHistoryEntry({
       game: "roulette",
-      bet: bet.amount,
+      bet: totalStake,
       result: result.won ? "Victoire" : "Défaite",
       payout: result.payoutTotal,
-      net: result.won ? result.payoutTotal - bet.amount : -bet.amount,
+      net: result.won ? result.payoutTotal - totalStake : -totalStake,
       date: new Date().toISOString(),
       number: winningNumber
     });
@@ -270,9 +279,10 @@ const rouletteModule = (() => {
     renderLeaderboard();
     renderFilteredHistory();
 
-    state.currentBet = null;
+    state.bets = [];
     state.wheelLocked = false;
-    document.getElementById("rouletteSpinBtn").disabled = false;
+    renderBets();
+    document.getElementById("rouletteSpinBtn").disabled = true;
     document.getElementById("roulettePlaceBet").disabled = false;
     state.lastResults = state.lastResults.slice(0, 10);
   }
@@ -318,6 +328,117 @@ const rouletteModule = (() => {
         : `La bille s'est arrêtée sur ${winningNumber}. Ton pari ${getBetLabel(bet.type, bet.exactNumber)} n'a pas été touché.`,
       number: winningNumber
     };
+  }
+
+  function renderRacetrack() {
+    const track = document.getElementById("rouletteRacetrackNumbers");
+    track.replaceChildren();
+    const center = document.createElement("div");
+    center.className = "racetrack-center";
+    center.textContent = "ROULETTE AMÉRICAINE · 0 / 00";
+    track.appendChild(center);
+    wheelNumbers.forEach((number, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `board-cell board-${getRouletteColor(number)} track-number`;
+      button.dataset.boardNumber = number;
+      button.textContent = number;
+      // Sixteen pockets on each straight and three on each rounded end.
+      if (index < 16 || (index >= 19 && index < 35)) {
+        const upper = index < 16;
+        const position = upper ? index : 34 - index;
+        button.style.left = `${10 + position * 5}%`;
+        button.style.top = upper ? "0" : "70%";
+        button.style.width = "5%";
+        button.style.height = "30%";
+      } else {
+        const right = index < 19;
+        const segment = right ? index - 16 : index - 35;
+        const start = (right ? -90 : 90) + segment * 60;
+        const arc = (radius, reverse) => Array.from({ length: 13 }, (_, step) => {
+          const angle = (start + (reverse ? 12 - step : step) * 5) * Math.PI / 180;
+          return [50 + radius * Math.cos(angle), 50 + radius * Math.sin(angle)];
+        });
+        const points = [...arc(50, false), ...arc(20, true)];
+        button.style.left = right ? "80%" : "0";
+        button.style.top = "0";
+        button.style.width = "20%";
+        button.style.height = "100%";
+        button.style.clipPath = `polygon(${points.map(([x, y]) => `${x}% ${y}%`).join(",")})`;
+        const angle = (start + 30) * Math.PI / 180;
+        const label = document.createElement("span");
+        label.textContent = number;
+        label.style.left = `${50 + 35 * Math.cos(angle)}%`;
+        label.style.top = `${50 + 35 * Math.sin(angle)}%`;
+        button.replaceChildren(label);
+        button.classList.add("track-end");
+      }
+      button.addEventListener("click", () => placeBet("exact", number));
+      track.appendChild(button);
+    });
+    const ns = "http://www.w3.org/2000/svg";
+    const lines = document.createElementNS(ns, "svg");
+    lines.setAttribute("viewBox", "0 0 1000 200");
+    lines.setAttribute("aria-hidden", "true");
+    lines.classList.add("track-lines");
+    let path = "M100 2H900 A98 98 0 0 1 900 198 H100 A98 98 0 0 1 100 2 M100 60H900 A40 40 0 0 1 900 140 H100 A40 40 0 0 1 100 60";
+    for (let i = 0; i <= 16; i++) {
+      const x = 100 + i * 50;
+      path += ` M${x} 0V60 M${x} 140V200`;
+    }
+    for (const cx of [100, 900]) {
+      for (const angle of cx === 900 ? [-30, 30] : [150, 210]) {
+        const radians = angle * Math.PI / 180;
+        path += ` M${cx + 40 * Math.cos(radians)} ${100 + 40 * Math.sin(radians)} L${cx + 100 * Math.cos(radians)} ${100 + 100 * Math.sin(radians)}`;
+      }
+    }
+    const outline = document.createElementNS(ns, "path");
+    outline.setAttribute("d", path);
+    lines.appendChild(outline);
+    track.appendChild(lines);
+  }
+
+  function renderBets() {
+    const container = document.getElementById("rouletteBets");
+    container.replaceChildren();
+    state.bets.forEach((bet, index) => {
+      const row = document.createElement("div");
+      row.className = "roulette-bet-row";
+      const label = document.createElement("span");
+      label.textContent = `${getBetLabel(bet.type, bet.exactNumber)} : ${bet.amount} jetons`;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "secondary-button";
+      remove.textContent = "Retirer";
+      remove.setAttribute("aria-label", `Retirer ${label.textContent}`);
+      remove.disabled = state.wheelLocked;
+      remove.addEventListener("click", () => {
+        if (state.wheelLocked) return;
+        const player = getPlayer();
+        player.chips += bet.amount;
+        savePlayer(player);
+        updateTopbar();
+        state.bets.splice(index, 1);
+        renderBets();
+      });
+      row.append(label, remove);
+      container.appendChild(row);
+    });
+    document.getElementById("rouletteBetTotal").textContent = `Total misé : ${state.bets.reduce((sum, bet) => sum + bet.amount, 0)} jetons`;
+    document.querySelectorAll(".board-cell[data-board-number]").forEach(cell => {
+      const amount = state.bets.filter(bet => bet.type === "exact" && String(bet.exactNumber) === cell.dataset.boardNumber).reduce((sum, bet) => sum + bet.amount, 0);
+      cell.classList.toggle("active", amount > 0);
+      cell.disabled = state.wheelLocked;
+      cell.querySelector(".bet-marker")?.remove();
+      cell.setAttribute("aria-label", `Numéro ${cell.dataset.boardNumber}, ${amount} jetons misés`);
+      if (amount) {
+        const marker = document.createElement("small");
+        marker.className = "bet-marker";
+        marker.textContent = amount;
+        cell.appendChild(marker);
+      }
+    });
+    document.getElementById("rouletteSpinBtn").disabled = state.wheelLocked || !state.bets.length;
   }
 
   function renderHistory() {

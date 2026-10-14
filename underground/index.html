@@ -51,14 +51,8 @@
         <button class="nav-item" data-view="crash" type="button">Crash</button>
         <button class="nav-item" data-view="crs" type="button">CRS VS Manifestants</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
-        <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
       </nav>
-
-      <div id="supportModeBanner" class="support-mode-banner" hidden>
-        <span>Mode support actif : tu consultes le compte <strong id="supportModeUsername"></strong>.</span>
-        <button id="endSupportModeBtn" class="secondary-button" type="button">Revenir au compte admin</button>
-      </div>
 
       <main class="main-panel">
         <section id="homeView" class="view active" aria-label="Accueil">
@@ -99,7 +93,16 @@
         </section>
 
         <section id="rouletteView" class="view" aria-label="Roulette">
+          <div class="action-row roulette-view-switch" aria-label="Vue de la roulette">
+            <button type="button" class="secondary-button" data-roulette-view="wheel" aria-pressed="true">Vue roue</button>
+            <button type="button" class="secondary-button" data-roulette-view="track" aria-pressed="false">Vue hippodrome</button>
+          </div>
           <div class="panel table-panel roulette-layout">
+            <div id="rouletteRacetrack" class="roulette-racetrack-wrap" hidden>
+              <div id="rouletteRacetrackNumbers" class="roulette-racetrack">
+                <div class="racetrack-center">Hippodrome américain<br><small>Clique sur un numéro pour miser</small></div>
+              </div>
+            </div>
             <div class="roulette-stage">
               <div id="rouletteWheel" class="roulette-wheel" aria-live="polite">
                 <div id="rouletteRotor" class="roulette-rotor">
@@ -206,25 +209,21 @@
               </div>
 
               <div class="action-row">
-                <button id="roulettePlaceBet" class="primary-button" type="button">Confirmer le pari</button>
+                <button id="roulettePlaceBet" class="primary-button" type="button">Ajouter le pari de zone</button>
                 <button id="rouletteSpinBtn" class="gold-button" type="button">Lancer la roulette</button>
               </div>
 
+              <div id="rouletteBets" class="roulette-bets" aria-live="polite"></div>
+              <strong id="rouletteBetTotal">Total misé : 0 jeton</strong>
               <div id="rouletteStatus" class="status-box">Aucun pari actif. Choisis une couleur, une zone ou un numéro exact.</div>
               <div id="roulettePayout" class="status-box subtle">Dernier résultat : aucun. Les chances les plus simples sont rouge/noir, pair/impair ou 1 à 18 / 19 à 36.</div>
-
-              <div class="history-panel">
-                <div class="section-heading compact">
-                  <h3>10 derniers résultats</h3>
-                </div>
-                <div id="rouletteHistory" class="mini-history"></div>
-              </div>
             </div>
           </div>
+          <div id="rouletteHistory" class="history-list"></div>
         </section>
 
         <section id="blackjackView" class="view" aria-label="Blackjack">
-          <div class="panel table-panel blackjack-lobby">
+                  <div class="panel table-panel blackjack-lobby">
             <div class="blackjack-console">
               <div class="section-heading compact">
                 <h2>Tables de blackjack</h2>
@@ -251,6 +250,12 @@
                 <button id="blackjackLeaveTableBtn" class="secondary-button" type="button">Quitter la table</button>
                 <button id="blackjackHostStartBtn" class="gold-button" type="button">Lancer la manche</button>
               </div>
+"primary-button" type="button">Nouvelle partie</button>
+                <button id="blackjackHitBtn" class="secondary-button" type="button">Tirer</button>
+                <button id="blackjackStandBtn" class="secondary-button" type="button">Rester</button>
+              </div>
+
+              <div id="blackjackStatus" class="status-box">Choisis une mise et commence une manche.</div>
             </div>
           </div>
         </section>
@@ -493,6 +498,7 @@
           </div>
         </section>
 
+<<<<<<< Updated upstream
         <section id="adminView" class="view" aria-label="Administration">
           <div class="panel admin-panel">
             <div class="section-heading">
@@ -576,6 +582,8 @@
           </div>
         </section>
 
+=======
+>>>>>>> Stashed changes
         <section id="profileView" class="view" aria-label="Profil et réglages">
           <div id="profileHero" class="profile-hero" data-style="aurora">
             <div id="profileBanner" class="profile-banner"></div>
@@ -672,7 +680,6 @@
     <script src="js/blackjack.js"></script>
     <script src="js/poker.js"></script>
     <script src="js/slots.js"></script>
-    <script src="js/admin.js"></script>
     <script src="js/app.js"></script>
     <script src="js/crs.js"></script>
   </body>

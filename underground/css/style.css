@@ -534,14 +534,6 @@ button {
   align-items: start;
 }
 
-.slots-layout {
-  display: flex;
-  max-width: 980px;
-  flex-direction: column;
-  gap: 22px;
-  margin: 0 auto;
-}
-
 .roulette-layout {
   display: flex;
   flex-direction: column;
@@ -767,7 +759,7 @@ button {
 }
 
 .board-zone-label.bet-choice.active {
-  box-shadow: 0 0 0 2px rgba(255, 214, 102, 0.6);
+  box-shadow: 0 0 0 2px rgba(255, 214, 102, 0.6); 
   border-color: rgba(255, 214, 102, 0.8);
 }
 
@@ -1093,23 +1085,14 @@ select {
 
 .slots-machine {
   position: relative;
-  width: min(100%, 760px);
-  min-height: 420px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+  min-height: 320px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  justify-self: center;
-  margin-inline: auto;
-  padding: 22px;
+  padding: 18px;
   border-radius: 22px;
-  background:
-    radial-gradient(ellipse at center, rgba(156, 44, 35, 0.2), transparent 68%),
-    linear-gradient(145deg, #201715, #100e0d 70%);
-  border: 1px solid rgba(197, 161, 90, 0.3);
-  box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.48), 0 16px 32px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
+  background: linear-gradient(135deg, rgba(184, 64, 53, 0.28), rgba(0, 0, 0, 0.12));
+  border: 1px solid rgba(197, 161, 90, 0.18);
 }
 
 .machine-light {
@@ -1119,32 +1102,6 @@ select {
   border-radius: 14px;
   background: linear-gradient(90deg, rgba(196, 123, 47, 0.3), rgba(184, 64, 53, 0.35), rgba(196, 123, 47, 0.3));
   box-shadow: 0 0 24px rgba(197, 161, 90, 0.25);
-  transition: filter 0.25s ease, box-shadow 0.25s ease;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  color: #f7dc9b;
-  font-size: 0.66rem;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.7);
-}
-
-.machine-light strong {
-  color: #fff4d1;
-  letter-spacing: 0.12em;
-}
-
-.slots-machine.is-spinning .machine-light {
-  animation: machineLightPulse 0.6s ease-in-out infinite alternate;
-}
-
-@keyframes machineLightPulse {
-  to {
-    filter: brightness(1.8);
-    box-shadow: 0 0 34px rgba(197, 161, 90, 0.65);
-  }
 }
 
 .reel-strip {
@@ -1153,10 +1110,8 @@ select {
   grid-template-columns: repeat(3, minmax(90px, 1fr));
   gap: 18px;
   width: 100%;
-  min-width: 0;
   max-width: 420px;
-  justify-self: center;
-  padding: 62px 18px 18px;
+  padding: 80px 18px 18px;
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(31, 29, 28, 0.95), rgba(18, 15, 14, 0.95));
   border: 2px solid rgba(197, 161, 90, 0.25);
@@ -1164,183 +1119,27 @@ select {
 }
 
 .reel {
-  position: relative;
-  display: block;
-  height: 210px;
-  min-height: 0;
+  min-height: 120px;
+  display: grid;
+  place-items: center;
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(249, 234, 194, 0.08), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(197, 161, 90, 0.2);
   font-size: 3rem;
-  overflow: hidden;
-  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.28), 0 5px 12px rgba(0, 0, 0, 0.24);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.reel::after {
-  content: "";
-  position: absolute;
-  inset: 33.333% 0;
-  z-index: 2;
-  border-block: 1px solid rgba(239, 190, 102, 0.35);
-  background: rgba(239, 190, 102, 0.045);
-  pointer-events: none;
-}
-
-.reel-track {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  will-change: transform;
-}
-
-.reel-track--idle {
-  height: 100%;
-}
-
-.reel-tile {
-  flex: 0 0 var(--reel-cell-height);
-  height: var(--reel-cell-height);
-  display: grid;
-  place-items: center;
-  line-height: 1;
-  text-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
-}
-
-.reel-track--idle .reel-tile {
-  flex: 1 1 0;
-  height: auto;
-}
-
-.reel-tile.is-landed {
-  background: linear-gradient(90deg, transparent, rgba(239, 190, 102, 0.12), transparent);
+  transition: transform 0.35s ease;
 }
 
 .reel.spinning {
-  border-color: rgba(239, 190, 102, 0.72);
-  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.28), 0 0 20px rgba(239, 190, 102, 0.18);
+  animation: reelSpin 0.2s linear infinite alternate;
 }
 
-.reel.spinning .reel-track {
-  filter: blur(0.65px);
-}
-
-.reel.stopped .reel-tile.is-result .slot-symbol {
-  animation: reelLand 0.28s cubic-bezier(0.2, 0.85, 0.3, 1.3) both;
-}
-
-@keyframes reelLand {
-  0% { transform: translateY(-24px) scale(0.84); opacity: 0.35; }
-  70% { transform: translateY(4px) scale(1.08); opacity: 1; }
-  100% { transform: translateY(0) scale(1); }
-}
-
-.slot-symbol {
-  display: inline-block;
-  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35));
-}
-
-.slot-lever {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: 220px;
-  height: 220px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #f0d59b;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.slot-lever:focus-visible {
-  outline: 2px solid #f0d59b;
-  outline-offset: 3px;
-  border-radius: 12px;
-}
-
-.lever-mechanism {
-  position: relative;
-  display: block;
-  width: 220px;
-  height: 190px;
-}
-
-.lever-guide {
-  position: absolute;
-  left: 50%;
-  bottom: 18px;
-  width: 26px;
-  height: 132px;
-  transform: translateX(-50%);
-  border: 2px solid rgba(207, 171, 102, 0.32);
-  border-radius: 14px;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.48), rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.48));
-  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.45);
-}
-
-.lever-arm {
-  position: absolute;
-  left: 50%;
-  bottom: 28px;
-  width: 8px;
-  height: 98px;
-  transform: translateX(-50%) rotate(-14deg);
-  transform-origin: 50% 100%;
-  border: 1px solid rgba(255, 233, 183, 0.4);
-  border-radius: 8px;
-  background: linear-gradient(90deg, #5a391e, #e5c580 42%, #76502b 100%);
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.55);
-}
-
-.lever-knob {
-  position: absolute;
-  top: -30px;
-  left: 50%;
-  width: 46px;
-  height: 46px;
-  transform: translateX(-50%);
-  border: 2px solid rgba(255, 218, 171, 0.75);
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 26%, #ff8b77, #c63132 55%, #651b23 100%);
-  box-shadow: inset -4px -5px 8px rgba(42, 5, 12, 0.5), 0 0 14px rgba(211, 52, 48, 0.38);
-  transition: box-shadow 0.2s ease;
-}
-
-.lever-pivot {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  width: 25px;
-  height: 25px;
-  transform: translateX(-50%);
-  border: 3px solid #b79453;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #f5d998, #79572d 72%);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
-}
-
-.slot-lever:hover:not(:disabled) .lever-knob {
-  box-shadow: inset -4px -5px 8px rgba(42, 5, 12, 0.5), 0 0 20px rgba(236, 70, 58, 0.68);
-}
-
-.slot-lever.is-pulled .lever-knob {
-  box-shadow: inset -4px -5px 8px rgba(42, 5, 12, 0.5), 0 0 22px rgba(236, 70, 58, 0.62);
-}
-
-.slot-lever:disabled {
-  cursor: wait;
-}
-
-.lever-label {
-  font-size: 0.61rem;
-  font-weight: 900;
-  letter-spacing: 0.14em;
+@keyframes reelSpin {
+  0% {
+    transform: translateY(-4px) scale(0.98);
+  }
+  100% {
+    transform: translateY(4px) scale(1.02);
+  }
 }
 
 .payout-panel {
@@ -1371,59 +1170,6 @@ select {
   padding: 8px 10px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.02);
-}
-
-.slots-result {
-  display: grid;
-  align-content: center;
-  gap: 5px;
-  border-left: 4px solid rgba(197, 161, 90, 0.62);
-  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-.slots-result strong {
-  font-size: 1.1rem;
-  font-weight: 900;
-}
-
-.slots-result span {
-  color: var(--muted);
-}
-
-.slots-result[data-result="win"] {
-  border-color: #59c58a;
-  background: rgba(25, 105, 67, 0.22);
-  box-shadow: 0 0 24px rgba(60, 190, 119, 0.12);
-  animation: slotsResultReveal 0.35s ease-out both;
-}
-
-.slots-result[data-result="win"] strong {
-  color: #9ef0bd;
-}
-
-.slots-result[data-result="loss"] {
-  border-color: #d45650;
-  background: rgba(145, 37, 38, 0.2);
-  box-shadow: 0 0 24px rgba(210, 62, 60, 0.1);
-  animation: slotsResultReveal 0.35s ease-out both;
-}
-
-.slots-result[data-result="loss"] strong {
-  color: #ffaaa1;
-}
-
-.slots-result[data-result="refund"] {
-  border-color: var(--gold);
-  background: rgba(197, 161, 90, 0.1);
-}
-
-.slots-result[data-result="refund"] strong {
-  color: var(--gold-soft);
-}
-
-@keyframes slotsResultReveal {
-  from { transform: translateY(6px); opacity: 0.65; }
-  to { transform: translateY(0); opacity: 1; }
 }
 
 .leaderboard-note {
@@ -2983,61 +2729,6 @@ select {
   .roulette-wheel {
     width: min(80vw, 300px);
   }
-
-  .reel-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-    padding: 68px 10px 10px;
-    border-radius: 14px;
-  }
-
-  .reel {
-    min-width: 0;
-    height: 162px;
-    border-radius: 10px;
-    font-size: 2.4rem;
-  }
-
-  .slots-machine {
-    width: 100%;
-    min-height: 360px;
-    grid-template-columns: minmax(0, 1fr) 100px;
-    gap: 4px;
-    padding: 16px 12px;
-  }
-
-  .slot-lever,
-  .lever-mechanism {
-    width: 100px;
-  }
-
-  .lever-arm {
-    height: 72px;
-  }
-
-  .lever-knob {
-    top: -24px;
-    width: 36px;
-    height: 36px;
-  }
-}
-
-@media (max-width: 680px) and (min-width: 561px) {
-  .slots-machine {
-    grid-template-columns: minmax(0, 1fr) 150px;
-  }
-
-  .slot-lever,
-  .lever-mechanism {
-    width: 150px;
-  }
-
-  .reel-strip {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    padding-right: 10px;
-    padding-left: 10px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3312,6 +3003,7 @@ select {
     min-width: 0;
   }
 }
+<<<<<<< Updated upstream
 .profile-hero, .player-profile-content { --profile-accent: #6ee7c7; }
 .profile-hero { overflow: hidden; border: 1px solid color-mix(in srgb, var(--profile-accent) 35%, transparent); border-radius: 24px; margin-bottom: 22px; background: #10171e; }
 .profile-banner { height: 180px; background: radial-gradient(ellipse at 20% 30%, #397b72, transparent 60%), linear-gradient(120deg, #101923, #21464a, #101923); background-size: cover; background-position: center; }
@@ -3412,3 +3104,38 @@ select {
 .admin-account-menu-buttons button { width: 100%; text-align: left; }
 #adminSearchForm h3 { width: 100%; margin: 0; }
 @media (max-width: 600px) { .admin-wallet-control { align-items: stretch; flex-direction: column; } .admin-section-nav button { margin-left: 0; } .admin-panel .admin-detail-panel { padding: 14px; } }
+=======
+/* Independent roulette bets and oval racetrack. */
+.roulette-stage[hidden], .roulette-racetrack-wrap[hidden] { display: none; }
+.roulette-view-switch { margin-bottom: 1rem; }
+.roulette-view-switch [aria-pressed="true"] { border-color: #d7b76c; background: #584622; }
+.roulette-racetrack-wrap { min-width: 0; display: flex; align-items: center; overflow-x: auto; padding: 12px; }
+.roulette-racetrack { position: relative; width: 100%; min-width: 520px; height: 380px; border-radius: 50%; border: 3px solid #bda36b; background: radial-gradient(ellipse, #154b35 45%, #09291d 46%, #1c6547 72%); }
+.racetrack-center { position: absolute; inset: 35% 20%; display: grid; place-content: center; text-align: center; color: #f4dfab; pointer-events: none; }
+.racetrack-center small { font-size: .75rem; }
+.track-number { position: absolute; transform: translate(-50%, -50%); width: 34px; height: 38px; padding: 0; }
+.board-cell { position: relative; }
+.board-cell.track-number { position: absolute; }
+.bet-marker { position: absolute; bottom: -5px; right: -5px; background: #ffe0a0; color: #21190a; border: 1px solid #8c681d; border-radius: 12px; padding: 1px 4px; font-size: 10px; line-height: 14px; pointer-events: none; z-index: 2; }
+.roulette-bets { display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
+.roulette-bet-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.roulette-bet-row button { padding: 5px 10px; }
+
+/* American racetrack: contiguous pockets around an elongated oval. */
+.roulette-layout:has(.roulette-racetrack-wrap:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+.roulette-racetrack-wrap { background: #253d20; border-radius: 16px; padding: 36px 16px; }
+.roulette-racetrack { width: 100%; min-width: 760px; height: auto; aspect-ratio: 5; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.racetrack-center { inset: 30% 10%; border-radius: 999px; background: #253d20; font-size: clamp(15px, 2vw, 24px); font-weight: 700; letter-spacing: .08em; z-index: 1; }
+.board-cell.track-number { position: absolute; transform: none; min-height: 0; padding: 0; border: 0; border-radius: 0; font-size: 26px; box-shadow: none; }
+.board-cell.track-number.board-red { background: #cf1725; }
+.board-cell.track-number.board-black { background: #262626; }
+.board-cell.track-number.board-green { background: #087a50; }
+.board-cell.track-number:hover { filter: brightness(1.3); }
+.board-cell.track-number.active { box-shadow: inset 0 0 0 5px #edc66a; }
+.board-cell.track-number:focus-visible { outline: none; filter: brightness(1.6); }
+.track-end span { position: absolute; transform: translate(-50%, -50%); }
+.track-number .bet-marker { bottom: 2px; right: 2px; z-index: 3; }
+.track-end .bet-marker { bottom: auto; right: auto; left: 42%; top: 43%; }
+.track-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.track-lines path { fill: none; stroke: #deded7; stroke-width: 4px; stroke-linejoin: round; }
+>>>>>>> Stashed changes
