@@ -3,9 +3,7 @@ FROM node:22-bookworm AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY server.js ./
-COPY plinko.js ./
-COPY dice.js ./
+COPY *.js ./
 COPY build-crs ./build-crs
 COPY public ./public
 COPY underground ./underground
@@ -19,9 +17,7 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/server.js ./server.js
-COPY --from=build --chown=node:node /app/plinko.js ./plinko.js
-COPY --from=build --chown=node:node /app/dice.js ./dice.js
+COPY --from=build --chown=node:node /app/*.js ./
 COPY --from=build --chown=node:node /app/build-crs ./build-crs
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/underground ./underground
