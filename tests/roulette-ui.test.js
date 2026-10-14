@@ -59,8 +59,52 @@ function setup() {
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../underground/js/roulette.js'), 'utf8'), context);
   get('rouletteCustomStake').value = '10';
   context.window.rouletteModule.initialize();
-  return { get, board, zone, switches, stage, player, history, document, finish: () => settle() };
+  return { get, board, zone, switches, stage, player, history, document, context, finish: () => settle() };
 }
+
+test('repeat restores all previous numbers, double zero and zone stakes without duplicating them', () => {
+  const ui = setup();
+  assert.equal(ui.get('rouletteRepeatBet').disabled, true);
+  ui.board.events.click();
+  ui.get('rouletteCustomStake').value = '25';
+  ui.get('rouletteRacetrackNumbers').children.find(item => item.dataset.boardNumber === '00').events.click();
+  ui.get('roulettePlaceBet').events.click();
+  const labels = ui.get('rouletteBets').children.map(row => row.children[0].textContent);
+  ui.get('rouletteSpinBtn').events.click();
+  assert.equal(ui.get('rouletteRepeatBet').disabled, true);
+  ui.finish();
+  assert.equal(ui.get('rouletteRepeatBet').disabled, false);
+  const balance = ui.player.chips;
+  ui.get('rouletteCustomStake').value = '100';
+  ui.get('rouletteRepeatBet').events.click();
+  assert.deepEqual(ui.get('rouletteBets').children.map(row => row.children[0].textContent), labels);
+  assert.equal(ui.player.chips, balance - 60);
+  ui.get('rouletteRepeatBet').events.click();
+  assert.equal(ui.player.chips, balance - 60);
+  ui.get('rouletteBets').children[0].children[1].events.click();
+  ui.get('rouletteSpinBtn').events.click();
+  ui.finish();
+  ui.get('rouletteRepeatBet').events.click();
+  assert.deepEqual(ui.get('rouletteBets').children.map(row => row.children[0].textContent), labels.slice(1));
+});
+
+test('repeat rejects the entire set if balance or current limits are insufficient', () => {
+  const ui = setup();
+  ui.board.events.click();
+  ui.get('rouletteCustomStake').value = '25';
+  ui.get('roulettePlaceBet').events.click();
+  ui.get('rouletteSpinBtn').events.click();
+  ui.finish();
+  ui.player.chips = 20;
+  ui.get('rouletteRepeatBet').events.click();
+  assert.equal(ui.player.chips, 20);
+  assert.equal(ui.get('rouletteBets').children.length, 0);
+  ui.player.chips = 1000;
+  ui.context.window.casinoGameSettings.roulette.maxBet = 15;
+  ui.get('rouletteRepeatBet').events.click();
+  assert.equal(ui.player.chips, 1000);
+  assert.equal(ui.get('rouletteBets').children.length, 0);
+});
 
 test('roulette initializes all 38 track pockets and keeps bets across views and zone selection', () => {
   const ui = setup();

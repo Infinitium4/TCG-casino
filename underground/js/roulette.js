@@ -4,6 +4,7 @@ const rouletteModule = (() => {
   ];
   const state = {
     bets: [],
+    previousBets: [],
     wheelLocked: false,
     rotation: 0,
     trackPosition: 0,
@@ -42,6 +43,7 @@ const rouletteModule = (() => {
     });
 
     placeBetButton.addEventListener("click", () => placeBet());
+    document.getElementById("rouletteRepeatBet").addEventListener("click", repeatBets);
     renderRacetrack();
     document.querySelectorAll("[data-roulette-view]").forEach(button => {
       button.addEventListener("click", () => {
@@ -186,6 +188,28 @@ const rouletteModule = (() => {
     showToast(`Pari de ${stake} jetons confirmé sur ${betText}.`);
   }
 
+  function repeatBets() {
+    if (state.wheelLocked || state.bets.length || !state.previousBets.length) return;
+    const player = getPlayer();
+    const limits = window.casinoGameSettings?.roulette || { minBet: 1, maxBet: 1_000_000 };
+    if (state.previousBets.some(bet => bet.amount < limits.minBet || bet.amount > limits.maxBet)) {
+      showToast("Les anciennes mises ne respectent plus les limites de la table.");
+      return;
+    }
+    const total = state.previousBets.reduce((sum, bet) => sum + bet.amount, 0);
+    if (total > player.chips) {
+      showToast(`Solde insuffisant pour répéter les mises : ${total} jetons nécessaires.`);
+      return;
+    }
+    state.bets = state.previousBets.map(bet => ({ ...bet }));
+    player.chips -= total;
+    savePlayer(player);
+    updateTopbar();
+    renderBets();
+    document.getElementById("rouletteStatus").textContent = `Mises répétées : ${state.bets.length} pari(s), ${total} jetons. Tu peux les modifier ou lancer la roulette.`;
+    showToast(`Mises répétées pour ${total} jetons.`);
+  }
+
   function spinWheel() {
     if (state.wheelLocked) {
       return;
@@ -276,6 +300,7 @@ const rouletteModule = (() => {
     renderLeaderboard();
     renderFilteredHistory();
 
+    state.previousBets = state.bets.map(bet => ({ ...bet }));
     state.bets = [];
     state.wheelLocked = false;
     renderBets();
@@ -477,6 +502,10 @@ const rouletteModule = (() => {
       }
     });
     document.getElementById("rouletteSpinBtn").disabled = state.wheelLocked || !state.bets.length;
+    const repeatButton = document.getElementById("rouletteRepeatBet");
+    repeatButton.disabled = state.wheelLocked || state.bets.length > 0 || !state.previousBets.length;
+    const previousTotal = state.previousBets.reduce((sum, bet) => sum + bet.amount, 0);
+    repeatButton.textContent = previousTotal ? `Répéter les mises (${previousTotal} jetons)` : "Répéter les mises";
   }
 
   function renderHistory() {
