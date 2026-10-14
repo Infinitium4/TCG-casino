@@ -28,6 +28,7 @@ async function initializeApp() {
 
   await crashModule.initialize();
   plinkoModule.initialize();
+  diceModule.initialize();
   bindNavigation();
   bindGlobalButtons();
   updateTopbar();
@@ -115,6 +116,7 @@ function showView(viewName) {
   });
   crashModule.setActive(viewName === "crash");
   plinkoModule.setActive(viewName === "plinko");
+  diceModule.setActive(viewName === "dice");
 }
 
 function updateTopbar() {
@@ -239,6 +241,7 @@ function renderHomeView() {
 
   const cards = [
     { name: "Plinko", icon: "◉", description: "16 rebonds. Une case. Jusqu’à 110 fois ta mise.", action: "LANCER UNE BILLE", view: "plinko" },
+    { name: "Dice", icon: "⚄", description: "Choisis ton seuil. Roll Under ou Roll Over, à toi de décider.", action: "LANCER LES DÉS", view: "dice" },
     {
       name: "Roulette",
       icon: "🎰",

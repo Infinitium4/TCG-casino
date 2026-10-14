@@ -10,6 +10,7 @@
     />
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="css/plinko.css" />
+    <link rel="stylesheet" href="css/dice.css" />
     <link rel="stylesheet" href="/css/bunker.css" />
   </head>
   <body>
@@ -50,6 +51,7 @@
         <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
         <button class="nav-item" data-view="crash" type="button">Crash</button>
         <button class="nav-item" data-view="plinko" type="button">PLINKO</button>
+        <button class="nav-item" data-view="dice" type="button">DICE</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
         <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
@@ -483,6 +485,33 @@
           </div>
         </section>
 
+        <section id="diceView" class="view" aria-label="Dice">
+          <div class="section-heading"><div><p class="eyebrow">CHOISIS TON SEUIL. TENTE TA CHANCE.</p><h1>DICE</h1></div><span class="status-box subtle">RTP théorique 99 %</span></div>
+          <div class="dice-layout">
+            <aside class="panel dice-controls">
+              <p class="eyebrow">TON SOLDE</p><strong id="diceBalance" class="dice-balance">—</strong><small>jetons virtuels</small>
+              <label class="input-group" for="diceStake">Mise<input id="diceStake" type="number" min="1" max="1000000" step="1" value="100" inputmode="numeric" /></label>
+              <div class="dice-adjust"><button class="secondary-button" type="button" data-dice-adjust="0.5">½</button><button class="secondary-button" type="button" data-dice-adjust="2">×2</button><button class="secondary-button" type="button" data-dice-adjust="max">MAX</button></div>
+              <label class="input-group" for="diceThreshold">Seuil<input id="diceThreshold" type="number" min="1" max="99" step="0.01" value="50.00" inputmode="decimal" /></label>
+              <div class="dice-mode" role="group" aria-label="Mode de victoire"><button class="secondary-button" type="button" data-dice-mode="under" aria-pressed="true">Roll Under</button><button class="secondary-button" type="button" data-dice-mode="over" aria-pressed="false">Roll Over</button></div>
+              <button id="diceLaunch" class="gold-button" type="button" disabled>LANCER</button>
+              <p id="diceFeedback" class="dice-feedback" role="status" aria-live="polite">Chargement du jeu…</p>
+              <small>Le gain total inclut la mise. Les jetons sont arrondis à l’entier inférieur.</small>
+            </aside>
+            <div class="panel dice-board" id="diceBoard">
+              <div class="dice-result"><p class="eyebrow">RÉSULTAT DU LANCER</p><strong id="diceResult">—</strong><span id="diceOutcome">À toi de jouer</span><span id="diceGain"></span></div>
+              <div class="dice-track-wrap">
+                <div class="dice-track" id="diceTrack"><span id="diceMarker" class="dice-marker" hidden>◆</span><input id="diceSlider" type="range" min="1" max="99" step="0.01" value="50" aria-label="Seuil Dice, de 1 à 99" /></div>
+                <div class="dice-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
+              </div>
+              <p id="diceRule" class="dice-rule">Gagne avec un résultat strictement inférieur à 50,00.</p>
+              <div class="dice-stats"><div><span>Chance de victoire</span><strong id="diceChance">50,00 %</strong></div><div><span>Multiplicateur</span><strong id="diceMultiplier">1,98x</strong></div><div><span>Gain potentiel total</span><strong id="dicePotential">198 jetons</strong></div></div>
+              <p class="dice-note">10 000 résultats équiprobables, de 0,00 à 99,99. Le vert indique la zone gagnante.</p>
+            </div>
+          </div>
+          <section class="panel dice-history-panel"><div class="section-heading compact"><h3>Tes derniers lancers</h3></div><div class="dice-table-wrap"><table class="dice-history-table"><thead><tr><th>Date</th><th>Mise</th><th>Mode / Seuil</th><th>Résultat</th><th>Multiplicateur</th><th>Gain net</th></tr></thead><tbody id="diceHistory"></tbody></table></div><p id="diceEmpty">Ton premier lancer t’attend.</p></section>
+        </section>
+
         <section id="leaderboardView" class="view" aria-label="Classement">
           <div class="panel">
             <div class="section-heading">
@@ -643,6 +672,7 @@
                   <option value="slots">Machine à sous</option>
                   <option value="crash">Crash</option>
                   <option value="plinko">Plinko</option>
+                  <option value="dice">Dice</option>
                 </select>
               </label>
 
@@ -671,6 +701,7 @@
     <script src="js/roulette.js"></script>
     <script src="js/crash.js"></script>
     <script src="js/plinko.js"></script>
+    <script src="js/dice.js"></script>
     <script src="js/blackjack.js"></script>
     <script src="js/poker.js"></script>
     <script src="js/slots.js"></script>

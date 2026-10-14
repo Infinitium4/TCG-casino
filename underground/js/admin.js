@@ -182,7 +182,7 @@ const adminModule = (() => {
         : 'Les mises sont ouvertes.';
       document.getElementById('adminRootPanel').hidden = !state.isPrimaryAdmin;
       if (!state.isPrimaryAdmin) return;
-      const labels = { roulette: 'Roulette', blackjack: 'Blackjack', poker: 'Poker', slots: 'Machine à sous', crash: 'Crash', plinko: 'Plinko' };
+      const labels = { roulette: 'Roulette', blackjack: 'Blackjack', poker: 'Poker', slots: 'Machine à sous', crash: 'Crash', plinko: 'Plinko', dice: 'Dice' };
       container.replaceChildren(...payload.games.map((game) => {
         const row = element('div', 'admin-game-setting');
         row.append(element('strong', '', labels[game.game] || game.game));

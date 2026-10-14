@@ -10,6 +10,7 @@
   const { Server } = require('socket.io');
   const SQLiteStore = require('connect-sqlite3')(session);
   const { initializePlinkoSchema, registerPlinkoRoutes } = require('./plinko');
+  const { initializeDiceSchema, registerDiceRoutes } = require('./dice');
 
   const app = express();
   const server = http.createServer(app);
@@ -28,6 +29,7 @@
   const MAX_CHIPS = Number.MAX_SAFE_INTEGER;
   const GAME_DEFAULTS = {
     plinko: { enabled: true, minBet: 1, maxBet: 1_000_000 },
+    dice: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     roulette: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     blackjack: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     poker: { enabled: true, minBet: 1, maxBet: 1_000_000 },
@@ -2091,6 +2093,7 @@
       `, [game, defaults.enabled ? 1 : 0, defaults.minBet, defaults.maxBet]);
     }
     await initializePlinkoSchema(run);
+    await initializeDiceSchema(run);
     await run(`
       INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
       VALUES ('betting_paused', '0')
@@ -3251,6 +3254,8 @@
   }));
 
   registerPlinkoRoutes({ app, io, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
+    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement });
+  registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement });
 
   app.get('/api/history', requireAuth, async (req, res) => {
