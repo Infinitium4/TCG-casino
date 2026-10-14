@@ -1,0 +1,50 @@
+#horsesView { --race-gold: #e7c477; }
+#horseRoom[hidden], #horseLobby[hidden] { display: none; }
+.race-table-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 12px; }
+.race-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.race-players > div, .race-table-item { padding: 14px; border: 1px solid #e7c47730; background: #151c1e; border-radius: 12px; }
+.race-players small { display: block; margin-top: 7px; color: #b4c5bb; }
+.race-players .is-ready { border-color: #48ce9166; }
+.race-tables { display: grid; gap: 12px; }
+.race-table-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.race-table-item small { display: block; margin-top: 6px; color: #b4c5bb; }
+.race-header { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 22px; }
+.race-header h2 { font-size: clamp(1.8rem, 4vw, 3.2rem); margin: 0; letter-spacing: -.04em; }
+.race-header .eyebrow { color: var(--race-gold); }
+.race-balance { padding: 14px 20px; border: 1px solid #e7c47740; border-radius: 14px; white-space: nowrap; color: #d0c6ac; }
+.race-balance strong { display: block; font-size: 1.5rem; color: #ffe7b3; }
+.race-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; }
+.race-arena { min-width: 0; position: relative; border-radius: 20px; border: 1px solid #e7c47755; background: #183a2b; overflow: hidden; box-shadow: 0 20px 50px #0005; }
+#horseRaceCanvas { display: block; width: 100%; aspect-ratio: 1100 / 570; }
+.race-arena-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 16px 20px; background: #10251f; border-bottom: 1px solid #e7c47730; font-size: .8rem; letter-spacing: .08em; color: #e7c477; }
+.race-arena-top strong { color: #fff0cf; font-variant-numeric: tabular-nums; }
+.race-countdown { position: absolute; inset: 30% 0 auto; text-align: center; font-size: clamp(3rem, 9vw, 7rem); font-weight: 900; color: #fff1bd; text-shadow: 0 5px 20px #0009; pointer-events: none; }
+.race-sidebar { padding: 22px; border-radius: 20px; background: #171e20; border: 1px solid #e7c47730; }
+.race-sidebar h3 { margin: 0 0 16px; font-size: .9rem; text-transform: uppercase; letter-spacing: .12em; color: #e7c477; }
+.race-ranking { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.race-ranking li { display: flex; align-items: center; gap: 10px; padding: 11px; background: #ffffff05; border-radius: 10px; font-size: .85rem; }
+.race-color { display: inline-grid; place-items: center; width: 27px; height: 27px; border-radius: 7px; background: var(--horse-color); color: #111b22; font-weight: 900; }
+.race-ranking small { margin-left: auto; color: #b4c5bb; font-variant-numeric: tabular-nums; }
+.race-selection { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 22px 0; }
+.race-horse-choice { display: grid; justify-items: center; gap: 7px; padding: 16px 8px; border: 1px solid #ffffff20; border-radius: 13px; background: #18201f; color: #efeee6; }
+.race-horse-choice[aria-pressed="true"] { border-color: var(--horse-color); background: color-mix(in srgb, var(--horse-color) 13%, #18201f); box-shadow: inset 0 -3px var(--horse-color); }
+.race-horse-choice small { color: #d9ccaa; font-size: .7rem; }
+.race-horse-choice:disabled { cursor: default; opacity: .75; }
+.race-bet-panel { margin-top: 20px; padding: 22px; background: #151c1e; border: 1px solid #e7c47730; border-radius: 18px; }
+.race-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.race-actions label { display: grid; gap: 7px; font-size: .8rem; color: #c7c7b7; }
+.race-actions input { width: 160px; }
+.race-actions button { min-height: 44px; }
+.race-sound { margin-top: 20px; display: flex; align-items: center; gap: 9px; color: #c4c6b7; font-size: .8rem; }
+.race-sound input { width: auto; flex: 0 0 auto; margin: 0; accent-color: var(--race-gold); }
+.race-feedback { min-height: 24px; color: #dfddcb; line-height: 1.6; margin-bottom: 0; }
+.race-feedback.is-error { color: #ff9d9d; }
+.race-note { color: #9aaa9e; font-size: .75rem; line-height: 1.6; margin-top: 18px; }
+.race-podium { display: flex; justify-content: center; gap: 12px; margin-top: 20px; }
+.race-podium:empty { display: none; }
+.race-podium div { flex: 1; max-width: 220px; padding: 20px 10px; background: #d8b66a12; border: 1px solid #d8b66a35; border-radius: 12px; text-align: center; }
+.race-podium strong { display: block; margin-top: 8px; color: #f0d598; }
+.race-history { margin-top: 18px; display: grid; gap: 8px; }
+.race-history p { margin: 0; padding: 10px 14px; background: #ffffff04; border-radius: 8px; font-size: .8rem; color: #bdc9c0; }
+@media (max-width: 980px) { .race-layout { grid-template-columns: 1fr; } .race-sidebar { padding: 16px; } .race-ranking { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; } .race-ranking li { flex-wrap: wrap; gap: 5px; padding: 8px; } .race-ranking small { width: 100%; margin: 0; } }
+@media (max-width: 600px) { .race-header { align-items: start; gap: 10px; } .race-balance { padding: 10px; font-size: .7rem; } .race-balance strong { font-size: 1.1rem; } .race-selection { grid-template-columns: repeat(3, minmax(0, 1fr)); } .race-ranking { grid-template-columns: 1fr; } .race-ranking li { flex-wrap: nowrap; } .race-ranking small { width: auto; margin-left: auto; } .race-arena-top { padding: 12px; font-size: .65rem; } .race-bet-panel { padding: 15px; } .race-podium { gap: 6px; } .race-podium div { font-size: .75rem; padding: 12px 5px; } }

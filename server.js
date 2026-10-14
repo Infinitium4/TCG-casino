@@ -11,6 +11,7 @@
   const SQLiteStore = require('connect-sqlite3')(session);
   const { initializePlinkoSchema, registerPlinkoRoutes } = require('./plinko');
   const { initializeDiceSchema, registerDiceRoutes } = require('./dice');
+  const { initializeHorseRacingSchema, registerHorseRacingRoutes } = require('./horse-racing');
 
   const app = express();
   const server = http.createServer(app);
@@ -28,6 +29,7 @@
   const CRASH_MAX_BET = 1_000_000;
   const MAX_CHIPS = Number.MAX_SAFE_INTEGER;
   const GAME_DEFAULTS = {
+    horses: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     plinko: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     dice: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     roulette: { enabled: true, minBet: 1, maxBet: 1_000_000 },
@@ -2094,6 +2096,7 @@
     }
     await initializePlinkoSchema(run);
     await initializeDiceSchema(run);
+    await initializeHorseRacingSchema(run);
     await run(`
       INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
       VALUES ('betting_paused', '0')
@@ -3257,6 +3260,8 @@
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement });
   registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement });
+  registerHorseRacingRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
+    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet, addGameHistory, recordBankSettlement, databaseReady });
 
   app.get('/api/history', requireAuth, async (req, res) => {
     const rows = await all(
@@ -3619,6 +3624,7 @@
 
   app.post('/api/reset', requireAuth, async (req, res) => {
     const reset = await withDatabaseTransaction(async () => {
+      if (await get("SELECT id FROM horse_races WHERE user_id = ? AND status != 'settled'", [req.session.userId])) return false;
       const activeCrashBet = await get(
         "SELECT id FROM crash_bets WHERE user_id = ? AND status = 'active' LIMIT 1",
         [req.session.userId]
@@ -3629,7 +3635,7 @@
       return true;
     });
     if (!reset) {
-      return res.status(409).json({ error: 'Termine ta manche Crash avant de réinitialiser le compte.' });
+      return res.status(409).json({ error: 'Termine ta partie en cours avant de réinitialiser le compte.' });
     }
     const updated = await getUserById(req.session.userId);
     res.json({ ok: true, user: updated });
