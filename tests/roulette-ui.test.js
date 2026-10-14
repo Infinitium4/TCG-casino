@@ -118,6 +118,25 @@ test('roulette applies pulled stake limits and locks, settles and resets indepen
   assert.equal(ui.get('rouletteSpinBtn').disabled, true);
 });
 
+test('stakes on all six rounded pockets render outside the clipped buttons and are removed on refund', () => {
+  const ui = setup();
+  const track = ui.get('rouletteRacetrackNumbers');
+  const ends = track.children.filter(item => item.classList.contains('track-end'));
+  assert.equal(ends.length, 6);
+  for (const pocket of ends) pocket.events.click();
+  for (const pocket of ends) {
+    const marker = pocket.betMarker;
+    assert.equal(marker.textContent, 10);
+    assert.equal(marker.parent, track);
+    assert.ok(Number.parseFloat(marker.style.left) < 10 || Number.parseFloat(marker.style.left) > 90);
+    assert.ok(Number.parseFloat(marker.style.top) > 0 && Number.parseFloat(marker.style.top) < 100);
+  }
+  assert.equal(track.children.filter(item => item.className === 'bet-marker track-bet-marker').length, 6);
+  while (ui.get('rouletteBets').children.length) ui.get('rouletteBets').children[0].children[1].events.click();
+  assert.equal(track.children.filter(item => item.className === 'bet-marker track-bet-marker').length, 0);
+  assert.equal(ui.player.chips, 1000);
+});
+
 test('spinning in racetrack view scrolls to the track and animates the same winning number', () => {
   const ui = setup();
   ui.switches[1].events.click();

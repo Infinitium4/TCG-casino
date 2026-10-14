@@ -105,6 +105,10 @@ const slotsModule = (() => {
     }
 
     state.spinning = true;
+    player.chips -= bet;
+    savePlayer(player);
+    updateTopbar();
+    updateSlotsHud();
     const leverButton = document.getElementById("slotsLever");
     const machine = document.querySelector(".slots-machine");
     leverButton.disabled = true;
@@ -193,7 +197,6 @@ const slotsModule = (() => {
         ? "MISE REMBOURSÉE"
         : `PERDU · -${bet} jetons`;
     const updatedPlayer = getPlayer();
-    updatedPlayer.chips -= bet;
     updatedPlayer.chips += outcome.payoutTotal;
 
     updatedPlayer.stats.gamesPlayed = Number(updatedPlayer.stats.gamesPlayed || 0) + 1;

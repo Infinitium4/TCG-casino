@@ -339,6 +339,7 @@ const rouletteModule = (() => {
       button.type = "button";
       button.className = `board-cell board-${getRouletteColor(number)} track-number`;
       button.dataset.boardNumber = number;
+      button.dataset.trackIndex = String(index);
       button.textContent = number;
       // Sixteen pockets on each straight and three on each rounded end.
       if (index < 16 || (index >= 19 && index < 35)) {
@@ -455,13 +456,24 @@ const rouletteModule = (() => {
       const amount = state.bets.filter(bet => bet.type === "exact" && String(bet.exactNumber) === cell.dataset.boardNumber).reduce((sum, bet) => sum + bet.amount, 0);
       cell.classList.toggle("active", amount > 0);
       cell.disabled = state.wheelLocked;
-      cell.querySelector(".bet-marker")?.remove();
+      cell.betMarker?.remove();
+      cell.betMarker = null;
       cell.setAttribute("aria-label", `Numéro ${cell.dataset.boardNumber}, ${amount} jetons misés`);
       if (amount) {
         const marker = document.createElement("small");
         marker.className = "bet-marker";
         marker.textContent = amount;
-        cell.appendChild(marker);
+        if (cell.dataset.trackIndex !== undefined) {
+          // Keep badges outside the clipped end pockets so the full stake is visible.
+          const point = getTrackPoint(Number(cell.dataset.trackIndex));
+          marker.className += " track-bet-marker";
+          marker.style.left = `${point.left}%`;
+          marker.style.top = `${point.top + 7}%`;
+          document.getElementById("rouletteRacetrackNumbers").appendChild(marker);
+        } else {
+          cell.appendChild(marker);
+        }
+        cell.betMarker = marker;
       }
     });
     document.getElementById("rouletteSpinBtn").disabled = state.wheelLocked || !state.bets.length;
