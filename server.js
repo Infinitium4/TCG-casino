@@ -22,7 +22,7 @@
   const PRIMARY_ADMIN_USERNAME = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
   const CRASH_ENABLED = process.env.CRASH_ENABLED !== 'false';
   const CRASH_TEST_MODE = process.env.NODE_ENV === 'test';
-  const CRASH_BETTING_WINDOW_MS = CRASH_TEST_MODE ? 1000 : 8000;
+  const CRASH_BETTING_WINDOW_MS = 1000;
   const CRASH_TIME_SCALE_MS = CRASH_TEST_MODE ? 500 : 12000;
   const CRASH_MAX_BET = 1_000_000;
   const MAX_CHIPS = Number.MAX_SAFE_INTEGER;
