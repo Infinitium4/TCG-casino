@@ -23,7 +23,7 @@ La **vue support** ouvre temporairement l’application comme le compte sélecti
 
 La suppression d’un compte retire son historique de parties, invalide ses sessions et conserve son pseudo dans le journal administratif. Elle est refusée pour le compte principal, la banque et les comptes engagés dans une manche en cours; l’administrateur principal peut gérer les autres comptes admin.
 
-Au démarrage, le serveur ajoute automatiquement les colonnes de rôle, bannissement et suspension aux bases existantes. Sur une base locale, `admin` est l’administrateur principal et `admin2` un admin secondaire (mot de passe de démonstration `admin123`). En production, configure `ADMIN_USERNAME` / `ADMIN_PASSWORD` et `SECOND_ADMIN_USERNAME` / `SECOND_ADMIN_PASSWORD` avec deux identifiants distincts. Pour donner le rôle à un compte déjà présent, configure le nom correspondant et redémarre le serveur; le mot de passe d'un compte existant n'est jamais réinitialisé.
+Au démarrage, le serveur ajoute automatiquement les colonnes de rôle, bannissement et suspension aux bases existantes. Sur une base locale, `admin` est l’administrateur principal et `admin2` un admin secondaire (mot de passe de démonstration `admin123`). En production, configure `ADMIN_USERNAME` / `ADMIN_PASSWORD` et `SECOND_ADMIN_USERNAME` / `SECOND_ADMIN_PASSWORD` avec deux identifiants distincts. Pour donner le rôle à un compte déjà présent, configure le nom correspondant et redémarre le serveur; le mot de passe de l'administrateur principal est synchronisé avec `ADMIN_PASSWORD` lorsque cette variable est renseignée. Le mot de passe de l'administrateur secondaire existant est conservé.
 
 Un compte interne `casino-bank` (modifiable avec `BANK_USERNAME`) est provisionné automatiquement. Il n'a pas de mot de passe utilisable, ne peut pas se connecter ni jouer, et apparaît dans l'administration avec le solde de la banque ainsi que ses derniers règlements. Les pertes des joueurs aux jeux contre la maison augmentent ce solde; les gains le diminuent, sans plancher à zéro. Le journal conserve aussi les égalités. Le poker est joueur contre joueur et sans commission (« rake ») : ses mises ne constituent donc pas un revenu de la banque.
 
@@ -112,7 +112,7 @@ sudo chown root:root /etc/tcg-casino.env
 sudo chmod 600 /etc/tcg-casino.env
 ```
 
-Les identifiants `ADMIN_USERNAME` et `ADMIN_PASSWORD` créent le compte initial si la base est vide. Sur une base existante, `ADMIN_USERNAME` attribue le rôle administrateur au compte portant exactement ce pseudo; `ADMIN_PASSWORD` ne modifie pas son mot de passe. Si tu copies ta base locale vers `/var/lib/tcg-casino/database.sqlite`, conserve le compte et les données déjà présents. Arrête le serveur avant de copier la base, puis donne-la à l'utilisateur `tcgcasino`.
+Les identifiants `ADMIN_USERNAME` et `ADMIN_PASSWORD` créent le compte initial si la base est vide. Sur une base existante, `ADMIN_USERNAME` attribue le rôle administrateur au compte portant exactement ce pseudo; `ADMIN_PASSWORD`, si renseigné, met à jour son mot de passe au démarrage sans modifier son solde ni son historique. Un changement invalide les sessions existantes de cet administrateur; une valeur inchangée conserve ces sessions. Si tu copies ta base locale vers `/var/lib/tcg-casino/database.sqlite`, conserve le compte et les données déjà présents. Arrête le serveur avant de copier la base, puis donne-la à l'utilisateur `tcgcasino`.
 
 ### Créer le service systemd
 

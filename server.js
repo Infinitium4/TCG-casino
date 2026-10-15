@@ -2265,11 +2265,21 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         console.log(`Compte administrateur initial créé : ${adminUsername}`);
       }
     } else if (adminUsername) {
-      const admin = await get('SELECT is_bank FROM users WHERE username = ?', [adminUsername]);
+      const admin = await get('SELECT id, is_bank, password_hash FROM users WHERE username = ?', [adminUsername]);
       if (admin?.is_bank) {
         throw new Error('ADMIN_USERNAME correspond déjà au compte banque.');
       }
-      await run('UPDATE users SET is_admin = 1 WHERE username = ?', [adminUsername]);
+      const configuredPassword = process.env.ADMIN_PASSWORD;
+      if (admin && configuredPassword && !await bcrypt.compare(configuredPassword, admin.password_hash)) {
+        const passwordHash = await bcrypt.hash(configuredPassword, 10);
+        await withDatabaseTransaction(async () => {
+          await run('UPDATE users SET is_admin = 1, password_hash = ? WHERE id = ?', [passwordHash, admin.id]);
+          await recordAdminAction(admin.id, 'admin_password_updated', 'Synchronisation de ADMIN_PASSWORD au démarrage', { userId: admin.id, username: adminUsername });
+        });
+        await invalidateUserSessions(admin.id);
+      } else {
+        await run('UPDATE users SET is_admin = 1 WHERE username = ?', [adminUsername]);
+      }
     }
 
     if (secondAdminUsername) {
