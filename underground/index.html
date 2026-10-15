@@ -744,23 +744,12 @@
               <form id="profileDesignForm" class="profile-design-form">
                 <h3>Un profil à ton image</h3>
                 <label class="input-group"><span>Bio</span><textarea id="profileBio" maxlength="160" rows="2" placeholder="Quelques mots sur toi…"></textarea></label>
-                <div class="profile-design-grid">
-                  <label class="input-group"><span>Couleur signature</span><input id="profileAccent" type="color" value="#6ee7c7" /></label>
-                  <label class="input-group"><span>Ambiance</span><select id="profileStyle"><option value="aurora">Aurore</option><option value="midnight">Minuit</option><option value="sunset">Coucher de soleil</option></select></label>
-                  <label class="input-group"><span>Cadrage de la photo</span><select id="profileFit"><option value="cover">Remplir le cadre</option><option value="contain">Photo entière</option></select></label>
-                  <label class="input-group"><span>Position verticale</span><input id="profilePosition" type="range" min="0" max="100" value="50" /></label>
-                </div>
+                <label class="input-group"><span>Couleur signature</span><input id="profileAccent" type="color" value="#6ee7c7" /></label>
                 <label class="input-group"><span>Bannière personnelle · 1 Mo maximum</span><input id="profileBannerInput" type="file" accept="image/png,image/jpeg,image/webp" /></label>
                 <button id="removeProfileBanner" class="secondary-button" type="button">Retirer la bannière</button>
                 <button class="primary-button" type="submit">Enregistrer mon style</button>
                 <p id="profileDesignStatus" role="status"></p>
               </form>
-              <label class="toggle-row">
-                <span>Son</span>
-                <input id="soundToggle" type="checkbox" />
-              </label>
-
-              <button id="resetProfileBtn" class="danger-button" type="button">Réinitialiser les données</button>
             </div>
 
             <div class="profile-block">

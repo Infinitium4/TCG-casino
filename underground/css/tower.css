@@ -4,7 +4,7 @@
 .tower-balance { font-size: 2rem; font-variant-numeric: tabular-nums; }
 .tower-controls > small, .tower-note { color: var(--muted); font-size: .75rem; line-height: 1.6; }
 .tower-controls .input-group { display: flex; flex-direction: column; gap: 8px; }
-.tower-controls input { width: 100%; min-width: 0; padding: 12px; color: var(--text); background: var(--bg-dark); border: 1px solid #c5a15a33; border-radius: 10px; }
+.tower-controls input { width: 100%; min-width: 0; padding: 12px; color: var(--text); background: var(--bg-dark); border: 1px solid color-mix(in srgb, var(--signature-color) 20%, transparent); border-radius: 10px; }
 .tower-adjust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .tower-controls > button { min-height: 48px; font-weight: 800; }
 .tower-feedback { min-height: 42px; font-size: .82rem; line-height: 1.6; color: var(--gold-soft); margin: 0; }
@@ -25,7 +25,7 @@
 .tower-result span { font-size: .8rem; color: var(--muted); }
 .tower-ladder-panel, .tower-history-panel { margin-top: 22px; padding: 22px; }
 .tower-ladder { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
-.tower-rung { background: var(--bg-dark); padding: 12px 5px; border: 1px solid #c5a15a22; border-radius: 9px; text-align: center; }
+.tower-rung { background: var(--bg-dark); padding: 12px 5px; border: 1px solid color-mix(in srgb, var(--signature-color) 13%, transparent); border-radius: 9px; text-align: center; }
 .tower-rung small { display: block; color: var(--muted); font-size: .65rem; }
 .tower-rung strong { display: block; margin-top: 6px; color: var(--gold-soft); }
 .tower-rung.is-reached { background: #37936b22; border-color: #37936b88; }

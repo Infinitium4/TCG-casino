@@ -217,11 +217,11 @@ async function openPlayerProfile(playerId) {
     const design = JSON.parse(profile.profile_design || '{}');
     const banner = document.createElement('div');
     banner.className = 'profile-banner';
-    content.dataset.style = design.style || 'aurora';
+    content.dataset.style = 'aurora';
     content.style.setProperty('--profile-accent', design.accent || '#6ee7c7');
     if (design.banner) banner.style.backgroundImage = `url("${design.banner}")`;
-    avatar.style.setProperty('--avatar-fit', design.fit || 'cover');
-    avatar.style.setProperty('--avatar-position', `${design.position ?? 50}%`);
+    avatar.style.setProperty('--avatar-fit', 'cover');
+    avatar.style.setProperty('--avatar-position', '50%');
     const bio = document.createElement('p');
     bio.textContent = design.bio || '';
     content.replaceChildren(banner, avatar, name, bio, stats);
@@ -429,14 +429,12 @@ async function renderLeaderboard() {
 function renderProfileView() {
   const player = getPlayer();
   const nameInput = document.getElementById("profileNameInput");
-  const soundToggle = document.getElementById("soundToggle");
   const avatarChoices = document.getElementById("avatarChoices");
   const historyFilter = document.getElementById("historyFilter");
 
   initializeProfileDesign(player);
   nameInput.value = player.name;
   nameInput.readOnly = true;
-  soundToggle.checked = !!player.soundEnabled;
   const profileImage = document.getElementById("profileAvatarImage");
   profileImage.hidden = !player.avatarImage;
   profileImage.src = player.avatarImage || "";
@@ -494,28 +492,7 @@ function renderProfileView() {
   };
   document.getElementById("removeAvatarImageBtn").onclick = () => saveProfileImage(null);
 
-  soundToggle.onchange = () => {
-    const playerData = getPlayer();
-    playerData.soundEnabled = soundToggle.checked;
-    savePlayer(playerData);
-    showToast(soundToggle.checked ? "Sons activés." : "Sons désactivés.");
-  };
-
   historyFilter.onchange = () => renderFilteredHistory();
-  document.getElementById("resetProfileBtn").onclick = () => {
-    const confirmed = window.confirm("Réinitialiser le solde et l'historique de ce compte ? Cette action est irréversible.");
-    if (!confirmed) return;
-    fetch("/api/reset", { method: "POST" })
-      .then((response) => {
-        if (!response.ok) throw new Error("Réinitialisation impossible.");
-        window.location.reload();
-      })
-      .catch((error) => {
-        console.error(error);
-        showToast("Réinitialisation impossible.");
-      });
-  };
-
   renderFilteredHistory();
 }
 
@@ -543,25 +520,35 @@ window.updateTopbar = updateTopbar;
 window.renderHomeView = renderHomeView;
 
 function initializeProfileDesign(player) {
-  const saved = { accent: '#6ee7c7', style: 'aurora', banner: null, fit: 'cover', position: 50, bio: '', ...player.design };
+  const saved = { accent: '#6ee7c7', banner: null, bio: '', ...player.design };
   let banner = saved.banner;
   const form = document.getElementById('profileDesignForm');
   const field = (name) => document.getElementById(`profile${name}`);
-  for (const key of ['Accent', 'Style', 'Fit', 'Position', 'Bio']) field(key).value = saved[key.toLowerCase()];
-  const read = () => ({ accent: field('Accent').value, style: field('Style').value, fit: field('Fit').value, position: Number(field('Position').value), bio: field('Bio').value, banner });
+  for (const key of ['Accent', 'Bio']) field(key).value = saved[key.toLowerCase()];
+  const read = () => ({ accent: field('Accent').value, style: 'aurora', fit: 'cover', position: 50, bio: field('Bio').value, banner });
+  const applySignatureColor = (accent) => {
+    const root = document.documentElement;
+    root.style.setProperty('--signature-color', accent);
+    const channels = accent.match(/[\da-f]{2}/gi)?.map(channel => parseInt(channel, 16) / 255);
+    if (!channels || channels.length !== 3) return;
+    const luminance = channels.map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+    root.style.setProperty('--signature-ink', luminance > 0.42 ? '#10200e' : '#f7f2e8');
+  };
   const preview = () => {
     const design = read();
     const hero = document.getElementById('profileHero');
-    hero.dataset.style = design.style;
+    hero.dataset.style = 'aurora';
     hero.style.setProperty('--profile-accent', design.accent);
+    applySignatureColor(design.accent);
     document.getElementById('profileBanner').style.backgroundImage = banner ? `url("${banner}")` : '';
     document.getElementById('profileHeroName').textContent = player.name;
     document.getElementById('profileHeroBio').textContent = design.bio || 'Écris ton histoire. Affirme ton style.';
     const avatar = document.getElementById('profileHeroAvatar');
     setAvatarContent(avatar, player.avatar, player.avatarImage);
     for (const frame of [avatar, document.getElementById('profileAvatarPreview')]) {
-      frame.style.setProperty('--avatar-fit', design.fit);
-      frame.style.setProperty('--avatar-position', `${design.position}%`);
+      frame.style.setProperty('--avatar-fit', 'cover');
+      frame.style.setProperty('--avatar-position', '50%');
     }
   };
   form.oninput = preview;

@@ -685,7 +685,7 @@ button {
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: radial-gradient(circle, #f3ddb1, #c5a15a 68%);
+  background: radial-gradient(circle, var(--gold-soft), var(--signature-color) 68%);
   border: 8px solid rgba(52, 33, 17, 0.8);
   z-index: 4;
   box-shadow: inset 0 0 12px rgba(255,255,255,0.25);
@@ -3004,11 +3004,9 @@ select {
     min-width: 0;
   }
 }
-.profile-hero, .player-profile-content { --profile-accent: #6ee7c7; }
+.profile-hero, .player-profile-content { --profile-accent: var(--signature-color); }
 .profile-hero { overflow: hidden; border: 1px solid color-mix(in srgb, var(--profile-accent) 35%, transparent); border-radius: 24px; margin-bottom: 22px; background: #10171e; }
 .profile-banner { height: 180px; background: radial-gradient(ellipse at 20% 30%, #397b72, transparent 60%), linear-gradient(120deg, #101923, #21464a, #101923); background-size: cover; background-position: center; }
-[data-style="midnight"] .profile-banner { background-color: #10132d; background-image: radial-gradient(ellipse at 75% 10%, #6355a7, transparent 65%), linear-gradient(120deg, #11182a, #29224b); }
-[data-style="sunset"] .profile-banner { background-image: radial-gradient(ellipse at 20% 70%, #edaa70, transparent 60%), linear-gradient(120deg, #8d3651, #322d54); }
 .profile-hero-identity { display: flex; align-items: center; gap: 22px; padding: 0 28px 24px; margin-top: -38px; position: relative; }
 .profile-hero-identity h2 { margin: 4px 0; font-size: clamp(1.5rem, 4vw, 2.2rem); overflow-wrap: anywhere; }
 .profile-hero-identity p:last-child { color: #b9c6ce; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -3020,31 +3018,29 @@ select {
 .profile-avatar-preview [hidden] { display: none; }
 .profile-hero-identity .player-profile-avatar { width: 112px; height: 112px; border: 5px solid #10171e; box-shadow: 0 0 0 2px var(--profile-accent); background: #17212c; border-radius: 28px; }
 .profile-design-form { display: grid; gap: 14px; margin: 24px 0; padding-top: 24px; border-top: 1px solid #ffffff15; }
-.profile-design-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .profile-design-form textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid #ffffff24; background: #10171e; border-radius: 12px; color: #eef4f8; padding: 12px; font: inherit; }
 .profile-design-form input[type="color"] { width: 100%; height: 44px; padding: 4px; }
-.profile-design-form input[type="range"] { accent-color: #6ee7c7; width: 100%; }
 .player-profile-content .profile-banner { width: 100%; border-radius: 16px; height: 130px; }
 
 /* Flight Club */
-#crashView { --flight-accent: #6ee7c7; }
+#crashView { --flight-accent: var(--signature-color); }
 .crash-layout { grid-template-columns: minmax(0, 1fr) 290px; gap: 22px; }
 .crash-main-panel, .crash-side-panel { background: #101720; border: 1px solid #ffffff12; border-radius: 22px; padding: 24px; box-shadow: 0 12px 36px #0002; }
 .crash-heading h2 { color: #f0f5f8; font-size: 2rem; letter-spacing: -1px; }
 .crash-heading .eyebrow { color: #889cae; font-size: .65rem; letter-spacing: .18em; }
-.crash-live-tag { display: inline-block; font-size: .6rem; letter-spacing: .12em; color: #6ee7c7; background: #6ee7c712; border: 1px solid #6ee7c733; border-radius: 6px; padding: 6px 8px; vertical-align: middle; }
+.crash-live-tag { display: inline-block; font-size: .6rem; letter-spacing: .12em; color: var(--gold-soft); background: color-mix(in srgb, var(--signature-color) 7%, transparent); border: 1px solid color-mix(in srgb, var(--signature-color) 20%, transparent); border-radius: 6px; padding: 6px 8px; vertical-align: middle; }
 .crash-round-label { background: transparent; border: 0; color: #8396a7; font-size: .75rem; }
 .crash-sky { height: clamp(300px, 37vw, 440px); border: 1px solid #ffffff10; border-radius: 18px; background: radial-gradient(ellipse at 65% 85%, #163b3d80, transparent 65%), repeating-linear-gradient(0deg, transparent 0 59px, #ffffff05 59px 60px), repeating-linear-gradient(90deg, transparent 0 79px, #ffffff05 79px 80px), #0a1018; }
 .crash-sun, .crash-cloud, .crash-city, .crash-runway, .crash-scanline { display: none; }
 .crash-stage-caption { position: absolute; top: 20px; left: 22px; right: 22px; display: flex; justify-content: space-between; gap: 10px; font-size: .6rem; letter-spacing: .14em; color: #728698; }
-.crash-stage-caption span { color: #6ee7c7; }
+.crash-stage-caption span { color: var(--gold-soft); }
 .crash-axis-labels { position: absolute; left: 16px; top: 65px; bottom: 32px; display: flex; flex-direction: column; justify-content: space-between; font-size: .65rem; color: #617486; }
 .crash-center-readout { top: 19%; left: 50%; width: 80%; transform: translateX(-50%); background: transparent; border: 0; padding: 0; pointer-events: none; }
 .crash-center-readout > span:first-child { color: #93a9b8; font-size: .75rem; letter-spacing: .15em; text-transform: uppercase; }
-.crash-center-readout strong { color: #effffa; font: 800 clamp(3rem, 7vw, 5.8rem)/1.15 ui-monospace, monospace; letter-spacing: -.06em; text-shadow: 0 0 45px #6ee7c735; }
+.crash-center-readout strong { color: #effffa; font: 800 clamp(3rem, 7vw, 5.8rem)/1.15 ui-monospace, monospace; letter-spacing: -.06em; text-shadow: 0 0 45px color-mix(in srgb, var(--signature-color) 21%, transparent); }
 .crash-center-readout > span:last-child { color: #8b9dab; font-size: .8rem; max-width: 90%; margin: auto; }
-.crash-flight-path { stroke: #6ee7c7; stroke-width: 4; filter: drop-shadow(0 0 8px #6ee7c766); }
-.crash-aircraft { fill: #eefef9; filter: drop-shadow(0 0 10px #6ee7c788); }
+.crash-flight-path { stroke: var(--signature-color); stroke-width: 4; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--signature-color) 40%, transparent)); }
+.crash-aircraft { fill: #eefef9; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--signature-color) 53%, transparent)); }
 .crash-sky.is-crashed { background-color: #25121d; }
 .crash-sky.is-crashed .crash-center-readout strong { color: #ff7e96; }
 .crash-sky.is-crashed .crash-flight-path { stroke: #ff7e96; }
@@ -3052,14 +3048,14 @@ select {
 .crash-balance-line { background: #ffffff04; border: 1px solid #ffffff08; border-radius: 10px; padding: 12px 16px; color: #91a4b3; }
 .crash-balance-line strong { color: #edf5fa; }
 .crash-stake-input { background: #090f17; border-color: #ffffff20; border-radius: 12px; }
-.crash-stake-input:focus-within { border-color: #6ee7c7; }
+.crash-stake-input:focus-within { border-color: var(--signature-color); }
 .crash-stake-input input { font-size: 1.35rem; }
 .crash-quick-stakes { flex-wrap: wrap; gap: 8px; }
 .crash-quick-stakes button { background: #1a2633; color: #c7d8e3; border: 1px solid #ffffff10; border-radius: 9px; padding: 9px 15px; }
-.crash-quick-stakes button:hover { color: #6ee7c7; border-color: #6ee7c755; }
+.crash-quick-stakes button:hover { color: var(--gold-soft); border-color: color-mix(in srgb, var(--signature-color) 33%, transparent); }
 .crash-quick-stakes button:disabled { opacity: .4; cursor: default; }
 .crash-action-row { gap: 18px; margin-top: 8px; }
-.crash-action-row #crashBetButton { background: #6ee7c7; color: #09231d; border: 0; border-radius: 12px; min-height: 56px; font-size: 1rem; font-weight: 800; box-shadow: 0 5px 24px #6ee7c715; }
+.crash-action-row #crashBetButton { background: var(--signature-color); color: var(--signature-ink); border: 0; border-radius: 12px; min-height: 56px; font-size: 1rem; font-weight: 800; box-shadow: 0 5px 24px color-mix(in srgb, var(--signature-color) 8%, transparent); }
 .crash-action-row #crashBetButton.crash-cashout-button { background: #f8d786; color: #332709; }
 .crash-action-row #crashBetButton:disabled { opacity: .4; }
 .crash-potential strong { color: #edf5fa; font-size: 1.35rem; }
@@ -3070,15 +3066,15 @@ select {
 .crash-guide ol { padding-left: 20px; font-size: .82rem; }
 .crash-history-chip { border-radius: 8px; padding: 9px 11px; font-family: ui-monospace, monospace; }
 @media (max-width: 1000px) { .crash-layout { grid-template-columns: 1fr; } .crash-sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); } .crash-guide { grid-column: 1 / -1; } }
-@media (max-width: 600px) { .crash-main-panel, .crash-side-panel { padding: 16px; } .crash-sidebar { grid-template-columns: 1fr; } .crash-stage-caption { font-size: .5rem; left: 14px; right: 14px; } .profile-hero-identity { padding: 0 18px 18px; gap: 14px; } .profile-hero-identity .player-profile-avatar { width: 84px; height: 84px; } .profile-design-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .crash-main-panel, .crash-side-panel { padding: 16px; } .crash-sidebar { grid-template-columns: 1fr; } .crash-stage-caption { font-size: .5rem; left: 14px; right: 14px; } .profile-hero-identity { padding: 0 18px 18px; gap: 14px; } .profile-hero-identity .player-profile-avatar { width: 84px; height: 84px; } }
 @media (prefers-reduced-motion: reduce) { .crash-sky, .crash-aircraft { animation: none !important; transition: none !important; } }
 .crash-rocket-body { fill: #eefef9; }
-.crash-rocket-fin, .crash-rocket-nose { fill: #6ee7c7; }
+.crash-rocket-fin, .crash-rocket-nose { fill: var(--signature-color); }
 .crash-rocket-window { fill: #16364b; stroke: #9deff1; stroke-width: 2; }
 .crash-rocket-engine { fill: #7c8fa3; }
 .crash-rocket-flame { fill: #ffbe65; filter: drop-shadow(0 0 6px #ff9b45); }
 .crash-sky:not(.is-flying) .crash-rocket-flame { display: none; }
-.crash-sky.is-cashed-out .crash-center-readout strong { color: #6ee7c7; }
+.crash-sky.is-cashed-out .crash-center-readout strong { color: var(--gold-soft); }
 .crash-sky.is-cashed-out .crash-aircraft { opacity: 1; }
 .blackjack-split-hands { display: grid; gap: 8px; margin: 8px 0; }
 .blackjack-split-hand { padding: 7px; border: 1px solid #ffffff20; border-radius: 10px; background: #0002; }
@@ -3087,16 +3083,16 @@ select {
 .blackjack-seat-cards[hidden] { display: none; }
 .blackjack-action-controls > small { display: block; max-width: 440px; color: #b7c4ba; line-height: 1.5; font-size: .72rem; }
 .admin-section-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 0 22px; border-bottom: 1px solid #ffffff15; margin-bottom: 22px; }
-.admin-section-nav a { color: #ead9b1; text-decoration: none; padding: 10px 14px; background: #ffffff06; border: 1px solid #ffffff12; border-radius: 10px; font-size: .82rem; }
-.admin-section-nav a:hover { background: #c5a15a20; }
+.admin-section-nav a { color: var(--gold-soft); text-decoration: none; padding: 10px 14px; background: #ffffff06; border: 1px solid #ffffff12; border-radius: 10px; font-size: .82rem; }
+.admin-section-nav a:hover { background: color-mix(in srgb, var(--signature-color) 12%, transparent); }
 .admin-section-nav button { margin-left: auto; }
 .admin-panel .admin-detail-panel { padding: 22px; margin-bottom: 22px; border-radius: 16px; background: #ffffff03; border: 1px solid #ffffff10; }
 .admin-panel .admin-detail-panel h3 { margin-top: 0; }
 .admin-panel [id] { scroll-margin-top: 24px; }
-.admin-wallet-control { display: flex; align-items: center; gap: 20px; justify-content: space-between; padding: 18px; border: 1px solid #c5a15a35; border-radius: 12px; margin: 18px 0; background: #c5a15a08; }
+.admin-wallet-control { display: flex; align-items: center; gap: 20px; justify-content: space-between; padding: 18px; border: 1px solid color-mix(in srgb, var(--signature-color) 21%, transparent); border-radius: 12px; margin: 18px 0; background: color-mix(in srgb, var(--signature-color) 3%, transparent); }
 .admin-wallet-control p { margin-bottom: 0; max-width: 540px; }
 .admin-log { border: 1px solid #ffffff15; border-radius: 10px; margin-top: 18px; }
-.admin-log summary, .admin-account-menu summary { cursor: pointer; padding: 12px; color: #ead9b1; font-weight: 600; font-size: .82rem; }
+.admin-log summary, .admin-account-menu summary { cursor: pointer; padding: 12px; color: var(--gold-soft); font-weight: 600; font-size: .82rem; }
 .admin-log[open] summary { border-bottom: 1px solid #ffffff15; }
 .admin-log .admin-detail-list { max-height: 300px; overflow: auto; padding: 14px 18px; margin: 0; }
 .admin-account-menu { min-width: 140px; border: 1px solid #ffffff15; border-radius: 8px; }

@@ -4,7 +4,7 @@
 .plinko-controls > small { color: var(--muted); line-height: 1.6; }
 .plinko-balance { font-size: 2rem; color: var(--text); font-variant-numeric: tabular-nums; }
 .plinko-controls .input-group { display: flex; flex-direction: column; gap: 8px; }
-.plinko-controls input, .plinko-controls select { width: 100%; min-width: 0; background: var(--bg-dark); color: var(--text); border: 1px solid #c5a15a33; border-radius: 10px; padding: 12px; }
+.plinko-controls input, .plinko-controls select { width: 100%; min-width: 0; background: var(--bg-dark); color: var(--text); border: 1px solid color-mix(in srgb, var(--signature-color) 20%, transparent); border-radius: 10px; padding: 12px; }
 .plinko-adjust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .plinko-adjust button { padding: 10px; }
 #plinkoLaunch { min-height: 54px; width: 100%; font-weight: 800; }
@@ -24,12 +24,12 @@
 .plinko-history-grid > .panel { padding: 22px; }
 .plinko-history { display: flex; flex-wrap: wrap; gap: 8px; }
 .plinko-history-chip { background: var(--panel-strong); padding: 9px 11px; border: 1px solid #ffffff12; border-radius: 9px; color: var(--muted); font-size: .8rem; }
-.plinko-history-chip.is-profit { color: #6ee7c7; border-color: #6ee7c733; }
+.plinko-history-chip.is-profit { color: var(--gold-soft); border-color: color-mix(in srgb, var(--signature-color) 20%, transparent); }
 .plinko-recent { display: grid; gap: 9px; max-height: 250px; overflow-y: auto; }
 .plinko-feed-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 16px; color: var(--muted); font-size: .8rem; padding: 8px 0; border-bottom: 1px solid #ffffff0b; }
 .plinko-feed-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plinko-feed-row strong { color: var(--gold-soft); }
-.plinko-live { color: #6ee7c7; font-size: .6rem; white-space: nowrap; }
+.plinko-live { color: var(--gold-soft); font-size: .6rem; white-space: nowrap; }
 @keyframes plinko-win { 20% { transform: translateY(5px) scale(1.12); filter: brightness(1.7); box-shadow: 0 0 20px #f8d78699; } }
 @media (max-width: 850px) { .plinko-layout { grid-template-columns: 1fr; } .plinko-board-panel { grid-row: 1; } .plinko-controls { display: grid; grid-template-columns: 1fr 1fr; } .plinko-controls > .eyebrow, .plinko-controls > small, #plinkoLaunch, .plinko-feedback, .plinko-last { grid-column: 1 / -1; } .plinko-history-grid { grid-template-columns: 1fr; } .plinko-bin { font-size: clamp(.44rem, 1.5vw, .8rem); min-height: 18px; } }
 @media (prefers-reduced-motion: reduce) { .plinko-bin.is-winner { animation: none; outline: 2px solid #fff; } }

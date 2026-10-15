@@ -4,11 +4,11 @@
 .dice-controls > small, .dice-note { color: var(--muted); line-height: 1.6; font-size: .75rem; }
 .dice-balance { color: var(--text); font-size: 2rem; font-variant-numeric: tabular-nums; }
 .dice-controls .input-group { display: flex; flex-direction: column; gap: 8px; }
-.dice-controls input { width: 100%; min-width: 0; padding: 12px; border-radius: 10px; background: var(--bg-dark); color: var(--text); border: 1px solid #c5a15a33; }
+.dice-controls input { width: 100%; min-width: 0; padding: 12px; border-radius: 10px; background: var(--bg-dark); color: var(--text); border: 1px solid color-mix(in srgb, var(--signature-color) 20%, transparent); }
 .dice-adjust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .dice-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .dice-mode button { padding: 12px 6px; font-size: .75rem; }
-.dice-mode button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold-soft); background: #c5a15a22; }
+.dice-mode button[aria-pressed="true"] { border-color: var(--signature-color); color: var(--gold-soft); background: color-mix(in srgb, var(--signature-color) 13%, transparent); }
 #diceLaunch { min-height: 54px; font-weight: 800; }
 .dice-feedback { min-height: 42px; color: var(--muted); font-size: .82rem; line-height: 1.6; margin: 0; }
 .dice-feedback.is-error { color: var(--danger); }
@@ -28,7 +28,7 @@
 .dice-marker::after { content: ''; position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%); border: 7px solid transparent; border-top-color: var(--gold); border-bottom: 0; }
 .dice-scale { display: flex; justify-content: space-between; color: var(--muted); font-size: .7rem; margin-top: 18px; }
 .dice-rule { text-align: center; color: var(--gold-soft); line-height: 1.6; margin: 26px 0; }
-.dice-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #c5a15a22; padding-top: 24px; gap: 16px; text-align: center; }
+.dice-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid color-mix(in srgb, var(--signature-color) 13%, transparent); padding-top: 24px; gap: 16px; text-align: center; }
 .dice-stats span { color: var(--muted); font-size: .72rem; }
 .dice-stats strong { display: block; font-size: 1.4rem; color: var(--text); margin-top: 8px; font-variant-numeric: tabular-nums; }
 .dice-note { text-align: center; margin-top: 26px; }

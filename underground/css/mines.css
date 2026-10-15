@@ -4,7 +4,7 @@
 .mines-controls > small { color: var(--muted); line-height: 1.6; }
 .mines-balance { color: var(--text); font-size: 2rem; font-variant-numeric: tabular-nums; }
 .mines-controls .input-group { display: flex; flex-direction: column; gap: 8px; }
-.mines-controls input, .mines-controls select { width: 100%; min-width: 0; background: var(--bg-dark); color: var(--text); border: 1px solid #c5a15a55; border-radius: 10px; padding: 12px; }
+.mines-controls input, .mines-controls select { width: 100%; min-width: 0; background: var(--bg-dark); color: var(--text); border: 1px solid color-mix(in srgb, var(--signature-color) 33%, transparent); border-radius: 10px; padding: 12px; }
 .mines-adjust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .mines-adjust button { min-height: 42px; }
 #minesStart, #minesCashout, #minesRetry { min-height: 52px; width: 100%; font-weight: 800; }
@@ -19,7 +19,7 @@
 .mines-board-heading span:first-child { color: var(--gold-soft); font-weight: 800; }
 .mines-board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: clamp(6px, 1.4vw, 12px); width: min(100%, 570px); margin: 0 auto; }
 .mines-cell { display: grid; place-items: center; aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid #68817355; border-radius: 9px; color: var(--gold-soft); background: linear-gradient(145deg, #35483d, #26362e); box-shadow: 0 4px 0 #0b1410, inset 0 1px #ffffff10; font-size: clamp(1rem, 4vw, 2rem); transition: transform 150ms ease, filter 150ms ease, background-color 150ms ease, border-color 150ms ease; }
-.mines-cell:not(:disabled):hover { transform: translateY(-2px); filter: brightness(1.2); border-color: #c5a15a99; }
+.mines-cell:not(:disabled):hover { transform: translateY(-2px); filter: brightness(1.2); border-color: var(--signature-color); }
 .mines-cell:focus-visible { outline: 3px solid var(--gold-soft); outline-offset: 2px; }
 .mines-cell:disabled { cursor: default; }
 .mines-cell.is-safe { color: #91e0bd; background: #1a4938; border-color: #65c39a88; animation: mines-reveal 260ms ease-out; }
