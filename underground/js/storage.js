@@ -11,7 +11,7 @@ function getDefaultPlayer() {
     name: "Joueur",
     avatar: "🎲",
     avatarImage: null,
-    chips: 1000,
+    chips: 0,
     soundEnabled: false,
     stats: {
       gamesPlayed: 0,

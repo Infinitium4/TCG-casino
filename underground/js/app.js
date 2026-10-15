@@ -87,6 +87,7 @@ function bindGlobalButtons() {
   });
 
   document.getElementById("logoutBtn").addEventListener("click", async () => {
+    if (!window.confirm("Veux-tu vraiment te déconnecter ?")) return;
     const response = await fetch("/api/logout", { method: "POST" });
     if (response.ok) {
       window.location.replace("/");

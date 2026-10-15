@@ -8,10 +8,11 @@ const clickerModule = (() => {
   }
   function render() {
     el('clickerButton').disabled = busy || !config || (!pending && !config.remaining);
-    el('clickerButton').textContent = pending ? 'CONFIRMER LE CLIC' : config && !config.remaining ? 'SOLDE DE 1 000 ATTEINT' : '+1 JETON';
+    el('clickerButton').textContent = pending ? 'CONFIRMER LE CLIC' : config && !config.remaining ? 'SOLDE DE 10 € ATTEINT' : '+0,05 €';
     if (!config) return;
-    el('clickerBalance').textContent = formatChips(config.balance);
-    el('clickerRemaining').textContent = config.remaining;
+    el('clickerBalance').textContent = formatChips(config.balance) + ' €';
+    el('clickerRemaining').textContent = formatChips(config.remaining);
+    el('clickerProgress').max = config.limit;
     el('clickerProgress').value = Math.min(config.balance, config.limit);
     savePlayer({ ...getPlayer(), chips: config.balance }); updateTopbar();
   }
@@ -40,7 +41,7 @@ const clickerModule = (() => {
         throw new Error(data.error);
       }
       remember(null); accept(data);
-      el('clickerFeedback').textContent = data.remaining ? (data.replay ? 'Clic déjà crédité.' : '+1 jeton validé !') : 'Solde de 1 000 jetons atteint. Le Clicker sera disponible si ton solde redescend.';
+      el('clickerFeedback').textContent = data.remaining ? (data.replay ? 'Clic déjà crédité.' : '+0,05 € validé !') : 'Solde de 10 € atteint. Le Clicker sera disponible si ton solde redescend.';
       if (!data.replay && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
         el('clickerButton').animate([{ transform: 'scale(1)' }, { transform: 'scale(1.04)' }, { transform: 'scale(1)' }], { duration: 160 });
       }

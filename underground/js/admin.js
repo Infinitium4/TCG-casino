@@ -339,7 +339,7 @@ const adminModule = (() => {
       return;
     }
     if (button.dataset.adminAction === 'reset') {
-      if (!window.confirm(`Réinitialiser ${account.username} ? Solde remis à 1 000, historique et personnalisation effacés. Pseudo, mot de passe et droits conservés. Cette action est irréversible.`)) return;
+      if (!window.confirm(`Réinitialiser ${account.username} ? Solde remis à 0, historique et personnalisation effacés. Pseudo, mot de passe et droits conservés. Cette action est irréversible.`)) return;
       const reason = window.prompt('Motif de réinitialisation :');
       if (!reason?.trim()) return;
       await request(`/api/admin/accounts/${accountId}/reset`, { method: 'POST', body: JSON.stringify({ reason }) });

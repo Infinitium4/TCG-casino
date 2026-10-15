@@ -1,5 +1,6 @@
 ﻿  const { initializeClickerSchema, registerClickerRoutes } = require('./clicker');
   const express = require('express');
+  const { rateLimit } = require('express-rate-limit');
   const http = require('http');
   const session = require('express-session');
   const bcrypt = require('bcryptjs');
@@ -1993,7 +1994,7 @@
         password_hash TEXT NOT NULL,
         avatar TEXT DEFAULT '🎲',
         avatar_image TEXT,
-        chips INTEGER DEFAULT 1000,
+        chips INTEGER DEFAULT 0,
         is_admin INTEGER NOT NULL DEFAULT 0,
         is_banned INTEGER NOT NULL DEFAULT 0,
         suspended_until INTEGER,
@@ -2511,7 +2512,15 @@
     res.json({ authenticated: true, user });
   });
 
-  app.post('/api/register', async (req, res) => {
+  const registrationLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Trop de tentatives de création de compte. Réessaie dans 15 minutes.' }
+  });
+
+  app.post('/api/register', registrationLimiter, async (req, res) => {
     const username = String(req.body.username || '').trim();
     const password = String(req.body.password || '');
 
@@ -2531,7 +2540,7 @@
 
       const passwordHash = await bcrypt.hash(password, 10);
       const created = await run(
-        'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, 1000)',
+        'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, 0)',
         [username, passwordHash, '🎲']
       );
 
@@ -2949,7 +2958,7 @@
       if (!target) return { status: 404, error: 'Compte introuvable.' };
       if (target.is_bank) return { status: 403, error: 'Le compte banque ne peut pas être réinitialisé.' };
       if (isUserInActiveTable(targetId) || await hasOtherActiveBet(targetId)) return { status: 409, error: 'Ce compte joue une partie. Réessaie à la fin de la manche.' };
-      await run("UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 1000, avatar = '🎲', avatar_image = NULL, profile_design = '{}' WHERE id = ?", [targetId]);
+      await run("UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 0, avatar = '🎲', avatar_image = NULL, profile_design = '{}' WHERE id = ?", [targetId]);
       await run('DELETE FROM game_history WHERE user_id = ?', [targetId]);
       await run('DELETE FROM crash_bets WHERE user_id = ?', [targetId]);
       await recordAdminAction(req.adminUserId, 'account_reset', reason, { userId: targetId, username: target.username });
@@ -3731,7 +3740,7 @@
         [req.session.userId]
       );
       if (activeCrashBet || await hasActiveTowerGame(req.session.userId)) return false;
-      await run('UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 1000, avatar = ? WHERE id = ?', ['🎲', req.session.userId]);
+      await run('UPDATE users SET infinite_money = 0, finite_chips = NULL, chips = 0, avatar = ? WHERE id = ?', ['🎲', req.session.userId]);
       await run('DELETE FROM game_history WHERE user_id = ?', [req.session.userId]);
       return true;
     });

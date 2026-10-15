@@ -113,7 +113,7 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
   const alice = await register('clicker-alice');
   const bob = await register('clicker-bob');
   const initial = (await request('/api/clicker/state', { cookie: alice })).body;
-  assert.equal(initial.balance, 1000); assert.equal(initial.eligible, false);
+  assert.equal(initial.balance, 0); assert.equal(initial.eligible, true);
   const payload = { requestId: 'clicker-request-000001', payout: 9999999, userId: 2 };
   const click = (body, cookie = alice, headers = {}) => request('/api/clicker/click', { cookie, method: 'POST', body: JSON.stringify(body), headers });
   const state = async (cookie = alice) => (await request('/api/clicker/state', { cookie })).body;
@@ -122,47 +122,56 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
     try { await new Promise((resolve, reject) => connection.run(sql, error => error ? reject(error) : resolve())); }
     finally { await new Promise(resolve => connection.close(resolve)); }
   }
+  await execute("UPDATE users SET chips = 10 WHERE username = 'clicker-alice'");
   assert.equal((await click(payload)).response.status, 409);
   assert.equal((await click(payload, alice, { 'Sec-Fetch-Site': 'cross-site' })).response.status, 403);
   assert.equal((await request('/api/clicker/click', { method: 'POST', body: JSON.stringify(payload) })).response.status, 401);
   assert.equal((await click({ requestId: 'short' })).response.status, 400);
-  await execute("UPDATE users SET chips = 998 WHERE username = 'clicker-alice'");
+  await execute("UPDATE users SET chips = 9.90 WHERE username = 'clicker-alice'");
   const repeated = await Promise.all(Array.from({ length: 12 }, () => click(payload)));
   assert.ok(repeated.every(r => r.response.status === 200));
   assert.equal(repeated.filter(r => !r.body.replay).length, 1);
-  assert.equal((await state()).balance, 999);
-  assert.equal((await state(bob)).balance, 1000);
+  assert.equal((await state()).balance, 9.95);
+  assert.equal((await state(bob)).balance, 0);
   const race = await Promise.all(Array.from({ length: 30 }, (_, i) => click({ requestId: `clicker-final-race-${i}` })));
   assert.equal(race.filter(r => r.response.status === 200).length, 1);
   assert.equal(race.filter(r => r.response.status === 409).length, 29);
-  assert.equal((await state()).balance, 1000);
+  assert.equal((await state()).balance, 10);
   assert.equal((await click(payload)).body.replay, true);
-  await execute("UPDATE users SET chips = 1001 WHERE username = 'clicker-alice'");
+  await execute("UPDATE users SET chips = 10.01 WHERE username = 'clicker-alice'");
   assert.equal((await click({ requestId: 'clicker-over-limit-0001' })).response.status, 409);
   await execute("UPDATE users SET chips = 0 WHERE username = 'clicker-alice'");
-  // More than 1000 successful credits on the same server day: no daily allowance.
-  for (let start = 0; start < 1000; start += 25) {
+  // Refill after spending: 200 clicks earn exactly 10 euros.
+  for (let start = 0; start < 200; start += 25) {
     const results = await Promise.all(Array.from({ length: 25 }, (_, i) => click({ requestId: `clicker-unlimited-${start + i}` })));
     assert.ok(results.every(r => r.response.status === 200));
   }
-  assert.equal((await state()).balance, 1000);
-  await execute("UPDATE users SET chips = 999 WHERE username = 'clicker-alice'");
-  assert.equal((await click(payload)).body.balance, 999);
+  assert.equal((await state()).balance, 10);
+  await execute("UPDATE users SET chips = 9.95 WHERE username = 'clicker-alice'");
+  assert.equal((await click(payload)).body.balance, 9.95);
   // Old receipts must also prevent replay across days.
   await execute("UPDATE clicker_gains SET day = '2000-01-01'");
-  assert.equal((await click(payload)).body.balance, 999);
+  assert.equal((await click(payload)).body.balance, 9.95);
   await stopServer(); await startServer();
-  assert.equal((await state()).balance, 999);
+  assert.equal((await state()).balance, 9.95);
   assert.equal((await click(payload)).body.replay, true);
-  assert.equal((await click({ requestId: 'clicker-after-restart-0001' })).body.balance, 1000);
-  await execute("UPDATE users SET chips = 999 WHERE username = 'clicker-bob'");
+  assert.equal((await click({ requestId: 'clicker-after-restart-0001' })).body.balance, 10);
+  await execute("UPDATE users SET chips = 9.95 WHERE username = 'clicker-bob'");
   await execute("CREATE TRIGGER clicker_test_failure BEFORE UPDATE OF chips ON users WHEN OLD.username = 'clicker-bob' BEGIN SELECT RAISE(ABORT, 'test credit failure'); END");
   assert.equal((await click(payload, bob)).response.status, 500);
-  assert.equal((await state(bob)).balance, 999);
+  assert.equal((await state(bob)).balance, 9.95);
   await execute('DROP TRIGGER clicker_test_failure');
   const recovered = await click(payload, bob);
-  assert.equal(recovered.body.replay, false); assert.equal(recovered.body.balance, 1000);
+  assert.equal(recovered.body.replay, false); assert.equal(recovered.body.balance, 10);
   assert.equal((await request('/api/reset', { cookie: alice, method: 'POST', body: '{}' })).response.status, 200);
   assert.equal((await click(payload)).body.replay, true);
-  assert.equal((await click({ requestId: 'clicker-after-reset-0001' })).response.status, 409);
+  assert.equal((await state()).balance, 0);
+  assert.equal((await click({ requestId: 'clicker-after-reset-0001' })).body.balance, 0.05);
+  // After restart the in-memory limiter has a fresh window; invalid attempts must also consume the IP quota.
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await request('/api/register', { method: 'POST', body: '{}' })).response.status, 400);
+  }
+  const limited = await request('/api/register', { method: 'POST', body: '{}' });
+  assert.equal(limited.response.status, 429);
+  assert.ok(Number(limited.response.headers.get('retry-after')) > 0);
 });

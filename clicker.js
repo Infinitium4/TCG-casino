@@ -1,6 +1,7 @@
-const LIMIT = 1000;
+const LIMIT = 10;
+const CREDIT = 0.05;
 function clickerAllowance(balance) {
-  return { remaining: Math.max(0, LIMIT - balance), limit: LIMIT, eligible: balance < LIMIT };
+  return { remaining: Math.max(0, Math.round((LIMIT - balance) * 100) / 100), limit: LIMIT, eligible: balance < LIMIT };
 }
 async function initializeClickerSchema(run) {
   await run(`CREATE TABLE IF NOT EXISTS clicker_gains (
@@ -32,13 +33,12 @@ function registerClickerRoutes({ app, requireAuth, handleAsync, run, get, withDa
         const current = await state(userId);
         const existing = await get('SELECT 1 FROM clicker_gains WHERE user_id = ? AND request_id = ?', [userId, requestId]);
         if (existing) return { ...current, replay: true };
-        if (!current.eligible) throw fail(409, 'Clicker disponible uniquement avec moins de 1 000 jetons.');
+        if (!current.eligible) throw fail(409, 'Clicker disponible uniquement avec moins de 10 €.');
         if (isUserInActiveTable(userId)) throw fail(409, 'Termine ta partie à table avant de cliquer.');
         if (user.infinite_money) throw fail(409, 'Désactive le solde infini avant de cliquer.');
-        if (!Number.isSafeInteger(user.chips + 1)) throw fail(409, 'Solde maximal atteint.');
         const day = new Date(now).toISOString().slice(0, 10);
         await run('INSERT INTO clicker_gains (user_id, day, request_id) VALUES (?, ?, ?)', [userId, day, requestId]);
-        const credit = await run('UPDATE users SET chips = chips + 1 WHERE id = ? AND chips < ?', [userId, LIMIT]);
+        const credit = await run('UPDATE users SET chips = MIN(?, ROUND(chips + ?, 2)) WHERE id = ? AND chips < ?', [LIMIT, CREDIT, userId, LIMIT]);
         if (credit.changes !== 1) throw fail(409, 'Solde insuffisamment bas pour utiliser le Clicker.');
         return { ...await state(userId), replay: false };
       });
