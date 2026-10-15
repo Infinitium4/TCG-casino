@@ -32,9 +32,9 @@ function harness() {
     fetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject }))
   });
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/plinko.js'), 'utf8');
-  vm.runInContext(source.replace('return { initialize, setActive };', 'globalThis.game = { initialize, state, launch, refresh, draw }; return { initialize, setActive };'), context);
+  vm.runInContext(source.replace('return { initialize, setActive };', 'globalThis.game = { initialize, state, launch, refresh, draw, updateControls }; return { initialize, setActive };'), context);
   context.game.initialize();
-  context.game.state.config = { settings: { enabled: true, minBet: 1, maxBet: 1000000 }, maxBalls: 8 };
+  context.game.state.config = { settings: { enabled: true, minBet: 1, maxBet: 1000000 } };
   element('plinkoBins').children = Array.from({ length: 17 }, (_, index) => element(`bin-${index}`));
   const drop = { id: 1, path: Array(16).fill(0), slot: 0, multiplier: 110, payout: 11000, stake: 100, createdAt: 0 };
   return { game: context.game, elements, storage, requests, drop, accountLoads: () => accountLoads };
@@ -85,11 +85,18 @@ test('an interrupted launch reuses its durable request ID without inventing a ne
   assert.equal(h.game.state.balls.length, 1);
 });
 
-test('eight simultaneous balls prevent new launches', async () => {
-  const h = harness();
-  h.game.state.balls = Array(8).fill({});
-  await h.game.launch();
-  assert.equal(h.requests.length, 0);
+test('launches remain available beyond eight simultaneous balls', async () => {
+  for (const count of [8, 16, 32]) {
+    const h = harness();
+    h.game.state.balls = Array(count).fill({});
+    h.game.updateControls();
+    assert.equal(Boolean(h.elements.get('plinkoLaunch').disabled), false);
+    const launch = h.game.launch();
+    assert.equal(h.requests.length, 1);
+    h.requests[0].resolve({ ok: true, json: async () => ({ drop: h.drop, balance: 11900 }) });
+    await launch;
+    assert.equal(h.game.state.balls.length, count + 1);
+  }
 });
 
 test('an outdated state response cannot undo a confirmed balance', async () => {

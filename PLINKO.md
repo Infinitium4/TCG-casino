@@ -56,8 +56,8 @@ n’efface pas le lancer de l’historique serveur.
 
 Les mises sont bloquées pendant une partie active de blackjack/poker ou un pari
 Crash actif pour éviter de désynchroniser leurs soldes. Le serveur limite les
-nouveaux lancers à un toutes les 250 ms par compte ; le navigateur limite
-l’affichage à 8 billes. Aucun mode automatique n’est activé.
+nouveaux lancers à un toutes les 250 ms par compte ; le navigateur n’impose
+aucun plafond de billes simultanées. Aucun mode automatique n’est activé.
 
 ## Animation et réseau
 

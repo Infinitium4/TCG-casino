@@ -2,7 +2,6 @@ const crypto = require('node:crypto');
 
 const MULTIPLIERS = Object.freeze([110, 41, 10, 5, 3, 1.5, 1, 0.5, 0.3, 0.5, 1, 1.5, 3, 5, 10, 41, 110]);
 const ROWS = 16;
-const MAX_BALLS = 8;
 function binomial(n, k) {
   let value = 1;
   for (let i = 1; i <= k; i++) value = value * (n - i + 1) / i;
@@ -55,7 +54,7 @@ function registerPlinkoRoutes(deps) {
     const recent = await all(`SELECT d.*, u.username FROM plinko_drops d JOIN users u ON u.id = d.user_id
       ORDER BY d.id DESC LIMIT 20`);
     res.json({ settings, balance: user.chips, rows: ROWS, multipliers: MULTIPLIERS,
-      probabilities: PROBABILITIES, rtp: RTP, risks: ['high'], maxBalls: MAX_BALLS,
+      probabilities: PROBABILITIES, rtp: RTP, risks: ['high'],
       paused: await isBettingPaused(), history: history.map(privateDrop), recent: recent.map(publicDrop) });
   }));
 

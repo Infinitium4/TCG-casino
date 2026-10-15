@@ -86,7 +86,7 @@ const plinkoModule = (() => {
   function updateControls() {
     const config = state.config;
     const disabled = state.pending || state.syncing || !config;
-    el('plinkoLaunch').disabled = disabled || (!state.retry && (state.balls.length >= (config?.maxBalls || 8) || !config?.settings?.enabled || config.settings.maintenance || config.paused));
+    el('plinkoLaunch').disabled = disabled || (!state.retry && (!config?.settings?.enabled || config.settings.maintenance || config.paused));
     el('plinkoLaunch').textContent = state.pending ? 'ENVOI EN COURS…' : state.retry ? 'RÉCUPÉRER MON LANCER' : 'LANCER UNE BILLE';
     el('plinkoBallCount').textContent = state.balls.length;
     el('plinkoBalance').textContent = formatChips(state.balance);
@@ -169,7 +169,7 @@ const plinkoModule = (() => {
     try { if (value) localStorage.setItem(key(), JSON.stringify(value)); else localStorage.removeItem(key()); } catch {}
   }
   async function launch() {
-    if (state.pending || state.syncing || !state.config || (!state.retry && state.balls.length >= state.config.maxBalls)) return;
+    if (state.pending || state.syncing || !state.config) return;
     const stake = Number(el('plinkoStake').value);
     if (!state.retry && (!Number.isSafeInteger(stake) || stake < state.config.settings.minBet || stake > Math.min(state.config.settings.maxBet, 1_000_000) || stake > state.balance)) {
       feedback('Choisis une mise entière autorisée et disponible dans ton solde.', true); return;
