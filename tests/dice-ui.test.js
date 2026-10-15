@@ -17,7 +17,7 @@ function harness() {
     });
     return nodes.get(id);
   };
-  const context = vm.createContext({
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), {
     document: { hidden: false, getElementById: node, querySelectorAll: () => [], addEventListener() {}, createElement: tag => node(`${tag}-${nodes.size}`) },
     window: { matchMedia: () => ({ matches: false }) }, accountUser: { id: 7, username: 'Alice' },
     getPlayer: () => player, savePlayer: next => { player = next; }, formatChips: String,
@@ -28,7 +28,7 @@ function harness() {
     performance: { now: () => 0 }, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
     AbortController, setTimeout, clearTimeout,
     fetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject }))
-  });
+  }));
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/dice.js'), 'utf8');
   vm.runInContext(source.replace('return { initialize, setActive };', 'globalThis.game = { initialize, setActive, state, quote, launch, refresh, animate, finish }; return { initialize, setActive };'), context);
   context.game.initialize(); context.game.state.active = true;
@@ -42,11 +42,11 @@ test('Dice displays exact quotes and reverses the winning zone in Over mode', ()
   h.nodes.get('diceThreshold').value = '60'; h.game.quote();
   assert.equal(h.nodes.get('diceChance').textContent, '60,00 %');
   assert.equal(h.nodes.get('diceMultiplier').textContent, '1,65x');
-  assert.equal(h.nodes.get('dicePotential').textContent, '165 jetons');
+  assert.equal(h.nodes.get('dicePotential').textContent, '165 €');
   h.game.state.mode = 'over'; h.game.quote();
   assert.equal(h.nodes.get('diceChance').textContent, '40,00 %');
   assert.equal(h.nodes.get('diceMultiplier').textContent, '2,48x');
-  assert.equal(h.nodes.get('dicePotential').textContent, '247 jetons');
+  assert.equal(h.nodes.get('dicePotential').textContent, '247.5 €');
   assert.match(h.nodes.get('diceRule').textContent, /supérieur ou égal/);
   assert.match(h.nodes.get('diceTrack').style.background, /#a93f4c 0%/);
 });
@@ -96,7 +96,7 @@ test('invalid stakes or thresholds never send a request', async () => {
     h.nodes.get('diceThreshold').value = threshold; await h.game.launch();
   }
   h.nodes.get('diceThreshold').value = '50';
-  for (const stake of ['-1', '0', '1001', '1.5']) {
+  for (const stake of ['-1', '0', '1001', '0.001']) {
     h.nodes.get('diceStake').value = stake; await h.game.launch();
   }
   assert.equal(h.requests.length, 0);

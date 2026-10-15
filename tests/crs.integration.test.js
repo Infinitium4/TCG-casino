@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -86,10 +87,7 @@ test('removed CRS game is absent from settings and its API is unavailable', asyn
   }
 
   async function register(username) {
-    const result = await request('/api/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password' })
-    });
+    const result = await createPlayerFixture(baseUrl, dataDir, { username, password: 'player-password' });
     assert.equal(result.response.status, 201, result.body.error);
     return result.cookie;
   }

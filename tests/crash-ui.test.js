@@ -20,13 +20,13 @@ test('cashout stops the flight and keeps confirmed winnings through later round 
   };
   let nextFrame = 0;
   const frames = new Map();
-  const context = vm.createContext({
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), {
     document: { hidden: false, getElementById: element, querySelectorAll: () => [], createElement: () => element(`new-${elements.size}`) },
     window: {}, Date, Number, Math, console,
     getPlayer: () => ({ chips: 1000 }), formatChips: String,
     requestAnimationFrame(callback) { const id = ++nextFrame; frames.set(id, callback); return id; },
     cancelAnimationFrame(id) { frames.delete(id); }
-  });
+  }));
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/crash.js'), 'utf8');
   vm.runInContext(source.replace('return { initialize,', 'globalThis.flight = { updateState, setActive, animate }; return { initialize,'), context);
   const round = { id: 'round-one', status: 'running', serverNow: Date.now(), startedAt: Date.now() - 1000, crashAt: Date.now() + 60000, multiplier: 1.5 };
@@ -45,7 +45,7 @@ test('cashout stops the flight and keeps confirmed winnings through later round 
   assert.equal(frames.size, 0);
   assert.equal(element('crashPhaseLabel').textContent, 'Gains retirés');
   assert.equal(element('crashMultiplier').textContent, '1.50x');
-  assert.equal(element('crashPotential').textContent, '37 jetons');
+  assert.equal(element('crashPotential').textContent, '37 €');
   update(active, { ...round, serverNow: Date.now() + 10, multiplier: 3 });
   assert.equal(frames.size, 0, 'a delayed active update cannot restart a confirmed cashout');
   update(cashout, { ...round, serverNow: Date.now() + 20, status: 'crashed', crashMultiplier: 4 });

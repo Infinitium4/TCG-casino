@@ -1,3 +1,4 @@
+const { isMoney, roundMoney, moneyRatio } = require('./underground/js/money');
 const crypto = require('node:crypto');
 
 function thresholdUnits(threshold) {
@@ -16,7 +17,7 @@ function rollDice(stake, mode, threshold, randomInt = crypto.randomInt) {
   const resultUnits = randomInt(10000);
   const won = mode === 'under' ? resultUnits < units : resultUnits >= units;
   return { result: resultUnits / 100, won, probability: outcomes / 100,
-    multiplier: 9900 / outcomes, payout: won ? Math.floor(stake * 9900 / outcomes) : 0 };
+    multiplier: 9900 / outcomes, payout: won ? moneyRatio(stake, 9900, outcomes) : 0 };
 }
 
 async function initializeDiceSchema(run) {
@@ -56,7 +57,7 @@ function registerDiceRoutes(deps) {
   app.post('/api/dice/roll', requireAuth, handleAsync(async (req, res) => {
     const { stake, mode, threshold, requestId } = req.body || {};
     const units = thresholdUnits(threshold);
-    if (!Number.isSafeInteger(stake) || stake < 1 || stake > 1_000_000 || units === null ||
+    if (!isMoney(stake) || stake < 0.01 || stake > 1_000_000 || units === null ||
         !['under', 'over'].includes(mode) || typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) {
       return res.status(400).json({ error: 'Mise ou paramètres Dice invalides. Seuil de 1 à 99, avec deux décimales maximum.' });
     }
@@ -72,21 +73,21 @@ function registerDiceRoutes(deps) {
         }
         const settings = await getGameSettings('dice');
         if (!settings?.enabled || settings.maintenance || await isBettingPaused()) throw fail(503, 'Les mises Dice sont suspendues.');
-        if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${Math.min(settings.maxBet, 1_000_000)} jetons.`);
+        if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${Math.min(settings.maxBet, 1_000_000)} €.`);
         if (isUserInActiveTable(userId) || await hasActiveCrashBet(userId)) throw fail(409, 'Termine ta partie en cours avant de jouer à Dice.');
         const now = Date.now();
         const last = await get('SELECT created_at_ms FROM dice_rolls WHERE user_id = ? ORDER BY id DESC LIMIT 1', [userId]);
         if (last && now - last.created_at_ms < 250) throw fail(429, 'Attends un instant avant de relancer.');
         if (user.chips < stake) throw fail(400, 'Solde insuffisant.');
         const outcome = rollDice(stake, mode, threshold);
-        if (!Number.isSafeInteger(user.chips - stake + outcome.payout)) throw fail(400, 'Le solde maximal serait dépassé.');
-        const debit = await run('UPDATE users SET chips = chips - ? WHERE id = ? AND chips >= ?', [stake, userId, stake]);
+        if (!isMoney(roundMoney(user.chips - stake + outcome.payout))) throw fail(400, 'Le solde maximal serait dépassé.');
+        const debit = await run('UPDATE users SET chips = ROUND(chips - ?, 2) WHERE id = ? AND chips >= ?', [stake, userId, stake]);
         if (!debit.changes) throw fail(400, 'Solde insuffisant.');
-        await run('UPDATE users SET chips = chips + ? WHERE id = ?', [outcome.payout, userId]);
+        await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ?', [outcome.payout, userId]);
         const saved = await run(`INSERT INTO dice_rolls (user_id, request_id, stake, mode, threshold_units, result_units, payout, created_at_ms)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [userId, requestId, stake, mode, units, Math.round(outcome.result * 100), outcome.payout, now]);
-        await addGameHistory(userId, 'dice', stake, `${mode === 'under' ? 'Under <' : 'Over ≥'} ${threshold.toFixed(2)} · Résultat ${outcome.result.toFixed(2)}`, outcome.payout, outcome.payout - stake);
-        await recordBankSettlement(userId, 'dice', outcome.payout - stake, user.username);
+        await addGameHistory(userId, 'dice', stake, `${mode === 'under' ? 'Under <' : 'Over ≥'} ${threshold.toFixed(2)} · Résultat ${outcome.result.toFixed(2)}`, outcome.payout, roundMoney(outcome.payout - stake));
+        await recordBankSettlement(userId, 'dice', roundMoney(outcome.payout - stake), user.username);
         const settled = await get('SELECT chips FROM users WHERE id = ?', [userId]);
         return { roll: { id: saved.id, requestId, stake, mode, threshold: units / 100, ...outcome, createdAt: now }, balance: settled.chips, replay: false };
       });

@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function setup(symbolIndexes = [0, 0, 0]) {
+function setup(symbolIndexes = [0, 0, 0], minBet = 10) {
   const ids = new Map();
   const timers = [];
   const history = [];
@@ -20,12 +20,12 @@ function setup(symbolIndexes = [0, 0, 0]) {
   const get = id => { if (!ids.has(id)) ids.set(id, node()); return ids.get(id); };
   const reels = [node(), node(), node()];
   let draws = 0;
-  const context = vm.createContext({
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), {
     document: { getElementById: get, querySelector: () => get('machine'), querySelectorAll: () => reels, createElement: node },
-    window: { matchMedia: () => ({ matches: false }), setTimeout: callback => timers.push(callback), casinoGameSettings: { slots: { minBet: 10, maxBet: 100 } } },
+    window: { matchMedia: () => ({ matches: false }), setTimeout: callback => timers.push(callback), casinoGameSettings: { slots: { minBet, maxBet: 100 } } },
     getPlayer: () => player, savePlayer() {}, formatChips: String, updateTopbar() {}, showToast() {},
     renderHomeView() {}, renderLeaderboard() {}, renderProfileView() {}, addHistoryEntry: entry => history.push(entry)
-  });
+  }));
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../underground/js/utils.js'), 'utf8'), context);
   context.addHistoryEntry = entry => history.push(entry);
   context.randomInt = () => symbolIndexes[draws++] ?? 0;
@@ -66,7 +66,7 @@ test('slots settles a loss and an adjacent-pair refund without debiting twice', 
 
 test('slots refuses stakes outside game limits or available balance', () => {
   const ui = setup();
-  for (const value of ['0', '9', '101', '25.5', 'invalid']) {
+  for (const value of ['0', '0.001', '1000001', '25.555', 'invalid']) {
     ui.get('slotsStake').value = value;
     ui.get('slotsLever').click();
   }
@@ -76,4 +76,16 @@ test('slots refuses stakes outside game limits or available balance', () => {
   assert.equal(ui.player.chips, 20);
   assert.equal(ui.timers.length, 0);
   assert.equal(ui.history.length, 0);
+});
+
+test('slots can spend the last five cents and retain the fractional payout', () => {
+  const ui = setup([0, 0, 0], 0.01);
+  ui.player.chips = 0.05;
+  ui.get('slotsStake').value = '0.05';
+  ui.get('slotsLever').click();
+  assert.equal(ui.player.chips, 0);
+  ui.finish();
+  assert.equal(ui.player.chips, 0.1);
+  assert.equal(ui.history[0].payout, 0.1);
+  assert.equal(ui.history[0].net, 0.05);
 });

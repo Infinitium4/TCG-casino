@@ -49,13 +49,13 @@ function setup() {
       return [];
     }
   };
-  const context = vm.createContext({ document, window: { casinoGameSettings: { roulette: { minBet: 5, maxBet: 100 } } },
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), { formatChips: String, document, window: { casinoGameSettings: { roulette: { minBet: 5, maxBet: 100 } } },
     ResizeObserver: class { observe() {} },
     getPlayer: () => player, savePlayer() {}, updateTopbar() {}, showToast() {},
     getRouletteColor: value => ['0', '00'].includes(String(value)) ? 'green' : String(value) === '7' ? 'red' : 'black',
     randomInt: () => 6, setTimeout: callback => { settle = callback; },
     addHistoryEntry: entry => history.push(entry), renderHomeView() {}, renderLeaderboard() {}, renderFilteredHistory() {}
-  });
+  }));
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../underground/js/roulette.js'), 'utf8'), context);
   get('rouletteCustomStake').value = '10';
   context.window.rouletteModule.initialize();
@@ -131,7 +131,7 @@ test('roulette initializes all 38 track pockets and keeps bets across views and 
 
 test('roulette applies pulled stake limits and locks, settles and resets independent bets', () => {
   const ui = setup();
-  for (const amount of ['4', '101', '5.5']) {
+  for (const amount of ['4', '101', '5.555']) {
     ui.get('rouletteCustomStake').value = amount;
     ui.board.events.click();
   }
@@ -205,4 +205,17 @@ test('main page loads every app module and has unique element IDs', () => {
   for (const file of ['index.html', 'js/roulette.js', 'css/style.css']) {
     assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../underground', file), 'utf8'), /^(?:<{7}|={7}|>{7})/m);
   }
+});
+
+test('roulette reserves several five-cent bets and refunds every cent', () => {
+  const ui = setup();
+  ui.context.window.casinoGameSettings.roulette.minBet = 0.01;
+  ui.player.chips = 0.15;
+  ui.get('rouletteCustomStake').value = '0.05';
+  ui.get('roulettePlaceBet').events.click();
+  ui.get('roulettePlaceBet').events.click();
+  ui.get('roulettePlaceBet').events.click();
+  assert.equal(ui.player.chips, 0);
+  while (ui.get('rouletteBets').children.length) ui.get('rouletteBets').children[0].children[1].events.click();
+  assert.equal(ui.player.chips, 0.15);
 });

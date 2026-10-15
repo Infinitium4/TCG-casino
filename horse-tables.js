@@ -1,3 +1,4 @@
+const { isMoney, roundMoney, moneyRatio } = require('./underground/js/money');
 const crypto = require('node:crypto');
 
 function generateMarket(horses, randomInt = crypto.randomInt) {
@@ -149,7 +150,7 @@ function registerHorseTables(deps, helpers) {
     const userId = req.session.userId, id = req.params.tableId;
     await membership(userId, id);
     const { stake, horseId, requestId, eventId } = req.body || {};
-    if (!Number.isSafeInteger(stake) || stake <= 0 || stake > 1_000_000 || !Number.isInteger(horseId) || horseId < 1 || horseId > 5 || typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw fail(400, 'Cheval, mise ou identifiant invalide.');
+    if (!isMoney(stake) || stake <= 0 || stake > 1_000_000 || !Number.isInteger(horseId) || horseId < 1 || horseId > 5 || typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw fail(400, 'Cheval, mise ou identifiant invalide.');
     const table = await get('SELECT * FROM horse_tables WHERE id=?', [id]);
     if (eventId !== table.event_id) throw fail(409, 'Les cotes ont changé : choisis ton pari pour cette nouvelle course.');
     const duplicate = await get('SELECT * FROM horse_races WHERE user_id=? AND request_id=?', [userId, requestId]);
@@ -158,14 +159,14 @@ function registerHorseTables(deps, helpers) {
       return state(userId);
     }
     const settings = await available();
-    if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${settings.maxBet} jetons.`);
+    if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${settings.maxBet} €.`);
     const event = await get('SELECT * FROM horse_events WHERE id=?', [eventId]);
     if (event.status !== 'ready') throw fail(409, 'Les paris sont fermés.');
     if (await get('SELECT id FROM horse_races WHERE event_id=? AND user_id=? AND cancelled=0', [eventId, userId])) throw fail(409, 'Ton pari est déjà validé.');
     if (await get("SELECT id FROM horse_races WHERE user_id=? AND status!='settled'", [userId]) || isUserInActiveTable(userId) || await hasActiveCrashBet(userId)) throw fail(409, 'Termine ta partie en cours.');
     const odds = JSON.parse(event.market).find(horse => horse.id === horseId).oddsCents;
     const user = await get('SELECT chips FROM users WHERE id=?', [userId]);
-    if (!Number.isSafeInteger(user.chips - stake + Math.floor(stake * odds / 100))) throw fail(400, 'Le solde maximal serait dépassé.');
+    if (!isMoney(roundMoney(user.chips - stake + moneyRatio(stake, odds, 100)))) throw fail(400, 'Le solde maximal serait dépassé.');
     if (!(await run('UPDATE users SET chips=chips-? WHERE id=? AND chips>=?', [stake, userId, stake])).changes) throw fail(400, 'Solde insuffisant.');
     const outcome = JSON.parse(event.outcome);
     await run("INSERT INTO horse_races(id,user_id,request_id,horse_id,stake,winner,outcome,status,created_at_ms,event_id,odds_cents) VALUES (?,?,?,?,?,?,?,'ready',?,?,?)",

@@ -6,12 +6,12 @@ const vm = require('node:vm');
 
 test('a refresh started before an action cannot overwrite the confirmed hand', async () => {
   let resolveResponse;
-  const context = vm.createContext({
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), {
     window: { location: { pathname: '/blackjack/game/test' } },
     document: { addEventListener() {} },
     console,
     fetch: () => new Promise(resolve => { resolveResponse = resolve; })
-  });
+  }));
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/blackjack-game.js'), 'utf8');
   vm.runInContext(source.replace('return { initialize };', 'globalThis.game = { state, refreshTable }; return { initialize };'), context);
   const refresh = context.game.refreshTable();

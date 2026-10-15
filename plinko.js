@@ -1,3 +1,4 @@
+const { isMoney, roundMoney, moneyRatio } = require('./underground/js/money');
 const crypto = require('node:crypto');
 
 const MULTIPLIERS = Object.freeze([110, 41, 10, 5, 3, 1.5, 1, 0.5, 0.3, 0.5, 1, 1.5, 3, 5, 10, 41, 110]);
@@ -16,8 +17,8 @@ function generateDrop(randomInt = crypto.randomInt) {
   return { path, slot, multiplier: MULTIPLIERS[slot] };
 }
 function payoutFor(stake, multiplier) {
-  // Integer tenths avoid floating point rounding errors (e.g. 0.3x).
-  return Math.floor(stake * Math.round(multiplier * 10) / 10);
+  // Compute the payout in cents using the exact multiplier ratio.
+  return moneyRatio(stake, Math.round(multiplier * 10), 10);
 }
 
 async function initializePlinkoSchema(run) {
@@ -60,7 +61,7 @@ function registerPlinkoRoutes(deps) {
 
   app.post('/api/plinko/drop', requireAuth, handleAsync(async (req, res) => {
     const { stake, requestId, risk = 'high', rows = ROWS } = req.body || {};
-    if (!Number.isSafeInteger(stake) || stake <= 0 || stake > 1_000_000 ||
+    if (!isMoney(stake) || stake <= 0 || stake > 1_000_000 ||
         typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId) ||
         risk !== 'high' || rows !== ROWS) {
       return res.status(400).json({ error: 'Mise ou paramètres Plinko invalides.' });
@@ -77,7 +78,7 @@ function registerPlinkoRoutes(deps) {
         }
         const settings = await getGameSettings('plinko');
         if (!settings?.enabled || settings.maintenance || await isBettingPaused()) throw fail(503, 'Les mises Plinko sont suspendues.');
-        if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${Math.min(settings.maxBet, 1_000_000)} jetons.`);
+        if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${Math.min(settings.maxBet, 1_000_000)} €.`);
         if (isUserInActiveTable(userId) || await hasActiveCrashBet(userId)) throw fail(409, 'Termine ta partie en cours avant de lancer une bille.');
         const now = Date.now();
         const last = await get('SELECT created_at_ms FROM plinko_drops WHERE user_id = ? ORDER BY id DESC LIMIT 1', [userId]);
@@ -85,15 +86,15 @@ function registerPlinkoRoutes(deps) {
         if (user.chips < stake) throw fail(400, 'Solde insuffisant.');
         const outcome = generateDrop();
         const payout = payoutFor(stake, outcome.multiplier);
-        const balance = user.chips - stake + payout;
-        if (!Number.isSafeInteger(balance) || balance < 0) throw fail(400, 'Le solde maximal serait dépassé.');
-        const debit = await run('UPDATE users SET chips = chips - ? WHERE id = ? AND chips >= ?', [stake, userId, stake]);
+        const balance = roundMoney(user.chips - stake + payout);
+        if (!isMoney(balance) || balance < 0) throw fail(400, 'Le solde maximal serait dépassé.');
+        const debit = await run('UPDATE users SET chips = ROUND(chips - ?, 2) WHERE id = ? AND chips >= ?', [stake, userId, stake]);
         if (!debit.changes) throw fail(400, 'Solde insuffisant.');
-        await run('UPDATE users SET chips = chips + ? WHERE id = ?', [payout, userId]);
+        await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ?', [payout, userId]);
         const saved = await run(`INSERT INTO plinko_drops (user_id, request_id, stake, risk, path, slot, multiplier, payout, created_at_ms)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [userId, requestId, stake, risk, JSON.stringify(outcome.path), outcome.slot, outcome.multiplier, payout, now]);
-        await addGameHistory(userId, 'plinko', stake, `Case ${outcome.slot + 1} · ${outcome.multiplier}x`, payout, payout - stake);
-        await recordBankSettlement(userId, 'plinko', payout - stake, user.username);
+        await addGameHistory(userId, 'plinko', stake, `Case ${outcome.slot + 1} · ${outcome.multiplier}x`, payout, roundMoney(payout - stake));
+        await recordBankSettlement(userId, 'plinko', roundMoney(payout - stake), user.username);
         const settledUser = await get('SELECT chips FROM users WHERE id = ?', [userId]);
         return { drop: { id: saved.id, requestId, stake, risk, ...outcome, payout, createdAt: now }, balance: settledUser.chips, replay: false, username: user.username };
       });

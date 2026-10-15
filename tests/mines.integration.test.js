@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -83,7 +84,7 @@ test('Mines settles games atomically and hides active mine positions', async t =
   }
 
   async function register(username) {
-    const result = await request('/api/register', { method: 'POST', body: JSON.stringify({ username, password: 'player-password' }) });
+    const result = await createPlayerFixture(baseUrl, dataDir, { username, password: 'player-password' });
     assert.equal(result.response.status, 201, result.body.error);
     return result.cookie;
   }
@@ -116,7 +117,7 @@ test('Mines settles games atomically and hides active mine positions', async t =
   assert.equal(initial.body.settings.enabled, true);
   for (const invalid of [
     { stake: 0, mineCount: 10, requestId: 'mines-invalid-zero-alice' },
-    { stake: 1.5, mineCount: 10, requestId: 'mines-invalid-frac-alice' },
+    { stake: 0.001, mineCount: 10, requestId: 'mines-invalid-frac-alice' },
     { stake: 1001, mineCount: 10, requestId: 'mines-invalid-funds-alice' },
     { stake: 100, mineCount: 25, requestId: 'mines-invalid-count-alice' }
   ]) {
@@ -148,19 +149,19 @@ test('Mines settles games atomically and hides active mine positions', async t =
   const cashoutBody = { gameId: started.body.game.id, requestId: 'mines-cashout-request-alice' };
   const cashout = await request('/api/mines/cashout', { cookie: alice, method: 'POST', body: JSON.stringify(cashoutBody) });
   assert.equal(cashout.body.game.status, 'cashed_out');
-  assert.equal(cashout.body.game.payout, 103);
-  assert.equal(cashout.body.balance, 1003);
+  assert.equal(cashout.body.game.payout, 103.13);
+  assert.equal(cashout.body.balance, 1003.13);
   const cashoutReplay = await request('/api/mines/cashout', { cookie: alice, method: 'POST', body: JSON.stringify(cashoutBody) });
   assert.equal(cashoutReplay.body.replay, true);
-  assert.equal(cashoutReplay.body.balance, 1003);
+  assert.equal(cashoutReplay.body.balance, 1003.13);
   assert.equal((await request('/api/mines/cashout', { cookie: alice, method: 'POST', body: JSON.stringify({ gameId: started.body.game.id, requestId: 'mines-other-cashout-alice' }) })).response.status, 409);
   await new Promise(resolve => setTimeout(resolve, 260));
   const restarted = await request('/api/mines/start', { cookie: alice, method: 'POST', body: JSON.stringify({ stake: 100, mineCount: 10, requestId: 'mines-restart-request-alice' }) });
   assert.equal(restarted.response.status, 200, restarted.body.error);
-  assert.equal(restarted.body.balance, 903);
+  assert.equal(restarted.body.balance, 903.13);
   const restartedCashout = await request('/api/mines/cashout', { cookie: alice, method: 'POST', body: JSON.stringify({ gameId: restarted.body.game.id, requestId: 'mines-restart-cashout-alice' }) });
   assert.equal(restartedCashout.body.game.status, 'cashed_out');
-  assert.equal(restartedCashout.body.balance, 1002);
+  assert.equal(restartedCashout.body.balance, 1002.13);
 
   const bobStart = await request('/api/mines/start', { cookie: bob, method: 'POST', body: JSON.stringify({ stake: 100, mineCount: 10, requestId: 'mines-start-request-bob' }) });
   assert.equal(bobStart.response.status, 200, bobStart.body.error);

@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -87,10 +88,7 @@ test('Plinko settles atomically, deduplicates requests and survives a restart', 
   }
 
   async function register(username) {
-    const result = await request('/api/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password' })
-    });
+    const result = await createPlayerFixture(baseUrl, dataDir, { username, password: 'player-password' });
     assert.equal(result.response.status, 201, result.body.error);
     return result.cookie;
   }
@@ -138,7 +136,7 @@ test('Plinko settles atomically, deduplicates requests and survives a restart', 
   assert.ok(first.drop.path.every(direction => direction === 0 || direction === 1));
   assert.equal(first.drop.slot, first.drop.path.reduce((sum, value) => sum + value, 0));
   assert.equal(first.drop.multiplier, initial.body.multipliers[first.drop.slot]);
-  assert.equal(first.drop.payout, Math.floor(100 * first.drop.multiplier));
+  assert.equal(first.drop.payout, Math.round(10000 * first.drop.multiplier) / 100);
   assert.equal(first.balance, initial.body.balance - 100 + first.drop.payout);
   assert.ok(results.every(result => result.body.drop.id === first.drop.id));
   const history = await request('/api/history', { cookie: alice });
@@ -149,7 +147,7 @@ test('Plinko settles atomically, deduplicates requests and survives a restart', 
   for (const field of ['user_id', 'requestId', 'path', 'slot', 'balance', 'password_hash']) assert.equal(Object.hasOwn(state.body.recent[0], field), false);
   const conflicting = await request('/api/plinko/drop', { cookie: alice, method: 'POST', body: JSON.stringify({ ...bet, stake: 50 }) });
   assert.equal(conflicting.response.status, 409);
-  for (const override of [{ stake: -1 }, { stake: 1.5 }, { stake: '100' }, { stake: 1000001 }, { rows: 15 }, { risk: 'low' }, { requestId: 'x' }]) {
+  for (const override of [{ stake: -1 }, { stake: 0.001 }, { stake: '100' }, { stake: 1000001 }, { rows: 15 }, { risk: 'low' }, { requestId: 'x' }]) {
     const invalid = await request('/api/plinko/drop', { cookie: bob, method: 'POST', body: JSON.stringify({ ...bet, ...override }) });
     assert.equal(invalid.response.status, 400);
   }

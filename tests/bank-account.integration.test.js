@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -111,10 +112,7 @@ test('internal bank settles solo game results and stays protected from account m
     ['blackjack', 'crash', 'dice', 'horses', 'mines', 'plinko', 'poker', 'roulette', 'slots', 'tower']);
   assert.ok(adminBank.body.gameBanks.every(bank => bank.chips === 0 && bank.username.startsWith('casino-bank-')));
 
-  const registered = await request('/api/register', {
-    method: 'POST',
-    body: JSON.stringify({ username: 'bank-test-player', password: 'player-pass' })
-  });
+  const registered = await createPlayerFixture(baseUrl, dataDir, { username: 'bank-test-player', password: 'player-pass' });
   assert.equal(registered.response.status, 201, registered.body.error);
   let playerCookie = registered.cookie;
   assert.ok(playerCookie);
@@ -381,7 +379,7 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal(reset.response.status, 200, reset.body.error);
   const resetCookie = await login('bank-test-player', 'player-pass');
   const resetAccount = (await request('/api/me', { cookie: resetCookie })).body;
-  assert.equal(resetAccount.user.chips, 1000);
+  assert.equal(resetAccount.user.chips, 0);
   assert.equal(resetAccount.user.avatar_image, null);
   assert.equal(resetAccount.stats.gamesPlayed, 0);
   assert.equal(resetAccount.isAdmin, false);

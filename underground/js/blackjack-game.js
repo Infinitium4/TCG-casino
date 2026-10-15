@@ -139,7 +139,7 @@ const blackjackGame = (() => {
       seat.querySelector('.blackjack-player-total').textContent = player.hand?.length
         ? `Score ${calculateHandValue(player.hand)} · Mise ${formatChips(player.bet || 0)}`
         : `Mise ${formatChips(player.bet || 0)}`;
-      seat.querySelector('.blackjack-player-balance').textContent = `${formatChips(player.chips || 0)} jetons`;
+      seat.querySelector('.blackjack-player-balance').textContent = `${formatChips(player.chips || 0)} €`;
 
       const cardCount = player.hand?.length || player.handCount || 0;
       const cards = player.hand?.length ? player.hand : Array(cardCount).fill(null);
@@ -210,10 +210,10 @@ const blackjackGame = (() => {
         controlsNode.innerHTML = '<div class="status-box subtle">En attente du joueur...</div>';
         return;
       }
-      turnInfo.textContent = `À toi. Main : ${calculateHandValue(player.hand || [])} • Mise : ${formatChips(player.bet)} jetons.`;
+      turnInfo.textContent = `À toi. Main : ${calculateHandValue(player.hand || [])} • Mise : ${formatChips(player.bet)} €.`;
       if (player.hands?.length > 1) {
         const hand = player.hands[player.activeHand];
-        turnInfo.textContent = `À toi · Main ${player.activeHand + 1}/${player.hands.length} · Score ${calculateHandValue(hand.cards)} · Mise ${formatChips(hand.bet)} jetons.`;
+        turnInfo.textContent = `À toi · Main ${player.activeHand + 1}/${player.hands.length} · Score ${calculateHandValue(hand.cards)} · Mise ${formatChips(hand.bet)} €.`;
       }
       controlsNode.innerHTML = `
         <div class="action-row stacked">
@@ -236,14 +236,14 @@ const blackjackGame = (() => {
       ? ({ blackjack: 'Blackjack naturel', win: 'Manche gagnée', push: 'Égalité', loss: 'Manche perdue' }[player.outcome])
       : '';
     turnInfo.textContent = table.round === 'finished'
-      ? `${outcome}. Gain rendu : ${formatChips(player.payout)} jetons.`
+      ? `${outcome}. Gain rendu : ${formatChips(player.payout)} €.`
       : 'La table est prête. L’hôte peut lancer une manche.';
 
     if (isHost) {
       controlsNode.innerHTML = `
         <label class="inline-amount">
           <span>Mise commune</span>
-          <input id="blackjackNextBet" type="number" min="1" step="1" value="${Number(table.betAmount || 25)}" />
+          <input id="blackjackNextBet" type="number" min="0.01" step="0.01" value="${Number(table.betAmount || 0.05)}" />
         </label>
         <button class="gold-button" type="button" id="startBlackjackRound">
           ${table.round === 'finished' ? 'Rejouer' : 'Lancer la manche'}
@@ -261,7 +261,7 @@ const blackjackGame = (() => {
 
   function renderTable(table) {
     state.table = table;
-    document.getElementById('tableBanner').textContent = `${sanitizeText(table.name, 30)} • Manche ${table.roundNumber || 0} • Mise ${formatChips(table.betAmount || 0)} jetons`;
+    document.getElementById('tableBanner').textContent = `${sanitizeText(table.name, 30)} • Manche ${table.roundNumber || 0} • Mise ${formatChips(table.betAmount || 0)} €`;
     renderDealer(table);
     renderSeats(table);
     renderHistory(table);
@@ -294,8 +294,8 @@ const blackjackGame = (() => {
 
   async function startNextRound() {
     const betAmount = Number(document.getElementById('blackjackNextBet')?.value || state.table?.betAmount || 0);
-    if (!Number.isInteger(betAmount) || betAmount <= 0) {
-      window.alert('La mise doit être un entier positif.');
+    if (!isMoney(betAmount) || betAmount <= 0) {
+      window.alert('La mise doit être positive, avec deux décimales maximum.');
       return;
     }
     try {

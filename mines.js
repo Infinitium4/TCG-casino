@@ -1,3 +1,4 @@
+const { isMoney, roundMoney, moneyRatio } = require('./underground/js/money');
 const crypto = require('node:crypto');
 
 const BOARD_SIZE = 25;
@@ -33,9 +34,9 @@ function multiplierFor(mineCount, safeCount) {
 }
 
 function payoutFor(stake, mineCount, safeCount) {
-  if (!Number.isSafeInteger(stake) || stake < 1) throw new RangeError('Mise Mines invalide.');
+  if (!isMoney(stake) || stake < 0.01) throw new RangeError('Mise Mines invalide.');
   const { numerator, denominator } = survivalFraction(mineCount, safeCount);
-  return Number((BigInt(stake) * numerator * 99n) / (denominator * 100n));
+  return moneyRatio(stake, numerator * 99n, denominator * 100n);
 }
 
 function generateMinePositions(mineCount, randomInt = crypto.randomInt) {
@@ -102,8 +103,8 @@ function registerMinesRoutes(deps) {
   };
   const currentBalance = async userId => (await get('SELECT chips FROM users WHERE id = ?', [userId])).chips;
   const recordSettlement = async (userId, user, game, payout, result) => {
-    await addGameHistory(userId, 'mines', game.stake, result, payout, payout - game.stake);
-    await recordBankSettlement(userId, 'mines', payout - game.stake, user.username);
+    await addGameHistory(userId, 'mines', game.stake, result, payout, roundMoney(payout - game.stake));
+    await recordBankSettlement(userId, 'mines', roundMoney(payout - game.stake), user.username);
   };
 
   app.get('/api/mines/state', requireAuth, handleAsync(async (req, res) => {
@@ -136,7 +137,7 @@ function registerMinesRoutes(deps) {
 
   app.post('/api/mines/start', requireAuth, handleAsync(async (req, res) => {
     const { stake, mineCount, requestId } = req.body || {};
-    if (!Number.isSafeInteger(stake) || stake < 1 || stake > MAX_STAKE || !validMineCount(mineCount) || !validRequestId(requestId)) {
+    if (!isMoney(stake) || stake < 0.01 || stake > MAX_STAKE || !validMineCount(mineCount) || !validRequestId(requestId)) {
       return res.status(400).json({ error: 'Mise ou nombre de mines invalide.' });
     }
     try {
@@ -151,14 +152,14 @@ function registerMinesRoutes(deps) {
         }
         const settings = await getGameSettings('mines');
         if (!settings?.enabled || settings.maintenance || await isBettingPaused()) throw fail(503, 'Les mises Mines sont suspendues.');
-        if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${Math.min(settings.maxBet, MAX_STAKE)} jetons.`);
+        if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${Math.min(settings.maxBet, MAX_STAKE)} €.`);
         if (isUserInActiveTable(userId) || await hasActiveCrashBet(userId)) throw fail(409, 'Termine ta partie en cours avant de jouer à Mines.');
         const active = await get("SELECT id FROM mines_games WHERE user_id = ? AND status = 'active'", [userId]);
         if (active) throw fail(409, 'Termine ta partie Mines en cours avant d’en lancer une autre.');
         const last = await get('SELECT created_at_ms FROM mines_games WHERE user_id = ? ORDER BY id DESC LIMIT 1', [userId]);
         if (last && Date.now() - last.created_at_ms < 250) throw fail(429, 'Attends un instant avant de relancer.');
         if (user.chips < stake) throw fail(400, 'Solde insuffisant.');
-        const debit = await run('UPDATE users SET chips = chips - ? WHERE id = ? AND chips >= ?', [stake, userId, stake]);
+        const debit = await run('UPDATE users SET chips = ROUND(chips - ?, 2) WHERE id = ? AND chips >= ?', [stake, userId, stake]);
         if (!debit.changes) throw fail(400, 'Solde insuffisant.');
         const createdAt = Date.now();
         const saved = await run(`INSERT INTO mines_games (user_id, request_id, stake, mine_count, mine_positions, created_at_ms)
@@ -207,8 +208,8 @@ function registerMinesRoutes(deps) {
         }
         if (status !== 'active') {
           user = await get('SELECT chips, username FROM users WHERE id = ?', [userId]);
-          if (!Number.isSafeInteger(user.chips + payout)) throw fail(400, 'Le solde maximal serait dépassé.');
-          if (payout) await run('UPDATE users SET chips = chips + ? WHERE id = ?', [payout, userId]);
+          if (!isMoney(roundMoney(user.chips + payout))) throw fail(400, 'Le solde maximal serait dépassé.');
+          if (payout) await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ?', [payout, userId]);
         }
         await run(`UPDATE mines_games SET revealed_positions = ?, status = ?, payout = ?, completed_at_ms = ? WHERE id = ?`,
           [JSON.stringify(nextRevealed), status, payout, status === 'active' ? null : Date.now(), gameId]);
@@ -248,8 +249,8 @@ function registerMinesRoutes(deps) {
         const safeCount = revealed.filter(position => !mines.includes(position)).length;
         const payout = payoutFor(game.stake, game.mine_count, safeCount);
         const user = await get('SELECT chips, username FROM users WHERE id = ?', [userId]);
-        if (!Number.isSafeInteger(user.chips + payout)) throw fail(400, 'Le solde maximal serait dépassé.');
-        await run('UPDATE users SET chips = chips + ? WHERE id = ?', [payout, userId]);
+        if (!isMoney(roundMoney(user.chips + payout))) throw fail(400, 'Le solde maximal serait dépassé.');
+        await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ?', [payout, userId]);
         await run("UPDATE mines_games SET status = 'cashed_out', payout = ?, completed_at_ms = ? WHERE id = ?", [payout, Date.now(), gameId]);
         const updated = await get('SELECT * FROM mines_games WHERE id = ?', [gameId]);
         const response = { game: present(updated), hitMine: false };

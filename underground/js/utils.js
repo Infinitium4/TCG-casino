@@ -21,7 +21,7 @@ function sanitizeText(value, maxLength = 18) {
 }
 
 function formatChips(value) {
-  return Number(value || 0).toLocaleString("fr-FR");
+  return Number(value || 0).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function randomInt(min, max) {
@@ -143,5 +143,5 @@ function addHistoryEntry(entry) {
 }
 
 function renderChipValue(value) {
-  return `${formatChips(value)} jetons`;
+  return `${formatChips(value)} €`;
 }

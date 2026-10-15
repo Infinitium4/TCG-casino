@@ -205,7 +205,7 @@ const pokerModule = (() => {
             <small>${Number(player.id) === Number(currentTable.hostId) ? '• Hôte' : ''}</small>
           </div>
           <div>
-            <small>${player.chips} jetons</small>
+            <small>${formatChips(player.chips)} €</small>
           </div>
         </div>
       `)
@@ -240,7 +240,7 @@ const pokerModule = (() => {
     const currentPlayer = currentTable.players.find((player) => Number(player.id) === Number(currentUserId));
     const isMyTurn = Number(currentTable.currentTurn) === currentTable.players.findIndex((player) => Number(player.id) === Number(currentUserId));
 
-    tableMeta.textContent = `${sanitizeText(currentTable.name, 24)} • Pot ${currentTable.pot} • Tour ${currentTable.round} • Mise actuelle ${currentTable.currentBet}`;
+    tableMeta.textContent = `${sanitizeText(currentTable.name, 24)} • Pot ${formatChips(currentTable.pot)} • Tour ${currentTable.round} • Mise actuelle ${formatChips(currentTable.currentBet)}`;
 
     boardNode.innerHTML = Array.from({ length: 5 }, (_, index) => {
       const card = currentTable.board[index];
@@ -263,8 +263,8 @@ const pokerModule = (() => {
               <strong>${sanitizeText(player.username || 'Joueur', 16)}</strong>
               <span>${badge}</span>
             </div>
-            <div style="margin-bottom:0.5rem; font-size:0.9rem;">Jetons: ${player.chips}</div>
-            <div style="margin-bottom:0.5rem; font-size:0.9rem;">Mise: ${player.bet}</div>
+            <div style="margin-bottom:0.5rem; font-size:0.9rem;">Solde : ${formatChips(player.chips)}</div>
+            <div style="margin-bottom:0.5rem; font-size:0.9rem;">Mise: ${formatChips(player.bet)}</div>
             <div style="display:flex; gap:0.4rem; margin-bottom:0.5rem;">${cards}</div>
             <div style="font-size:0.75rem; color:#d3d8e6;">${isWinner ? 'Gagnant' : player.folded ? 'Couché' : isTurn ? 'À jouer' : 'En jeu'}</div>
           </div>
@@ -295,17 +295,17 @@ const pokerModule = (() => {
       canAllIn ? '<button class="danger-button" type="button" data-poker-action="all-in">All-in</button>' : ''
     ].filter(Boolean).join('');
 
-    const minimumAmount = Math.max(1, (Number(currentTable.currentBet || 0) > 0
-      ? Number(currentTable.currentBet || 0) + Number(currentTable.blinds?.big || 20)
-      : Number(currentTable.blinds?.big || 20)) - Number(currentPlayer.bet || 0));
+    const minimumAmount = Math.max(0.01, roundMoney((Number(currentTable.currentBet || 0) > 0
+      ? Number(currentTable.currentBet || 0) + Number(currentTable.blinds?.big || 0.01)
+      : Number(currentTable.blinds?.big || 0.01)) - Number(currentPlayer.bet || 0)));
     const maxAmount = Number(currentPlayer.chips || 0);
-    const amountKey = `${currentPlayer.id}:${currentTable.round}:${currentTable.currentBet}:${currentPlayer.bet}:${maxAmount}:${minimumAmount}`;
+    const amountKey = `${currentPlayer.id}:${currentTable.round}:${formatChips(currentTable.currentBet)}:${formatChips(currentPlayer.bet)}:${maxAmount}:${minimumAmount}`;
     const amountValue = state.amountDraft?.key === amountKey ? state.amountDraft.value : minimumAmount;
     const existingAmountInput = document.getElementById("pokerActionAmount");
     if (existingAmountInput?.dataset.amountKey === amountKey && document.activeElement === existingAmountInput) {
       return;
     }
-    actionPanel.innerHTML = `${actionButtons}<input id="pokerActionAmount" data-amount-key="${amountKey}" type="number" min="${minimumAmount}" max="${maxAmount}" step="1" value="${amountValue}" style="max-width:120px;" />`;
+    actionPanel.innerHTML = `${actionButtons}<input id="pokerActionAmount" data-amount-key="${amountKey}" type="number" min="${minimumAmount}" max="${maxAmount}" step="0.01" value="${amountValue}" style="max-width:120px;" />`;
 
     const amountInput = document.getElementById("pokerActionAmount");
     amountInput?.addEventListener("input", () => {
@@ -373,7 +373,7 @@ const pokerModule = (() => {
       }
       const payload = await response.json();
       state.currentTableId = null;
-      showToast(payload.committed > 0 ? `Tu as quitté la table et tu as perdu ${payload.committed} jetons.` : "Tu as quitté la table.");
+      showToast(payload.committed > 0 ? `Tu as quitté la table et tu as perdu ${payload.committed} €.` : "Tu as quitté la table.");
       await refreshTables();
     } catch (error) {
       console.error(error);

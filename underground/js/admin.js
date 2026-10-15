@@ -11,7 +11,7 @@ const adminModule = (() => {
     const enabled = Boolean(getPlayer().infiniteMoney);
     document.getElementById('adminInfiniteMoneyBtn').textContent = enabled ? 'Désactiver l’argent infini' : 'Activer sur mon compte';
     document.getElementById('adminInfiniteStatus').textContent = enabled
-      ? 'Actif : tes jetons se rechargent automatiquement. La désactivation restaure ton solde précédent.'
+      ? 'Actif : tes € se rechargent automatiquement. La désactivation restaure ton solde précédent.'
       : 'Réservé à admin1. Active un solde automatiquement réapprovisionné pour jouer.';
   }
 
@@ -80,7 +80,7 @@ const adminModule = (() => {
       summary.textContent = `${payload.bank.username} · solde global ${formatChips(payload.bank.chips)} · historique cumulé : collecté ${formatChips(payload.totals.collected)} · payé ${formatChips(Math.abs(payload.totals.paid))} · ${payload.totals.settlements} règlement(s)`;
       const gameLabels = { blackjack: 'Blackjack', crash: 'Crash', dice: 'Dice', horses: 'Courses hippiques', mines: 'Mines', plinko: 'Plinko', poker: 'Poker', roulette: 'Roulette', slots: 'Machine à sous', tower: 'Tower Rush' };
       gameBanks.replaceChildren(...payload.gameBanks.map(bank => element(
-        'li', '', `${gameLabels[bank.game] || bank.game} · ${formatChips(bank.chips)} jetons · ${bank.username}`
+        'li', '', `${gameLabels[bank.game] || bank.game} · ${formatChips(bank.chips)} € · ${bank.username}`
       )));
       if (!payload.gameBanks.length) gameBanks.append(element('li', '', 'Aucune banque de jeu configurée.'));
       if (!payload.recent.length) {
@@ -204,13 +204,15 @@ const adminModule = (() => {
         maintenanceLabel.append(maintenance, element('span', '', 'Maintenance'));
         const minBet = document.createElement('input');
         minBet.type = 'number';
-        minBet.min = '1';
+        minBet.min = '0.01';
+        minBet.step = '0.01';
         minBet.max = '2147483647';
         minBet.value = String(game.minBet);
         minBet.setAttribute('aria-label', `Mise minimale ${labels[game.game] || game.game}`);
         const maxBet = document.createElement('input');
         maxBet.type = 'number';
-        maxBet.min = '1';
+        maxBet.min = '0.01';
+        maxBet.step = '0.01';
         maxBet.max = '2147483647';
         maxBet.value = String(game.maxBet);
         maxBet.setAttribute('aria-label', `Mise maximale ${labels[game.game] || game.game}`);
@@ -378,11 +380,11 @@ const adminModule = (() => {
     }
 
     if (button.dataset.adminAction === 'chips') {
-      const amountText = window.prompt('Variation des jetons (ex. 500 ou -100) :');
+      const amountText = window.prompt('Variation des € (ex. 500 ou -100) :');
       if (amountText === null) return;
       const delta = Number(amountText);
-      if (!Number.isSafeInteger(delta) || delta === 0) {
-        window.alert('Entre un nombre entier non nul.');
+      if (!isMoney(delta) || delta === 0) {
+        window.alert('Entre un montant non nul, avec deux décimales maximum.');
         return;
       }
       const reason = window.prompt('Motif obligatoire pour le journal :');
@@ -544,8 +546,8 @@ const adminModule = (() => {
       event.preventDefault();
       const amount = Number(document.getElementById('adminDistributionAmount').value);
       const reason = document.getElementById('adminDistributionReason').value.trim();
-      if (!Number.isSafeInteger(amount) || amount < 1 || !reason) return;
-      if (!window.confirm(`Distribuer ${formatChips(amount)} jetons à chaque joueur ?`)) return;
+      if (!isMoney(amount) || amount < 0.01 || !reason) return;
+      if (!window.confirm(`Distribuer ${formatChips(amount)} € à chaque joueur ?`)) return;
       try {
         const payload = await request('/api/admin/chips/distribute', {
           method: 'POST',

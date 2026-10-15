@@ -25,7 +25,7 @@ const horsesModule = (() => {
     player.chips = balance;
     savePlayer(player);
     updateTopbar();
-    el('horseBalance').textContent = `${formatChips(balance)} jetons`;
+    el('horseBalance').textContent = `${formatChips(balance)} €`;
   }
   function accept(payload) {
     if (Object.hasOwn(payload, 'table')) {
@@ -64,7 +64,7 @@ const horsesModule = (() => {
     if (payload.history) renderHistory(payload.history);
     controls();
     if (state.race?.status === 'settled') showResult();
-    else if (state.race?.status === 'ready') feedback(`Pari confirmé : ${horse(state.selected).name}, ${state.race.stake} jetons à ×${state.race.odds || 4}. ${state.table ? 'L’hôte lance quand tous les joueurs ont misé.' : 'Prêt pour le départ ?'}`);
+    else if (state.race?.status === 'ready') feedback(`Pari confirmé : ${horse(state.selected).name}, ${state.race.stake} € à ×${state.race.odds || 4}. ${state.table ? 'L’hôte lance quand tous les joueurs ont misé.' : 'Prêt pour le départ ?'}`);
     else if (state.race) feedback('Les paris sont fermés. Que le meilleur gagne !');
     else feedback(state.multiplayer && !state.table ? 'Crée une table ou rejoins celle de tes amis.' : state.retry ? 'Le précédent envoi est à vérifier. Clique sur Miser pour le reprendre sans double débit.' : 'Choisis ton cheval, puis valide ta mise.');
     wake();
@@ -86,7 +86,7 @@ const horsesModule = (() => {
     el('horsePlayers').replaceChildren(...(state.table?.players || []).map(player => {
       const row = document.createElement('div'); row.className = player.stake ? 'is-ready' : '';
       const name = document.createElement('strong'); name.textContent = `${player.username}${player.id === state.table.hostId ? ' · Hôte' : ''}${player.id === Number(accountUser.id) ? ' · Toi' : ''}`;
-      const bet = document.createElement('small'); bet.textContent = player.stake ? `${horse(player.horseId).name} · ${player.stake} jetons · ×${(player.oddsCents / 100).toFixed(2)}` : 'Choisit son cheval…';
+      const bet = document.createElement('small'); bet.textContent = player.stake ? `${horse(player.horseId).name} · ${player.stake} € · ×${(player.oddsCents / 100).toFixed(2)}` : 'Choisit son cheval…';
       row.append(name, bet); return row;
     }));
     if (state.table) {
@@ -155,8 +155,8 @@ const horsesModule = (() => {
   async function bet() {
     if (el('horseBet').disabled) return;
     const stake = Number(el('horseStake').value);
-    if (!state.retry && (!Number.isSafeInteger(stake) || stake < state.config.minBet || stake > state.config.maxBet || stake > state.balance)) {
-      feedback(`Choisis une mise entière entre ${state.config.minBet} et ${Math.min(state.balance, state.config.maxBet)} jetons.`, true);
+    if (!state.retry && (!isMoney(stake) || stake < state.config.minBet || stake > state.config.maxBet || stake > state.balance)) {
+      feedback(`Choisis une mise entre ${state.config.minBet} et ${Math.min(state.balance, state.config.maxBet)} €.`, true);
       return;
     }
     state.retry ??= { stake, horseId: state.selected, ...(state.table ? { tableId: state.table.id, eventId: state.table.eventId } : {}),
@@ -231,7 +231,7 @@ const horsesModule = (() => {
   function showResult() {
     const race = state.race;
     const won = race.payout > 0;
-    feedback(`${horse(race.winner).name} remporte la course ! ${won ? `Victoire : ${race.payout} jetons reçus (bénéfice +${race.payout - race.stake}).` : `Ton cheval ${horse(race.horseId).name} n’a pas gagné. Mise perdue : ${race.stake} jetons.`}`);
+    feedback(`${horse(race.winner).name} remporte la course ! ${won ? `Victoire : ${race.payout} € reçus (bénéfice +${race.payout - race.stake}).` : `Ton cheval ${horse(race.horseId).name} n’a pas gagné. Mise perdue : ${race.stake} €.`}`);
     el('horsePodium').replaceChildren(...race.order.slice(0, 3).map((id, index) => {
       const card = document.createElement('div'); card.textContent = ['🥇', '🥈', '🥉'][index];
       const name = document.createElement('strong'); name.textContent = horse(id).name; card.appendChild(name); return card;
@@ -251,7 +251,7 @@ const horsesModule = (() => {
   function renderHistory(entries) {
     el('horseHistory').replaceChildren(...entries.map(race => {
       const row = document.createElement('p');
-      row.textContent = race.cancelled ? `Pari annulé · ${race.stake} jetons remboursés` : `${horse(race.horseId)?.name || 'Cheval'} · ${race.stake} jetons misés · ×${race.odds || 4} · ${race.payout ? `${race.payout} jetons reçus` : 'Perdu'} · Gagnant : ${horse(race.winner)?.name || race.winner}`;
+      row.textContent = race.cancelled ? `Pari annulé · ${race.stake} € remboursés` : `${horse(race.horseId)?.name || 'Cheval'} · ${race.stake} € misés · ×${race.odds || 4} · ${race.payout ? `${race.payout} € reçus` : 'Perdu'} · Gagnant : ${horse(race.winner)?.name || race.winner}`;
       return row;
     }));
   }

@@ -186,12 +186,12 @@ async function openPlayerProfile(playerId) {
     const stats = document.createElement("div");
     stats.className = "player-profile-stats";
     const values = [
-      ["Solde", `${formatChips(profile.chips)} jetons`],
+      ["Solde", `${formatChips(profile.chips)} €`],
       ["Parties", profile.gamesPlayed],
       ["Victoires", profile.wins],
       ["Taux de victoire", `${profile.winRate}%`],
-      ["Meilleur gain", `${formatChips(profile.bestWin)} jetons`],
-      ["Bilan net", `${profile.net > 0 ? "+" : ""}${formatChips(profile.net)} jetons`]
+      ["Meilleur gain", `${formatChips(profile.bestWin)} €`],
+      ["Bilan net", `${profile.net > 0 ? "+" : ""}${formatChips(profile.net)} €`]
     ];
     for (const [label, value] of values) {
       const stat = document.createElement("div");

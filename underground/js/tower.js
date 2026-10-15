@@ -15,7 +15,7 @@ const towerModule = (() => {
     el('towerStart').disabled = blocked || live() || !state.config?.settings?.enabled || state.config.settings.maintenance || state.config.paused;
     el('towerPlace').disabled = blocked || !ready;
     el('towerCashout').disabled = blocked || !ready || !game.floor;
-    el('towerCashout').textContent = live() && game.floor ? `ENCAISSER ${formatChips(Math.floor(game.stake * Math.round(game.multiplier * 100) / 100))} JETONS` : 'ENCAISSER';
+    el('towerCashout').textContent = live() && game.floor ? `ENCAISSER ${formatChips(moneyRatio(game.stake, Math.round(game.multiplier * 100), 100))} €` : 'ENCAISSER';
     el('towerRetry').hidden = !state.retry; el('towerRetry').disabled = state.pending;
     el('towerStake').disabled = blocked || live();
     document.querySelectorAll('[data-tower-adjust]').forEach(button => { button.disabled = blocked || live(); });
@@ -43,7 +43,7 @@ const towerModule = (() => {
       const text = document.createElement('div'); text.textContent = `${game.floor} étages · ${mult(game.multiplier)} · ${game.score} pts`;
       const date = document.createElement('small'); date.textContent = `${new Date(game.createdAt).toLocaleString('fr-FR')} · Mise ${formatChips(game.stake)}`; text.append(date);
       const result = document.createElement('strong'); result.className = game.status === 'CASHOUT' ? 'is-win' : 'is-loss';
-      result.textContent = game.status === 'CASHOUT' ? `${formatChips(game.payout)} jetons encaissés` : 'Mise perdue'; row.append(text, result); return row;
+      result.textContent = game.status === 'CASHOUT' ? `${formatChips(game.payout)} € encaissés` : 'Mise perdue'; row.append(text, result); return row;
     }));
     if (!state.history.length) el('towerHistory').textContent = 'Ta première tour t’attend.';
   }
@@ -54,7 +54,7 @@ const towerModule = (() => {
     if (!ended) return;
     el('towerResult').classList.toggle('is-loss', game.status === 'LOST');
     el('towerResultTitle').textContent = game.status === 'CASHOUT' ? 'GAINS ENCAISSÉS' : 'LA TOUR EST TOMBÉE';
-    el('towerResultValue').textContent = game.status === 'CASHOUT' ? `${formatChips(game.payout)} jetons` : `−${formatChips(game.stake)} jetons`;
+    el('towerResultValue').textContent = game.status === 'CASHOUT' ? `${formatChips(game.payout)} €` : `−${formatChips(game.stake)} €`;
     el('towerResultDetail').textContent = `${game.floor} étages · ${mult(game.multiplier)} · ${game.score} points`;
   }
   function sound(success, perfect = false) {
@@ -171,7 +171,7 @@ const towerModule = (() => {
     if (state.pending || state.syncing || state.fall || !state.config) return;
     if (!state.retry && type === 'start') {
       const stake = Number(el('towerStake').value);
-      if (!Number.isSafeInteger(stake) || stake < state.config.settings.minBet || stake > Math.min(state.config.settings.maxBet, 1_000_000) || stake > state.balance) { message('Vérifie ta mise et ton solde.', true); return; }
+      if (!isMoney(stake) || stake < state.config.settings.minBet || stake > Math.min(state.config.settings.maxBet, 1_000_000) || stake > state.balance) { message('Vérifie ta mise et ton solde.', true); return; }
     }
     const request = state.retry || { action: type, body: { requestId: Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join(''),
       ...(type === 'start' ? { stake: Number(el('towerStake').value) } : { gameId: state.game?.id }), ...(type === 'place' ? { floor: state.game?.floor } : {}) } };
@@ -190,7 +190,7 @@ const towerModule = (() => {
       } else { state.balance = payload.balance; publishBalance(); if (!live()) { recordFinished(); await syncAccount(); } }
       hud(); result(); startAnimation();
       if (request.action === 'start') message('Tour commencée. Place la plateforme avec le bouton ou Espace.');
-      if (request.action === 'cashout') { message(`${formatChips(payload.game.payout)} jetons encaissés !`); sound(true, true); }
+      if (request.action === 'cashout') { message(`${formatChips(payload.game.payout)} € encaissés !`); sound(true, true); }
     } catch (error) { message(state.retry ? 'Connexion interrompue. Récupère ton action sans nouvelle mise.' : error.message, true); }
     finally { clearTimeout(timeout); state.pending = false; controls(); if (reconcile) refresh(); }
   }
@@ -207,7 +207,7 @@ const towerModule = (() => {
     document.querySelectorAll('[data-tower-adjust]').forEach(button => button.addEventListener('click', () => {
       if (live() || state.pending || !state.config) return;
       const max = Math.min(state.balance, state.config.settings.maxBet, 1_000_000);
-      el('towerStake').value = Math.min(max, Math.max(state.config.settings.minBet, button.dataset.towerAdjust === 'max' ? max : Math.floor(Number(el('towerStake').value) * Number(button.dataset.towerAdjust))));
+      el('towerStake').value = Math.min(max, Math.max(state.config.settings.minBet, button.dataset.towerAdjust === 'max' ? max : roundMoney(Number(el('towerStake').value) * Number(button.dataset.towerAdjust))));
     }));
     document.addEventListener('keydown', event => {
       if (event.code !== 'Space' || event.repeat || !state.active || /INPUT|TEXTAREA|SELECT|BUTTON/.test(event.target.tagName) || event.target.isContentEditable || document.querySelector('dialog[open]')) return;

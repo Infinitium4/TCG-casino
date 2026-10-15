@@ -20,12 +20,12 @@ test('all 65536 paths produce the exact binomial distribution and reference RTP'
   assert.equal(counts[16], 1);
   assert.equal(counts[8], 12870);
   assert.equal(payoutFor(100, .3), 30);
-  assert.equal(payoutFor(3, .5), 1);
+  assert.equal(payoutFor(3, .5), 1.5);
   assert.equal(payoutFor(1_000_000, 110), 110_000_000);
 });
 
 function geometry() {
-  const context = vm.createContext({});
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), {}));
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/plinko.js'), 'utf8');
   vm.runInContext(source.replace('return { initialize, setActive };', 'globalThis.ballPosition = ballPosition; return { initialize, setActive };'), context);
   return context.ballPosition;

@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -86,10 +87,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   }
 
   async function register(username) {
-    const result = await request('/api/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password' })
-    });
+    const result = await createPlayerFixture(baseUrl, dataDir, { username, password: 'player-password' });
     assert.equal(result.response.status, 201, result.body.error);
     return result.cookie;
   }
@@ -159,7 +157,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   assert.equal(initial.body.balance, 1000);
   assert.equal(initial.body.round, null);
 
-  for (const stake of [0, -1, 1.5, 1_000_001]) {
+  for (const stake of [0, -1, 0.001, 1_000_001]) {
     const invalid = await request('/api/crash/bets', {
       cookie: playerCookie,
       method: 'POST',
@@ -226,7 +224,7 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   });
   assert.equal(withdrawn.response.status, 200, withdrawn.body.error);
   assert.equal(withdrawn.body.bet.status, 'cashed_out');
-  assert.equal(withdrawn.body.bet.payout, Math.floor(withdrawn.body.bet.cashoutMultiplier * 100));
+  assert.equal(withdrawn.body.bet.payout, Math.round(withdrawn.body.bet.cashoutMultiplier * 10000) / 100);
   assert.equal(withdrawn.body.balance, 3_000_000_900 + withdrawn.body.bet.payout);
   assert.ok(withdrawn.body.balance > 2_147_483_647);
 

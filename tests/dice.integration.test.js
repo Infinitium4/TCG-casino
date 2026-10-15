@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -87,10 +88,7 @@ test('Dice validates, settles atomically and recovers repeated rolls after resta
   }
 
   async function register(username) {
-    const result = await request('/api/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password' })
-    });
+    const result = await createPlayerFixture(baseUrl, dataDir, { username, password: 'player-password' });
     assert.equal(result.response.status, 201, result.body.error);
     return result.cookie;
   }
@@ -134,7 +132,7 @@ test('Dice validates, settles atomically and recovers repeated rolls after resta
     const conflict = await request('/api/dice/roll', { cookie: alice, method: 'POST', body: JSON.stringify({ ...bet, ...change }) });
     assert.equal(conflict.response.status, 409);
   }
-  for (const change of [{ stake: -1 }, { stake: 1.5 }, { stake: '100' }, { stake: 1000001 }, { threshold: 0 }, { threshold: 100 }, { threshold: 1.001 }, { threshold: '50' }, { threshold: null }, { mode: 'invalid' }, { requestId: 'short' }]) {
+  for (const change of [{ stake: -1 }, { stake: 0.001 }, { stake: '100' }, { stake: 1000001 }, { threshold: 0 }, { threshold: 100 }, { threshold: 1.001 }, { threshold: '50' }, { threshold: null }, { mode: 'invalid' }, { requestId: 'short' }]) {
     const invalid = await request('/api/dice/roll', { cookie: bob, method: 'POST', body: JSON.stringify({ ...bet, ...change }) });
     assert.equal(invalid.response.status, 400);
   }
@@ -169,7 +167,7 @@ test('Dice validates, settles atomically and recovers repeated rolls after resta
     const outcomes = mode === 'under' ? Math.round(threshold * 100) : 10000 - Math.round(threshold * 100);
     assert.equal(roll.probability, outcomes / 100);
     assert.equal(roll.won, mode === 'under' ? roll.result < threshold : roll.result >= threshold);
-    assert.equal(roll.payout, roll.won ? Math.floor(100 * 9900 / outcomes) : 0);
+    assert.equal(roll.payout, roll.won ? Math.round(10000 * 9900 / outcomes) / 100 : 0);
   }
   await request('/api/admin/security/pause-bets', { cookie: admin, method: 'POST', body: JSON.stringify({ paused: true, reason: 'Dice integration test' }) });
   const paused = await request('/api/dice/roll', { cookie: bob, method: 'POST', body: JSON.stringify({ ...bet, requestId: 'dice-paused-request-0003' }) });

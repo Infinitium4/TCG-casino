@@ -32,7 +32,7 @@ const diceModule = (() => {
     el('diceChance').textContent = `${decimal(chance)} %`;
     el('diceMultiplier').textContent = `${decimal(multiplier)}x`;
     const stake = Number(el('diceStake').value);
-    el('dicePotential').textContent = Number.isSafeInteger(stake) && stake > 0 ? `${formatChips(Math.floor(stake * 9900 / outcomes))} jetons` : '—';
+    el('dicePotential').textContent = isMoney(stake) && stake > 0 ? `${formatChips(moneyRatio(stake, 9900, outcomes))} €` : '—';
     el('diceSlider').value = threshold;
     el('diceSlider').setAttribute('aria-valuetext', `Seuil ${decimal(threshold)}, ${state.mode === 'under' ? 'strictement inférieur' : 'supérieur ou égal'}, chance ${decimal(chance)} %`);
     const [left, right] = state.mode === 'under' ? ['#37936b', '#a93f4c'] : ['#a93f4c', '#37936b'];
@@ -43,15 +43,15 @@ const diceModule = (() => {
   function renderHistory() {
     el('diceHistory').replaceChildren(...state.history.map(roll => {
       const row = document.createElement('tr');
-      const net = roll.payout - roll.stake;
+      const net = roundMoney(roll.payout - roll.stake);
       for (const [index, value] of [new Date(roll.createdAt).toLocaleString('fr-FR'), formatChips(roll.stake),
         `${roll.mode === 'under' ? 'Under <' : 'Over ≥'} ${decimal(roll.threshold)}`, decimal(roll.result),
-        `${decimal(roll.multiplier)}x`, `${net >= 0 ? '+' : ''}${formatChips(net)} jetons`].entries()) {
+        `${decimal(roll.multiplier)}x`, `${net >= 0 ? '+' : ''}${formatChips(net)} €`].entries()) {
         const cell = document.createElement('td'); cell.textContent = value;
         if (index === 3 || index === 5) cell.className = roll.won ? 'is-win' : 'is-loss';
         row.append(cell);
       }
-      row.title = `Gain total rendu : ${formatChips(roll.payout)} jetons`;
+      row.title = `Gain total rendu : ${formatChips(roll.payout)} €`;
       return row;
     }));
     el('diceEmpty').hidden = state.history.length > 0;
@@ -88,7 +88,7 @@ const diceModule = (() => {
     el('diceMarker').textContent = decimal(roll.result);
     el('diceResult').textContent = decimal(roll.result);
     el('diceOutcome').textContent = roll.won ? 'LANCER GAGNANT' : 'LANCER PERDANT';
-    el('diceGain').textContent = roll.won ? `${formatChips(roll.payout)} jetons rendus · ${decimal(roll.multiplier)}x` : `−${formatChips(roll.stake)} jetons`;
+    el('diceGain').textContent = roll.won ? `${formatChips(roll.payout)} € rendus · ${decimal(roll.multiplier)}x` : `−${formatChips(roll.stake)} €`;
     el('diceBoard').classList.toggle('is-win', roll.won); el('diceBoard').classList.toggle('is-loss', !roll.won);
     state.balance = balance; publishBalance();
     state.history = [roll, ...state.history.filter(entry => entry.id !== roll.id)].slice(0, 20); renderHistory();
@@ -108,7 +108,7 @@ const diceModule = (() => {
   async function launch() {
     if (state.busy || !state.config) return;
     const stake = Number(el('diceStake').value), threshold = thresholdValue();
-    if (!state.retry && (threshold === null || !Number.isSafeInteger(stake) || stake < state.config.settings.minBet ||
+    if (!state.retry && (threshold === null || !isMoney(stake) || stake < state.config.settings.minBet ||
         stake > Math.min(state.config.settings.maxBet, 1_000_000) || stake > state.balance)) {
       message('Vérifie ta mise, ton seuil et ton solde disponible.', true); return;
     }
@@ -157,7 +157,7 @@ const diceModule = (() => {
     document.querySelectorAll('[data-dice-adjust]').forEach(button => button.addEventListener('click', () => {
       if (!state.config || state.busy || state.retry) return;
       const max = Math.min(state.balance, state.config.settings.maxBet, 1_000_000);
-      el('diceStake').value = Math.min(max, Math.max(state.config.settings.minBet, button.dataset.diceAdjust === 'max' ? max : Math.floor(Number(el('diceStake').value) * Number(button.dataset.diceAdjust))));
+      el('diceStake').value = Math.min(max, Math.max(state.config.settings.minBet, button.dataset.diceAdjust === 'max' ? max : roundMoney(Number(el('diceStake').value) * Number(button.dataset.diceAdjust))));
       quote();
     }));
     document.addEventListener('visibilitychange', () => {

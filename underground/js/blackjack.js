@@ -117,13 +117,13 @@ const blackjackModule = (() => {
           <strong>${sanitizeText(player.username || 'Joueur', 18)}</strong>
           <small>${Number(player.id) === Number(table.hostId) ? ' • Hôte' : ''}</small>
         </div>
-        <small>${formatChips(player.chips)} jetons</small>
+        <small>${formatChips(player.chips)} €</small>
       </div>
     `).join('');
 
-    boardNode.textContent = `L’hôte choisit la mise commune. Chaque joueur doit avoir assez de jetons (${table.players.length}/${table.maxPlayers} places).`;
+    boardNode.textContent = `L’hôte choisit la mise commune. Chaque joueur doit avoir assez de € (${table.players.length}/${table.maxPlayers} places).`;
     stakeInput.disabled = !isHost;
-    stakeInput.value = String(table.betAmount || stakeInput.value || 25);
+    stakeInput.value = String(table.betAmount || stakeInput.value || 0.05);
     startButton.disabled = !isHost;
     startButton.textContent = isHost ? (table.round === 'finished' ? 'Rejouer la manche' : 'Lancer la manche') : 'En attente de l’hôte';
     leaveButton.disabled = false;
@@ -178,8 +178,8 @@ const blackjackModule = (() => {
   async function startRound() {
     if (!state.currentTableId) return;
     const betAmount = Number(document.getElementById('blackjackTableStake')?.value || 0);
-    if (!Number.isInteger(betAmount) || betAmount <= 0) {
-      showToast('La mise commune doit être un entier positif.');
+    if (!isMoney(betAmount) || betAmount <= 0) {
+      showToast('La mise commune doit être positive, avec deux décimales maximum.');
       return;
     }
 

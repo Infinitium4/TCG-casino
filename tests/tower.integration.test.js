@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -87,10 +88,7 @@ test('Tower starts once, validates authoritative placements, resumes and settles
   }
 
   async function register(username) {
-    const result = await request('/api/register', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password' })
-    });
+    const result = await createPlayerFixture(baseUrl, dataDir, { username, password: 'player-password' });
     assert.equal(result.response.status, 201, result.body.error);
     return result.cookie;
   }
@@ -193,7 +191,7 @@ test('Tower starts once, validates authoritative placements, resumes and settles
   assert.equal((await request('/api/history', { cookie })).body.history.filter(row => row.game_name === 'tower').length, 3);
   await request('/api/tower/state', { cookie });
   assert.equal((await request('/api/history', { cookie })).body.history.filter(row => row.game_name === 'tower').length, 3);
-  for (const stake of [-1, 0, 1.5, '100', 1000001]) {
+  for (const stake of [-1, 0, 0.001, '100', 1000001]) {
     const invalid = await request('/api/tower/start', { cookie, method: 'POST', body: JSON.stringify({ ...start, stake }) });
     assert.equal(invalid.response.status, 400);
   }

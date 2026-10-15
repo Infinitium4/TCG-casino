@@ -18,7 +18,7 @@ function harness() {
   };
   const storage = new Map(), requests = [];
   let player = { chips: 1000 }, accountLoads = 0;
-  const context = vm.createContext({
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), {
     document: { hidden: false, getElementById: element, querySelectorAll: () => [],
       createElement: tag => element(`new-${tag}-${elements.size}`), addEventListener() {} },
     window: { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) },
@@ -30,7 +30,7 @@ function harness() {
     AbortController, setTimeout, clearTimeout,
     loadAccountData: async () => { accountLoads++; return true; }, updateTopbar() { element('topbarBalance').textContent = String(player.chips); },
     fetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject }))
-  });
+  }));
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/plinko.js'), 'utf8');
   vm.runInContext(source.replace('return { initialize, setActive };', 'globalThis.game = { initialize, state, launch, refresh, draw, updateControls }; return { initialize, setActive };'), context);
   context.game.initialize();
@@ -65,7 +65,7 @@ test('double click sends one launch over HTTP and animates only the confirmed se
   assert.equal(h.accountLoads(), 1);
   assert.equal(h.game.state.balls.length, 0);
   assert.equal(h.elements.get('plinkoLastMultiplier').textContent, '110x');
-  assert.equal(h.elements.get('plinkoLastPayout').textContent, '11000 jetons');
+  assert.equal(h.elements.get('plinkoLastPayout').textContent, '11000 €');
 });
 
 test('an interrupted launch reuses its durable request ID without inventing a new result', async () => {

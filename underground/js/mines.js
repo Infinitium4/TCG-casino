@@ -75,7 +75,7 @@ const minesModule = (() => {
     el('minesSafeCount').textContent = safeCount;
     el('minesMultiplier').textContent = game ? formatMultiplier(game.multiplier) : '1,00x';
     el('minesPotentialLabel').textContent = activeGame ? 'Gain brut potentiel' : 'Gain brut final';
-    el('minesPotential').textContent = game ? `${formatChips(activeGame ? game.potential : game.payout)} jetons` : '—';
+    el('minesPotential').textContent = game ? `${formatChips(activeGame ? game.potential : game.payout)} €` : '—';
   }
 
   function updateControls() {
@@ -153,11 +153,11 @@ const minesModule = (() => {
       publishBalance();
       if (request.action === 'start') feedback('Partie lancée. Révèle une case.');
       else if (request.action === 'cashout') {
-        const net = payload.game.payout - payload.game.stake;
-        feedback(`Gain encaissé : ${formatChips(payload.game.payout)} jetons bruts · ${net >= 0 ? '+' : '−'}${formatChips(Math.abs(net))} net.`);
-      } else if (payload.hitMine) feedback(`Mine touchée. Mise perdue : ${formatChips(payload.game.stake)} jetons.`);
-      else if (payload.game.status === 'won') feedback(`Toutes les cases sûres révélées : ${formatChips(payload.game.payout)} jetons gagnés.`);
-      else feedback(`Diamant trouvé · ${formatMultiplier(payload.game.multiplier)} · ${formatChips(payload.game.potential)} jetons à encaisser.`);
+        const net = roundMoney(payload.game.payout - payload.game.stake);
+        feedback(`Gain encaissé : ${formatChips(payload.game.payout)} € bruts · ${net >= 0 ? '+' : '−'}${formatChips(Math.abs(net))} net.`);
+      } else if (payload.hitMine) feedback(`Mine touchée. Mise perdue : ${formatChips(payload.game.stake)} €.`);
+      else if (payload.game.status === 'won') feedback(`Toutes les cases sûres révélées : ${formatChips(payload.game.payout)} € gagnés.`);
+      else feedback(`Diamant trouvé · ${formatMultiplier(payload.game.multiplier)} · ${formatChips(payload.game.potential)} € à encaisser.`);
     } catch (error) {
       feedback(state.retry ? 'Connexion interrompue. Réessaie cette action sans nouvelle mise.' : error.message, true);
     } finally {
@@ -177,7 +177,7 @@ const minesModule = (() => {
     const mineCount = Number(el('minesCount').value);
     const minBet = state.config.settings.minBet;
     const maxBet = Math.min(state.config.settings.maxBet, 1_000_000);
-    if (!Number.isSafeInteger(stake) || stake < minBet || stake > maxBet || stake > state.balance || !Number.isInteger(mineCount) || mineCount < 1 || mineCount > 24) {
+    if (!isMoney(stake) || stake < minBet || stake > maxBet || stake > state.balance || !Number.isInteger(mineCount) || mineCount < 1 || mineCount > 24) {
       feedback('Vérifie ta mise, ton nombre de mines et ton solde disponible.', true);
       return;
     }
@@ -214,7 +214,7 @@ const minesModule = (() => {
       const input = el('minesStake');
       const max = Math.min(state.balance, state.config.settings.maxBet, 1_000_000);
       input.value = Math.min(max, Math.max(state.config.settings.minBet,
-        button.dataset.minesAdjust === 'max' ? max : Math.floor(Number(input.value) * Number(button.dataset.minesAdjust))));
+        button.dataset.minesAdjust === 'max' ? max : roundMoney(Number(input.value) * Number(button.dataset.minesAdjust))));
     }));
     updateControls();
   }

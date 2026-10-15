@@ -1,3 +1,4 @@
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
@@ -50,9 +51,9 @@ test('horse betting and settlement are authenticated, atomic, durable and idempo
   await start();
   db = new sqlite3.Database(path.join(dataDir, 'database.sqlite')); db.configure('busyTimeout', 5000);
   assert.equal((await request('/api/horses/state')).status, 401);
-  const cookie = (await request('/api/register', null, { username: 'horse-player', password: 'player-password' })).cookie;
-  const other = (await request('/api/register', null, { username: 'other-player', password: 'player-password' })).cookie;
-  for (const stake of [0, -1, 1.5, 1001, '25']) assert.equal((await request('/api/horses/bet', cookie, { stake, horseId: 1, requestId: 'invalid-stake-test' })).status, 400);
+  const cookie = (await createPlayerFixture(baseUrl, dataDir, { username: 'horse-player', password: 'player-password' })).cookie;
+  const other = (await createPlayerFixture(baseUrl, dataDir, { username: 'other-player', password: 'player-password' })).cookie;
+  for (const stake of [0, -1, 0.001, 1001, '25']) assert.equal((await request('/api/horses/bet', cookie, { stake, horseId: 1, requestId: 'invalid-stake-test' })).status, 400);
   assert.equal((await request('/api/horses/bet', cookie, { stake: 10, horseId: 6, requestId: 'invalid-horse-test' })).status, 400);
   const body = { stake: 100, horseId: 1, requestId: 'duplicate-test-request' };
   const duplicates = await Promise.all(Array.from({ length: 4 }, () => request('/api/horses/bet', cookie, body)));
@@ -146,8 +147,8 @@ test('horse betting and settlement are authenticated, atomic, durable and idempo
   await sql('DROP TRIGGER fail_shared_bank');
   const paidHost = (await request('/api/horses/state', cookie)).body;
   const paidGuest = (await request('/api/horses/state', other)).body;
-  assert.equal(paidHost.balance, 1100 + Math.floor(100 * odds / 100));
-  assert.equal(paidGuest.balance, 950 + Math.floor(50 * odds / 100));
+  assert.equal(paidHost.balance, 1100 + Math.round(100 * odds) / 100);
+  assert.equal(paidGuest.balance, 950 + Math.round(50 * odds) / 100);
   assert.equal(paidGuest.table.status, 'settled');
   assert.equal((await request('/api/horses/state', cookie)).body.balance, paidHost.balance);
   assert.equal((await request(`${tableUrl}/next`, other, { eventId: table.eventId })).status, 403);
@@ -171,7 +172,7 @@ test('horse betting and settlement are authenticated, atomic, durable and idempo
   await request(`/api/horses/tables/${capacity.id}/join`, other, {});
   const candidates = [];
   for (let i = 0; i < 7; i++) {
-    const registered = await request('/api/register', null, { username: `horse-capacity-${i}`, password: 'capacity-password' });
+    const registered = await createPlayerFixture(baseUrl, dataDir, { username: `horse-capacity-${i}`, password: 'capacity-password' });
     assert.equal(registered.status, 201);
     candidates.push(registered.cookie);
     if (i < 5) assert.equal((await request(`/api/horses/tables/${capacity.id}/join`, registered.cookie, {})).status, 200);
@@ -193,7 +194,7 @@ test('horse betting and settlement are authenticated, atomic, durable and idempo
   await sql('UPDATE horse_events SET ends_at_ms=? WHERE id=?', [Date.now() - 1, solo.eventId]);
   await sql('UPDATE horse_races SET ends_at_ms=? WHERE event_id=?', [Date.now() - 1, solo.eventId]);
   const soloResult = (await request('/api/horses/state', outsider)).body;
-  const soloPayout = soloResult.race.winner === 1 ? Math.floor(25 * solo.horses[0].oddsCents / 100) : 0;
+  const soloPayout = soloResult.race.winner === 1 ? Math.round(25 * solo.horses[0].oddsCents) / 100 : 0;
   assert.equal(soloResult.race.status, 'settled');
   assert.equal(soloResult.balance, 975 + soloPayout);
   assert.equal((await request('/api/horses/state', outsider)).body.balance, soloResult.balance);

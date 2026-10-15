@@ -87,7 +87,7 @@ const pokerGame = (() => {
             <div class="seat-badge ${isTurn ? 'active' : ''} ${isWinner ? 'winner' : ''}">${badge || (isTurn ? 'Tour' : '')}</div>
             <div class="seat-player ${isWinner ? 'winner' : ''}">
               <div class="seat-name">${sanitizeText(player.username || 'Joueur', 14)}</div>
-              <div class="seat-chip">${formatChips(player.chips || 0)} jetons</div>
+              <div class="seat-chip">${formatChips(player.chips || 0)} €</div>
               <div class="seat-bet">Mise: ${formatChips(player.bet || 0)}</div>
             </div>
             <div class="seat-cards">${handDisplay}</div>
@@ -145,12 +145,12 @@ const pokerGame = (() => {
       return;
     }
 
-    turnInfo.textContent = `À toi de jouer. Tu as ${formatChips(currentPlayer.chips || 0)} jetons restants.`;
-    const minimumAmount = Math.max(1, (Number(table.currentBet || 0) > 0
-      ? Number(table.currentBet || 0) + Number(table.blinds?.big || 20)
-      : Number(table.blinds?.big || 20)) - Number(currentPlayer.bet || 0));
+    turnInfo.textContent = `À toi de jouer. Tu as ${formatChips(currentPlayer.chips || 0)} € restants.`;
+    const minimumAmount = Math.max(0.01, roundMoney((Number(table.currentBet || 0) > 0
+      ? Number(table.currentBet || 0) + Number(table.blinds?.big || 0.01)
+      : Number(table.blinds?.big || 0.01)) - Number(currentPlayer.bet || 0)));
     const maxAmount = Number(currentPlayer.chips || 0);
-    const amountKey = `${currentPlayer.id}:${table.round}:${table.currentBet}:${currentPlayer.bet}:${maxAmount}:${minimumAmount}`;
+    const amountKey = `${currentPlayer.id}:${table.round}:${formatChips(table.currentBet)}:${formatChips(currentPlayer.bet)}:${maxAmount}:${minimumAmount}`;
     const amountValue = state.amountDraft?.key === amountKey ? state.amountDraft.value : minimumAmount;
     const existingAmountInput = document.getElementById('pokerAmountInput');
     if (existingAmountInput?.dataset.amountKey === amountKey && document.activeElement === existingAmountInput) {
@@ -171,7 +171,7 @@ const pokerGame = (() => {
       </div>
       <label class="inline-amount">
         <span>Montant</span>
-        <input id="pokerAmountInput" data-amount-key="${amountKey}" type="number" min="${minimumAmount}" max="${maxAmount}" step="1" value="${amountValue}" />
+        <input id="pokerAmountInput" data-amount-key="${amountKey}" type="number" min="${minimumAmount}" max="${maxAmount}" step="0.01" value="${amountValue}" />
       </label>
     `;
 

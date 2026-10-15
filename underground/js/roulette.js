@@ -150,12 +150,12 @@ const rouletteModule = (() => {
     const player = getPlayer();
     const betType = selectedType || document.querySelector(".bet-choice.active")?.dataset.bet || "red";
     const stake = Number(document.getElementById("rouletteCustomStake").value);
-    const limits = window.casinoGameSettings?.roulette || { minBet: 1, maxBet: 1_000_000 };
+    const limits = window.casinoGameSettings?.roulette || { minBet: 0.01, maxBet: 1_000_000 };
     const exactValue = selectedNumber ?? document.getElementById("rouletteExactNumber").value;
     const exactNumber = exactValue === "00" ? "00" : Number(exactValue);
 
-    if (!Number.isFinite(stake) || stake < limits.minBet || stake > limits.maxBet || !Number.isInteger(stake)) {
-      showToast(`La mise doit être comprise entre ${limits.minBet} et ${limits.maxBet} jetons.`);
+    if (!Number.isFinite(stake) || stake < limits.minBet || stake > limits.maxBet || !isMoney(stake)) {
+      showToast(`La mise doit être comprise entre ${limits.minBet} et ${limits.maxBet} €.`);
       return;
     }
 
@@ -171,7 +171,7 @@ const rouletteModule = (() => {
       }
     }
 
-    player.chips -= stake;
+    player.chips = roundMoney(player.chips - stake);
     savePlayer(player);
     updateTopbar();
 
@@ -183,31 +183,31 @@ const rouletteModule = (() => {
     renderBets();
 
     const betText = getBetLabel(betType, exactNumber);
-    document.getElementById("rouletteStatus").textContent = `Pari confirmé : ${betText} pour ${stake} jetons.`;
+    document.getElementById("rouletteStatus").textContent = `Pari confirmé : ${betText} pour ${formatChips(stake)} €.`;
     document.getElementById("roulettePayout").textContent = "La roulette va tourner. Attention : le 00 apporte un avantage au casino.";
-    showToast(`Pari de ${stake} jetons confirmé sur ${betText}.`);
+    showToast(`Pari de ${formatChips(stake)} € confirmé sur ${betText}.`);
   }
 
   function repeatBets() {
     if (state.wheelLocked || state.bets.length || !state.previousBets.length) return;
     const player = getPlayer();
-    const limits = window.casinoGameSettings?.roulette || { minBet: 1, maxBet: 1_000_000 };
+    const limits = window.casinoGameSettings?.roulette || { minBet: 0.01, maxBet: 1_000_000 };
     if (state.previousBets.some(bet => bet.amount < limits.minBet || bet.amount > limits.maxBet)) {
       showToast("Les anciennes mises ne respectent plus les limites de la table.");
       return;
     }
     const total = state.previousBets.reduce((sum, bet) => sum + bet.amount, 0);
     if (total > player.chips) {
-      showToast(`Solde insuffisant pour répéter les mises : ${total} jetons nécessaires.`);
+      showToast(`Solde insuffisant pour répéter les mises : ${formatChips(total)} € nécessaires.`);
       return;
     }
     state.bets = state.previousBets.map(bet => ({ ...bet }));
-    player.chips -= total;
+    player.chips = roundMoney(player.chips - total);
     savePlayer(player);
     updateTopbar();
     renderBets();
-    document.getElementById("rouletteStatus").textContent = `Mises répétées : ${state.bets.length} pari(s), ${total} jetons. Tu peux les modifier ou lancer la roulette.`;
-    showToast(`Mises répétées pour ${total} jetons.`);
+    document.getElementById("rouletteStatus").textContent = `Mises répétées : ${state.bets.length} pari(s), ${formatChips(total)} €. Tu peux les modifier ou lancer la roulette.`;
+    showToast(`Mises répétées pour ${formatChips(total)} €.`);
   }
 
   function spinWheel() {
@@ -253,13 +253,13 @@ const rouletteModule = (() => {
 
   function settleSpin(winningNumber) {
     const player = getPlayer();
-    const totalStake = state.bets.reduce((sum, bet) => sum + bet.amount, 0);
+    const totalStake = roundMoney(state.bets.reduce((sum, bet) => sum + bet.amount, 0));
     const results = state.bets.map(bet => evaluateRouletteBet(bet, winningNumber));
-    const payoutTotal = results.reduce((sum, result) => sum + result.payoutTotal, 0);
+    const payoutTotal = roundMoney(results.reduce((sum, result) => sum + result.payoutTotal, 0));
     const result = { won: payoutTotal > 0, payoutTotal, message: `${results.filter(result => result.won).length} pari(s) gagnant(s).` };
 
     if (result.won) {
-      player.chips += result.payoutTotal;
+      player.chips = roundMoney(player.chips + result.payoutTotal);
     }
 
     player.stats.gamesPlayed = Number(player.stats.gamesPlayed || 0) + 1;
@@ -276,21 +276,21 @@ const rouletteModule = (() => {
       number: winningNumber,
       color: getRouletteColor(winningNumber),
       outcome: result.won ? "Gagné" : "Perdu",
-      labels: result.won ? `${result.payoutTotal} jetons` : "0"
+      labels: result.won ? `${formatChips(result.payoutTotal)} €` : "0"
     });
     state.lastResults = state.lastResults.slice(0, 10);
 
     document.getElementById("rouletteBallTrack").classList.remove("is-spinning");
 
     document.getElementById("rouletteStatus").textContent = `Le numéro gagnant est ${winningNumber}. ${result.message}`;
-    document.getElementById("roulettePayout").textContent = `Mises : ${totalStake} jetons | Retour : ${payoutTotal} jetons | Bilan : ${payoutTotal - totalStake} jetons.`;
+    document.getElementById("roulettePayout").textContent = `Mises : ${formatChips(totalStake)} € | Retour : ${formatChips(payoutTotal)} € | Bilan : ${formatChips(roundMoney(payoutTotal - totalStake))} €.`;
 
     addHistoryEntry({
       game: "roulette",
       bet: totalStake,
       result: result.won ? "Victoire" : "Défaite",
       payout: result.payoutTotal,
-      net: result.won ? result.payoutTotal - totalStake : -totalStake,
+      net: roundMoney(result.payoutTotal - totalStake),
       date: new Date().toISOString(),
       number: winningNumber
     });
@@ -344,7 +344,7 @@ const rouletteModule = (() => {
 
     return {
       won,
-      payoutTotal: payout,
+      payoutTotal: roundMoney(payout),
       message: won
         ? `Bravo ! La bille s'est arrêtée sur ${winningNumber}. Ton pari ${getBetLabel(bet.type, bet.exactNumber)} est gagnant.`
         : `La bille s'est arrêtée sur ${winningNumber}. Ton pari ${getBetLabel(bet.type, bet.exactNumber)} n'a pas été touché.`,
@@ -457,7 +457,7 @@ const rouletteModule = (() => {
       const row = document.createElement("div");
       row.className = "roulette-bet-row";
       const label = document.createElement("span");
-      label.textContent = `${getBetLabel(bet.type, bet.exactNumber)} : ${bet.amount} jetons`;
+      label.textContent = `${getBetLabel(bet.type, bet.exactNumber)} : ${formatChips(bet.amount)} €`;
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "secondary-button";
@@ -467,7 +467,7 @@ const rouletteModule = (() => {
       remove.addEventListener("click", () => {
         if (state.wheelLocked) return;
         const player = getPlayer();
-        player.chips += bet.amount;
+        player.chips = roundMoney(player.chips + bet.amount);
         savePlayer(player);
         updateTopbar();
         state.bets.splice(index, 1);
@@ -476,14 +476,14 @@ const rouletteModule = (() => {
       row.append(label, remove);
       container.appendChild(row);
     });
-    document.getElementById("rouletteBetTotal").textContent = `Total misé : ${state.bets.reduce((sum, bet) => sum + bet.amount, 0)} jetons`;
+    document.getElementById("rouletteBetTotal").textContent = `Total misé : ${formatChips(state.bets.reduce((sum, bet) => sum + bet.amount, 0))} €`;
     document.querySelectorAll(".board-cell[data-board-number]").forEach(cell => {
       const amount = state.bets.filter(bet => bet.type === "exact" && String(bet.exactNumber) === cell.dataset.boardNumber).reduce((sum, bet) => sum + bet.amount, 0);
       cell.classList.toggle("active", amount > 0);
       cell.disabled = state.wheelLocked;
       cell.betMarker?.remove();
       cell.betMarker = null;
-      cell.setAttribute("aria-label", `Numéro ${cell.dataset.boardNumber}, ${amount} jetons misés`);
+      cell.setAttribute("aria-label", `Numéro ${cell.dataset.boardNumber}, ${amount} € misés`);
       if (amount) {
         const marker = document.createElement("small");
         marker.className = "bet-marker";
@@ -505,7 +505,7 @@ const rouletteModule = (() => {
     const repeatButton = document.getElementById("rouletteRepeatBet");
     repeatButton.disabled = state.wheelLocked || state.bets.length > 0 || !state.previousBets.length;
     const previousTotal = state.previousBets.reduce((sum, bet) => sum + bet.amount, 0);
-    repeatButton.textContent = previousTotal ? `Répéter les mises (${previousTotal} jetons)` : "Répéter les mises";
+    repeatButton.textContent = previousTotal ? `Répéter les mises (${previousTotal} €)` : "Répéter les mises";
   }
 
   function renderHistory() {

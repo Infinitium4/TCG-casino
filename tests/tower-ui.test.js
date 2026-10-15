@@ -17,7 +17,7 @@ function harness() {
       append(child) { this.children.push(child); }, replaceChildren(...children) { this.children = children; }, getContext: () => ctx });
     return nodes.get(id);
   };
-  const context = vm.createContext({ document: { hidden: false, getElementById: id => ids.has(id) ? node(id) : null, querySelectorAll: () => [], querySelector: () => null,
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), { document: { hidden: false, getElementById: id => ids.has(id) ? node(id) : null, querySelectorAll: () => [], querySelector: () => null,
     addEventListener: (name, fn) => events.set(name, fn), createElement: tag => node(`${tag}-${nodes.size}`) },
     window: { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) }, accountUser: { id: 7, username: 'Alice' },
     getPlayer: () => player, savePlayer: next => { player = next; }, updateTopbar() { node('topbarBalance').textContent = String(player.chips); },
@@ -26,7 +26,7 @@ function harness() {
     crypto: { getRandomValues: bytes => webcrypto.getRandomValues(bytes) },
     Date: class extends Date { static now() { return clock; } }, performance: { now: () => 0 },
     requestAnimationFrame: () => 1, cancelAnimationFrame() {}, AbortController, setTimeout, clearTimeout,
-    fetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })) });
+    fetch: (url, options) => new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })) }));
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../underground/js/tower-motion.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../underground/js/tower.js'), 'utf8').replace('return { initialize, setActive };', 'globalThis.game = { initialize, state, action, draw, controls, hud }; return { initialize, setActive };'), context);
   context.game.initialize(); context.game.state.active = true;
@@ -71,7 +71,7 @@ test('validated floor animates before revealing the new floor, then cashout cred
   const cashout = h.game.action('cashout');
   h.requests[1].resolve({ ok: true, json: async () => ({ game: { ...placed, status: 'CASHOUT', payout: 108 }, balance: 1008, serverNow: 1701 }) }); await cashout;
   assert.equal(h.nodes.get('towerResult').hidden, false);
-  assert.equal(h.nodes.get('towerResultValue').textContent, '108 jetons');
+  assert.equal(h.nodes.get('towerResultValue').textContent, '108 €');
   assert.equal(h.nodes.get('topbarBalance').textContent, '1008');
   assert.equal(h.game.state.history.length, 1);
 });

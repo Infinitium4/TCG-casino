@@ -29,7 +29,7 @@ const slotsModule = (() => {
   function updateSlotsHud() {
     const player = getPlayer();
     const input = document.getElementById("slotsStake");
-    document.getElementById("slotsHud").textContent = `Solde : ${formatChips(player.chips)} jetons · Mise : ${input.value || 0} jetons`;
+    document.getElementById("slotsHud").textContent = `Solde : ${formatChips(player.chips)} € · Mise : ${input.value || 0} €`;
   }
 
   function setSlotsResult(stateName, title, message) {
@@ -92,20 +92,20 @@ const slotsModule = (() => {
 
     const player = getPlayer();
     const bet = Number(document.getElementById("slotsStake").value);
-    const limits = window.casinoGameSettings?.slots || { minBet: 1, maxBet: 1_000_000 };
+    const limits = window.casinoGameSettings?.slots || { minBet: 0.01, maxBet: 1_000_000 };
 
-    if (!Number.isFinite(bet) || bet < limits.minBet || bet > limits.maxBet || !Number.isInteger(bet)) {
-      showToast(`La mise doit être comprise entre ${limits.minBet} et ${limits.maxBet} jetons.`);
+    if (!Number.isFinite(bet) || bet < limits.minBet || bet > limits.maxBet || !isMoney(bet)) {
+      showToast(`La mise doit être comprise entre ${limits.minBet} et ${limits.maxBet} €.`);
       return;
     }
 
     if (bet > player.chips) {
-      showToast("Tu n'as pas assez de jetons pour cette mise.");
+      showToast("Tu n'as pas assez de € pour cette mise.");
       return;
     }
 
     state.spinning = true;
-    player.chips -= bet;
+    player.chips = roundMoney(player.chips - bet);
     savePlayer(player);
     updateTopbar();
     updateSlotsHud();
@@ -189,15 +189,15 @@ const slotsModule = (() => {
 
   function settleSlots(result, bet) {
     const outcome = evaluateSlots(result, bet);
-    const net = outcome.payoutTotal - bet;
+    const net = roundMoney(outcome.payoutTotal - bet);
     const resultState = net > 0 ? "win" : net === 0 ? "refund" : "loss";
     const resultTitle = resultState === "win"
-      ? `GAGNÉ · +${net} jetons`
+      ? `GAGNÉ · +${formatChips(net)} €`
       : resultState === "refund"
         ? "MISE REMBOURSÉE"
-        : `PERDU · -${bet} jetons`;
+        : `PERDU · -${formatChips(bet)} €`;
     const updatedPlayer = getPlayer();
-    updatedPlayer.chips += outcome.payoutTotal;
+    updatedPlayer.chips = roundMoney(updatedPlayer.chips + outcome.payoutTotal);
 
     updatedPlayer.stats.gamesPlayed = Number(updatedPlayer.stats.gamesPlayed || 0) + 1;
     if (resultState === "win") {
@@ -235,23 +235,23 @@ const slotsModule = (() => {
     const [first, second, third] = resultArray;
 
     if (first.name === second.name && second.name === third.name) {
-      const payoutTotal = bet * first.payout;
+      const payoutTotal = moneyRatio(bet, first.payout, 1);
       return {
         payoutTotal,
-        message: `Jackpot ! ${first.name} x3 : ${payoutTotal} jetons.`
+        message: `Jackpot ! ${first.name} x3 : ${payoutTotal} €.`
       };
     }
 
     if (first.name === second.name || second.name === third.name) {
       return {
         payoutTotal: bet,
-        message: `Deux symboles identiques adjacents : remboursement total de ${bet} jetons.`
+        message: `Deux symboles identiques adjacents : remboursement total de ${formatChips(bet)} €.`
       };
     }
 
     return {
       payoutTotal: 0,
-      message: `Aucun gain. Tu as perdu ${bet} jetons.`
+      message: `Aucun gain. Tu as perdu ${formatChips(bet)} €.`
     };
   }
 

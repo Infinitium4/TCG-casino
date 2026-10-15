@@ -402,18 +402,18 @@ test('a tied pot is split and its odd chip goes clockwise from the dealer', () =
   table.status = 'in-progress';
   table.round = 'river';
   table.dealerIndex = 0;
-  table.pot = 3;
+  table.pot = 0.03;
   table.board = ['Ah', 'Kh', 'Qh', 'Jh', '10h'];
   table.players.forEach((player) => {
-    player.totalContribution = 1;
+    player.totalContribution = 0.01;
     player.hand = ['2c', '3d'];
   });
   table.players[2].folded = true;
 
   table.resolveShowdownWinner();
 
-  assert.equal(table.players[0].chips, 501);
-  assert.equal(table.players[1].chips, 502);
+  assert.equal(table.players[0].chips, 500.01);
+  assert.equal(table.players[1].chips, 500.02);
   assert.equal(table.players[2].chips, 500);
   assert.equal(table.pot, 0);
 });
@@ -434,6 +434,7 @@ test('a last active player wins immediately after the others fold', () => {
   [1, 2, 3].forEach((id) => table.addPlayer({ id, username: `P${id}`, chips: 500 }));
   table.startRound();
 
+  table.players[0].chips = 480;
   table.players[0].bet = 20;
   table.pot = 20;
   table.currentBet = 20;

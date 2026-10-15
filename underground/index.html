@@ -129,7 +129,7 @@
           </div>
           <div class="race-bet-panel">
             <h3>Choisis ton champion</h3><div id="horseChoices" class="race-selection"></div>
-            <div class="race-actions"><label for="horseStake">Mise en jetons<input id="horseStake" type="number" min="1" max="1000000" step="1" value="25" /></label><button id="horseBet" class="primary-button" type="button" disabled>Miser</button><button id="horseStart" class="gold-button" type="button" hidden>Lancer la course</button><button id="horseNew" class="secondary-button" type="button" hidden>Nouvelle course</button></div>
+            <div class="race-actions"><label for="horseStake">Mise en €<input id="horseStake" type="number" min="0.01" max="1000000" step="0.01" value="0.05" /></label><button id="horseBet" class="primary-button" type="button" disabled>Miser</button><button id="horseStart" class="gold-button" type="button" hidden>Lancer la course</button><button id="horseNew" class="secondary-button" type="button" hidden>Nouvelle course</button></div>
             <p id="horseFeedback" class="race-feedback" role="status">Chargement de l’hippodrome…</p><p class="race-note">Jetons virtuels sans valeur monétaire, non échangeables contre de l’argent.</p>
           </div>
           <div id="horsePodium" class="race-podium" aria-live="polite"></div>
@@ -167,7 +167,7 @@
 
               <div class="stake-row">
                 <label for="rouletteCustomStake">Montant de la mise</label>
-                <input id="rouletteCustomStake" type="number" min="1" step="5" value="10" />
+                <input id="rouletteCustomStake" type="number" min="0.01" step="0.01" value="0.05" />
               </div>
 
               <div id="rouletteHelp" class="status-box subtle">
@@ -175,11 +175,11 @@
               </div>
 
               <div class="chip-row">
-                <button class="chip-option active" type="button" data-stake="10">10</button>
-                <button class="chip-option" type="button" data-stake="25">25</button>
-                <button class="chip-option" type="button" data-stake="50">50</button>
-                <button class="chip-option" type="button" data-stake="100">100</button>
-                <button class="chip-option" type="button" data-stake="250">250</button>
+                <button class="chip-option active" type="button" data-stake="0.05">0,05 €</button>
+                <button class="chip-option" type="button" data-stake="0.25">0,25 €</button>
+                <button class="chip-option" type="button" data-stake="0.5">0,50 €</button>
+                <button class="chip-option" type="button" data-stake="1.0">1,00 €</button>
+                <button class="chip-option" type="button" data-stake="2.5">2,50 €</button>
               </div>
 
               <input id="rouletteExactNumber" type="text" value="7" hidden />
@@ -290,7 +290,7 @@
               <div id="blackjackWaitingBoard" class="status-box" style="margin-top: 0.75rem;"></div>
               <div class="stake-row" style="margin-top: 1rem;">
                 <label for="blackjackTableStake">Mise commune</label>
-                <input id="blackjackTableStake" type="number" min="1" step="1" value="25" />
+                <input id="blackjackTableStake" type="number" min="0.01" step="0.01" value="0.05" />
               </div>
               <div class="action-row stacked" style="margin-top: 1rem;">
                 <button id="blackjackLeaveTableBtn" class="secondary-button" type="button">Quitter la table</button>
@@ -389,7 +389,7 @@
 
               <div class="stake-row">
                 <label for="slotsStake">Mise</label>
-                <input id="slotsStake" type="number" min="10" step="5" value="25" />
+                <input id="slotsStake" type="number" min="0.01" step="0.01" value="0.05" />
               </div>
 
               <div id="slotsHud" class="status-box subtle"></div>
@@ -448,27 +448,27 @@
               <div class="crash-controls">
                 <div class="crash-balance-line">
                   <span>Ton solde</span>
-                  <strong><span id="crashBalance">0</span> jetons</strong>
+                  <strong><span id="crashBalance">0</span> €</strong>
                 </div>
                 <div class="crash-stake-row">
                   <label for="crashStake">Mise de ta partie</label>
                   <div class="crash-stake-input">
-                    <input id="crashStake" type="number" min="1" max="1000000" step="1" value="25" inputmode="numeric" />
-                    <span>jetons</span>
+                    <input id="crashStake" type="number" min="0.01" max="1000000" step="0.01" value="0.05" inputmode="decimal" />
+                    <span>€</span>
                   </div>
                 </div>
                 <div class="crash-quick-stakes" aria-label="Montants rapides">
                   <button type="button" data-crash-adjust="0.5">½ mise</button>
                   <button type="button" data-crash-adjust="2">×2 mise</button>
-                  <button type="button" data-crash-stake="25">25</button>
-                  <button type="button" data-crash-stake="50">50</button>
-                  <button type="button" data-crash-stake="100">100</button>
-                  <button type="button" data-crash-stake="250">250</button>
+                  <button type="button" data-crash-stake="0.05">0,05 €</button>
+                  <button type="button" data-crash-stake="0.5">0,50 €</button>
+                  <button type="button" data-crash-stake="1.0">1,00 €</button>
+                  <button type="button" data-crash-stake="2.5">2,50 €</button>
                 </div>
                 <div class="crash-action-row">
                   <div class="crash-potential">
                     <span>Retour brut · mise incluse</span>
-                    <strong id="crashPotential">25 jetons</strong>
+                    <strong id="crashPotential">25 €</strong>
                   </div>
                   <button id="crashBetButton" class="gold-button" type="button" disabled>Lancer ma partie</button>
                 </div>
@@ -477,7 +477,7 @@
             </div>
 
             <aside class="crash-sidebar">
-              <section class="panel crash-side-panel crash-guide"><p class="eyebrow">LE PRINCIPE</p><h3>Prends de la hauteur.</h3><p>Choisis ta mise, lance ton vol et retire tes jetons avant le crash.</p><ol><li>Mise avant le décollage.</li><li>Le multiplicateur augmente en vol.</li><li>Retire à temps : mise × multiplicateur.</li></ol><small>Si le vol s’arrête avant ton retrait, tu perds ta mise.</small></section>
+              <section class="panel crash-side-panel crash-guide"><p class="eyebrow">LE PRINCIPE</p><h3>Prends de la hauteur.</h3><p>Choisis ta mise, lance ton vol et retire tes € avant le crash.</p><ol><li>Mise avant le décollage.</li><li>Le multiplicateur augmente en vol.</li><li>Retire à temps : mise × multiplicateur.</li></ol><small>Si le vol s’arrête avant ton retrait, tu perds ta mise.</small></section>
               <section class="panel crash-side-panel">
                 <div class="section-heading compact"><h3>Ta mise</h3></div>
                 <div id="crashBetsList" class="crash-bets-list">
@@ -490,7 +490,7 @@
                   <div class="status-box subtle">L’historique sera chargé depuis le serveur.</div>
                 </div>
               </section>
-              <p class="crash-disclaimer">Jeu de démonstration à jetons virtuels uniquement. Les résultats ne sont pas présentés comme provably fair.</p>
+              <p class="crash-disclaimer">Jeu de démonstration à € virtuels uniquement. Les résultats ne sont pas présentés comme provably fair.</p>
             </aside>
           </div>
         </section>
@@ -499,8 +499,8 @@
           <div class="section-heading"><div><p class="eyebrow">UNE BILLE. 16 REBONDS.</p><h1>PLINKO</h1></div><span class="status-box subtle">Jusqu’à 110x</span></div>
           <div class="plinko-layout">
             <aside class="panel plinko-controls">
-              <p class="eyebrow">TON SOLDE</p><strong id="plinkoBalance" class="plinko-balance">—</strong><small>jetons virtuels</small>
-              <label class="input-group" for="plinkoStake">Mise<input id="plinkoStake" type="number" min="1" max="1000000" step="1" value="100" inputmode="numeric" /></label>
+              <p class="eyebrow">TON SOLDE</p><strong id="plinkoBalance" class="plinko-balance">—</strong><small>€ virtuels</small>
+              <label class="input-group" for="plinkoStake">Mise<input id="plinkoStake" type="number" min="0.01" max="1000000" step="0.01" value="0.05" inputmode="decimal" /></label>
               <div class="plinko-adjust"><button class="secondary-button" type="button" data-plinko-adjust="0.5">½</button><button class="secondary-button" type="button" data-plinko-adjust="2">×2</button><button class="secondary-button" type="button" data-plinko-adjust="max">MAX</button></div>
               <label class="input-group" for="plinkoRows">Rangées<select id="plinkoRows" disabled><option>16</option></select></label>
               <label class="input-group" for="plinkoRisk">Risque<select id="plinkoRisk"><option value="high">Élevé</option><option disabled>Faible · à venir</option><option disabled>Moyen · à venir</option></select></label>
@@ -537,14 +537,14 @@
           <div class="section-heading"><div><p class="eyebrow">CHOISIS TON SEUIL. TENTE TA CHANCE.</p><h1>DICE</h1></div><span class="status-box subtle">RTP théorique 99 %</span></div>
           <div class="dice-layout">
             <aside class="panel dice-controls">
-              <p class="eyebrow">TON SOLDE</p><strong id="diceBalance" class="dice-balance">—</strong><small>jetons virtuels</small>
-              <label class="input-group" for="diceStake">Mise<input id="diceStake" type="number" min="1" max="1000000" step="1" value="100" inputmode="numeric" /></label>
+              <p class="eyebrow">TON SOLDE</p><strong id="diceBalance" class="dice-balance">—</strong><small>€ virtuels</small>
+              <label class="input-group" for="diceStake">Mise<input id="diceStake" type="number" min="0.01" max="1000000" step="0.01" value="0.05" inputmode="decimal" /></label>
               <div class="dice-adjust"><button class="secondary-button" type="button" data-dice-adjust="0.5">½</button><button class="secondary-button" type="button" data-dice-adjust="2">×2</button><button class="secondary-button" type="button" data-dice-adjust="max">MAX</button></div>
               <label class="input-group" for="diceThreshold">Seuil<input id="diceThreshold" type="number" min="1" max="99" step="0.01" value="50.00" inputmode="decimal" /></label>
               <div class="dice-mode" role="group" aria-label="Mode de victoire"><button class="secondary-button" type="button" data-dice-mode="under" aria-pressed="true">Roll Under</button><button class="secondary-button" type="button" data-dice-mode="over" aria-pressed="false">Roll Over</button></div>
               <button id="diceLaunch" class="gold-button" type="button" disabled>LANCER</button>
               <p id="diceFeedback" class="dice-feedback" role="status" aria-live="polite">Chargement du jeu…</p>
-              <small>Le gain total inclut la mise. Les jetons sont arrondis à l’entier inférieur.</small>
+              <small>Le gain total inclut la mise. Les € sont arrondis à l’entier inférieur.</small>
             </aside>
             <div class="panel dice-board" id="diceBoard">
               <div class="dice-result"><p class="eyebrow">RÉSULTAT DU LANCER</p><strong id="diceResult">—</strong><span id="diceOutcome">À toi de jouer</span><span id="diceGain"></span></div>
@@ -553,7 +553,7 @@
                 <div class="dice-scale"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>
               </div>
               <p id="diceRule" class="dice-rule">Gagne avec un résultat strictement inférieur à 50,00.</p>
-              <div class="dice-stats"><div><span>Chance de victoire</span><strong id="diceChance">50,00 %</strong></div><div><span>Multiplicateur</span><strong id="diceMultiplier">1,98x</strong></div><div><span>Gain potentiel total</span><strong id="dicePotential">198 jetons</strong></div></div>
+              <div class="dice-stats"><div><span>Chance de victoire</span><strong id="diceChance">50,00 %</strong></div><div><span>Multiplicateur</span><strong id="diceMultiplier">1,98x</strong></div><div><span>Gain potentiel total</span><strong id="dicePotential">198 €</strong></div></div>
               <p class="dice-note">10 000 résultats équiprobables, de 0,00 à 99,99. Le vert indique la zone gagnante.</p>
             </div>
           </div>
@@ -564,8 +564,8 @@
           <div class="section-heading"><div><p class="eyebrow">CHOISIS TON CHEMIN. ENCAISSE À TEMPS.</p><h1>MINES</h1></div><span class="status-box subtle">RTP théorique 99 %</span></div>
           <div class="mines-layout">
             <aside class="panel mines-controls">
-              <p class="eyebrow">TON SOLDE</p><strong id="minesBalance" class="mines-balance">—</strong><small>jetons virtuels</small>
-              <label class="input-group" for="minesStake">Mise<input id="minesStake" type="number" min="1" max="1000000" step="1" value="100" inputmode="numeric" /></label>
+              <p class="eyebrow">TON SOLDE</p><strong id="minesBalance" class="mines-balance">—</strong><small>€ virtuels</small>
+              <label class="input-group" for="minesStake">Mise<input id="minesStake" type="number" min="0.01" max="1000000" step="0.01" value="0.05" inputmode="decimal" /></label>
               <div class="mines-adjust"><button class="secondary-button" type="button" data-mines-adjust="0.5">½</button><button class="secondary-button" type="button" data-mines-adjust="2">×2</button><button class="secondary-button" type="button" data-mines-adjust="max">MAX</button></div>
               <label class="input-group" for="minesCount">Nombre de mines<select id="minesCount"></select></label>
               <button id="minesStart" class="gold-button" type="button" disabled>LANCER LA PARTIE</button>
@@ -587,8 +587,8 @@
           <div class="section-heading"><div><p class="eyebrow">CONSTRUIS. PRENDS LE RISQUE. ENCAISSE.</p><h1>TOWER RUSH</h1></div><span class="status-box subtle">8 étages · <span id="towerMaxMultiplier">jusqu’à 3,65x</span></span></div>
           <div class="tower-layout">
             <aside class="panel tower-controls">
-              <p class="eyebrow">TON SOLDE</p><strong id="towerBalance" class="tower-balance">—</strong><small>jetons virtuels</small>
-              <label class="input-group" for="towerStake">Mise<input id="towerStake" type="number" min="1" max="1000000" step="1" value="100" inputmode="numeric" /></label>
+              <p class="eyebrow">TON SOLDE</p><strong id="towerBalance" class="tower-balance">—</strong><small>€ virtuels</small>
+              <label class="input-group" for="towerStake">Mise<input id="towerStake" type="number" min="0.01" max="1000000" step="0.01" value="0.05" inputmode="decimal" /></label>
               <div class="tower-adjust"><button class="secondary-button" type="button" data-tower-adjust="0.5">½</button><button class="secondary-button" type="button" data-tower-adjust="2">×2</button><button class="secondary-button" type="button" data-tower-adjust="max">MAX</button></div>
               <button id="towerRetry" class="secondary-button" type="button" hidden>R?CUP?RER MON ACTION</button>
               <button id="towerStart" class="gold-button" type="button" disabled>DÉMARRER</button>
@@ -615,7 +615,7 @@
             <div class="section-heading">
               <h2>Classement local</h2>
             </div>
-            <p class="leaderboard-note">Les joueurs sont classés selon leur solde de jetons.</p>
+            <p class="leaderboard-note">Les joueurs sont classés selon leur solde de €.</p>
             <div id="leaderboardBoard" class="leaderboard-board"></div>
           </div>
         </section>
@@ -630,7 +630,7 @@
               <span id="adminAccountCount" class="status-box subtle"></span>
             </div>
             <p class="admin-note">
-              Consulte les soldes et historiques, ajuste les jetons et gère les bannissements.
+              Consulte les soldes et historiques, ajuste les € et gère les bannissements.
               Chaque action administrative est journalisée.
             </p>
             <section class="admin-detail-panel">
@@ -646,7 +646,7 @@
               <form id="adminDistributionForm" class="admin-search">
                 <label class="input-group" for="adminDistributionAmount">
                   <span>Jetons à distribuer par joueur</span>
-                  <input id="adminDistributionAmount" type="number" min="1" max="1000000" step="1" value="100" required />
+                  <input id="adminDistributionAmount" type="number" min="0.01" max="1000000" step="0.01" value="0.05" required />
                 </label>
                 <label class="input-group" for="adminDistributionReason">
                   <span>Motif</span>
@@ -659,7 +659,7 @@
             </section>
             <section id="adminRootPanel" class="admin-detail-panel" hidden>
               <h3>Contrôles de l’admin principal</h3>
-              <div class="admin-wallet-control"><div><strong>Argent infini</strong><p id="adminInfiniteStatus" class="admin-note">Mode réservé à admin1. Les jetons sont réapprovisionnés automatiquement.</p></div><button id="adminInfiniteMoneyBtn" class="primary-button" type="button">Activer sur mon compte</button></div>
+              <div class="admin-wallet-control"><div><strong>Argent infini</strong><p id="adminInfiniteStatus" class="admin-note">Mode réservé à admin1. Les € sont réapprovisionnés automatiquement.</p></div><button id="adminInfiniteMoneyBtn" class="primary-button" type="button">Activer sur mon compte</button></div>
               <h4>Jeux, limites et maintenance</h4>
               <div id="adminGameSettings" class="admin-game-settings"></div>
               <details class="admin-log"><summary>Journal de sécurité</summary><ul id="adminGlobalAudit" class="admin-detail-list"></ul></details>
@@ -803,6 +803,7 @@
     <div id="toast" class="toast" aria-live="polite"></div>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="js/money.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/roulette.js"></script>

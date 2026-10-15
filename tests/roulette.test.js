@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const context = { window: {}, getRouletteColor: number => ['0', '00'].includes(String(number)) ? 'green' : String(number) === '7' ? 'red' : 'black' };
+const context = { ...require('../underground/js/money'), window: {}, getRouletteColor: number => ['0', '00'].includes(String(number)) ? 'green' : String(number) === '7' ? 'red' : 'black' };
 const source = fs.readFileSync('underground/js/roulette.js', 'utf8').replace('window.rouletteModule = { initialize };', 'window.rouletteModule = { initialize, evaluateRouletteBet };');
 vm.runInNewContext(source, context);
 const evaluate = context.window.rouletteModule.evaluateRouletteBet;

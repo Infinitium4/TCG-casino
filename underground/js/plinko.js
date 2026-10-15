@@ -107,7 +107,7 @@ const plinkoModule = (() => {
     el('plinkoRecent').replaceChildren(...state.recent.filter(drop => !state.unrevealed.has(drop.id) &&
       !(state.pending && drop.username === accountUser.username)).slice(0, 20).map(drop => {
       const row = document.createElement('div'); row.className = 'plinko-feed-row';
-      for (const [tag, text] of [['span', drop.username], ['strong', formatMultiplier(drop.multiplier)], ['span', `${formatChips(drop.payout)} jetons`]]) {
+      for (const [tag, text] of [['span', drop.username], ['strong', formatMultiplier(drop.multiplier)], ['span', `${formatChips(drop.payout)} €`]]) {
         const node = document.createElement(tag); node.textContent = text; row.append(node);
       }
       return row;
@@ -122,10 +122,10 @@ const plinkoModule = (() => {
       renderHistory(); renderRecent();
     }
     el('plinkoLastMultiplier').textContent = formatMultiplier(drop.multiplier);
-    el('plinkoLastPayout').textContent = `${formatChips(drop.payout)} jetons`;
+    el('plinkoLastPayout').textContent = `${formatChips(drop.payout)} €`;
     const bin = el('plinkoBins').children[drop.slot];
     bin.classList.remove('is-winner'); void bin.offsetWidth; bin.classList.add('is-winner');
-    if (!state.pending && !state.retry) feedback(`${formatMultiplier(drop.multiplier)} · ${drop.payout >= drop.stake ? 'Gain' : 'Retour'} : ${formatChips(drop.payout)} jetons.`);
+    if (!state.pending && !state.retry) feedback(`${formatMultiplier(drop.multiplier)} · ${drop.payout >= drop.stake ? 'Gain' : 'Retour'} : ${formatChips(drop.payout)} €.`);
     syncAccount();
   }
   function publishBalance() {
@@ -171,8 +171,8 @@ const plinkoModule = (() => {
   async function launch() {
     if (state.pending || state.syncing || !state.config) return;
     const stake = Number(el('plinkoStake').value);
-    if (!state.retry && (!Number.isSafeInteger(stake) || stake < state.config.settings.minBet || stake > Math.min(state.config.settings.maxBet, 1_000_000) || stake > state.balance)) {
-      feedback('Choisis une mise entière autorisée et disponible dans ton solde.', true); return;
+    if (!state.retry && (!isMoney(stake) || stake < state.config.settings.minBet || stake > Math.min(state.config.settings.maxBet, 1_000_000) || stake > state.balance)) {
+      feedback('Choisis une mise autorisée et disponible dans ton solde.', true); return;
     }
     // getRandomValues also works when the VM is accessed over plain HTTP.
     const request = state.retry || { stake, risk: 'high', rows: 16,
@@ -215,7 +215,7 @@ const plinkoModule = (() => {
       const input = el('plinkoStake'), config = state.config;
       if (!config) return;
       const max = Math.min(state.balance, config.settings.maxBet, 1_000_000);
-      input.value = Math.min(max, Math.max(config.settings.minBet, button.dataset.plinkoAdjust === 'max' ? max : Math.floor(Number(input.value) * Number(button.dataset.plinkoAdjust))));
+      input.value = Math.min(max, Math.max(config.settings.minBet, button.dataset.plinkoAdjust === 'max' ? max : roundMoney(Number(input.value) * Number(button.dataset.plinkoAdjust))));
     }));
     state.socket = window.io ? io() : null;
     state.socket?.on('session:ready', () => { if (state.active) state.socket.emit('plinko:subscribe'); });

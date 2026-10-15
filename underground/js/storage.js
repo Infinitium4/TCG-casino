@@ -60,7 +60,7 @@ function getPlayer() {
     safePlayer.chips = defaultPlayer.chips;
   }
 
-  safePlayer.chips = Number(safePlayer.chips) || 0;
+  safePlayer.chips = roundMoney(Number(safePlayer.chips) || 0);
   safePlayer.stats.gamesPlayed = Number(safePlayer.stats.gamesPlayed || 0);
   safePlayer.stats.wins = Number(safePlayer.stats.wins || 0);
   safePlayer.stats.bestWin = Number(safePlayer.stats.bestWin || 0);

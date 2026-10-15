@@ -1,3 +1,4 @@
+const { isMoney, roundMoney, moneyRatio } = require('./underground/js/money');
 const crypto = require('node:crypto');
 const { initializeHorseTables, registerHorseTables } = require('./horse-tables');
 
@@ -50,14 +51,14 @@ function registerHorseRacingRoutes(deps) {
     payout: row.payout, odds: Number(row.odds_cents || 400) / 100, eventId: row.event_id || null, cancelled: Boolean(row.cancelled) });
   async function settle(row) {
     if (!row || row.status !== 'running' || Date.now() < row.ends_at_ms) return row;
-    const payout = row.horse_id === row.winner ? Math.floor(row.stake * Number(row.odds_cents || 400) / 100) : 0;
+    const payout = row.horse_id === row.winner ? moneyRatio(row.stake, Number(row.odds_cents || 400), 100) : 0;
     const user = await get('SELECT chips, username FROM users WHERE id = ?', [row.user_id]);
-    if (!Number.isSafeInteger(user.chips + payout)) throw fail(409, 'Le solde maximal serait dépassé.');
+    if (!isMoney(roundMoney(user.chips + payout))) throw fail(409, 'Le solde maximal serait dépassé.');
     const update = await run("UPDATE horse_races SET status = 'settled', payout = ?, settled_at_ms = ? WHERE id = ? AND status = 'running'", [payout, Date.now(), row.id]);
     if (update.changes) {
-      await run('UPDATE users SET chips = chips + ? WHERE id = ?', [payout, row.user_id]);
-      await addGameHistory(row.user_id, 'horses', row.stake, payout ? 'Victoire' : 'Défaite', payout, payout - row.stake);
-      await recordBankSettlement(row.user_id, 'horses', payout - row.stake, user.username);
+      await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ?', [payout, row.user_id]);
+      await addGameHistory(row.user_id, 'horses', row.stake, payout ? 'Victoire' : 'Défaite', payout, roundMoney(payout - row.stake));
+      await recordBankSettlement(row.user_id, 'horses', roundMoney(payout - row.stake), user.username);
     }
     return get('SELECT * FROM horse_races WHERE id = ?', [row.id]);
   }
@@ -92,7 +93,7 @@ function registerHorseRacingRoutes(deps) {
   }));
   app.post('/api/horses/bet', requireAuth, route(async (req, res) => {
     const { stake, horseId, requestId } = req.body || {};
-    if (!Number.isSafeInteger(stake) || stake <= 0 || stake > 1_000_000 || !Number.isInteger(horseId) || horseId < 1 || horseId > 5 || typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw fail(400, 'Cheval, mise ou identifiant invalide.');
+    if (!isMoney(stake) || stake <= 0 || stake > 1_000_000 || !Number.isInteger(horseId) || horseId < 1 || horseId > 5 || typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw fail(400, 'Cheval, mise ou identifiant invalide.');
     const payload = await withDatabaseTransaction(async () => {
       const userId = req.session.userId;
       const existing = await get('SELECT * FROM horse_races WHERE user_id = ? AND request_id = ?', [userId, requestId]);
@@ -102,14 +103,14 @@ function registerHorseRacingRoutes(deps) {
       }
       const settings = await getGameSettings('horses');
       if (!settings?.enabled || settings.maintenance || await isBettingPaused()) throw fail(503, 'Les paris hippiques sont suspendus.');
-      if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${settings.maxBet} jetons.`);
+      if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, `Mise autorisée : ${settings.minBet} à ${settings.maxBet} €.`);
       if (await get('SELECT table_id FROM horse_table_members WHERE user_id = ?', [userId])) throw fail(409, 'Utilise le panneau de paris de ta table.');
       await settle(await get("SELECT * FROM horse_races WHERE user_id = ? AND status != 'settled'", [userId]));
       if (await get("SELECT id FROM horse_races WHERE user_id = ? AND status != 'settled'", [userId])) throw fail(409, 'Termine ta course avant de miser à nouveau.');
       if (isUserInActiveTable(userId) || await hasActiveCrashBet(userId)) throw fail(409, 'Termine ta partie en cours avant de miser.');
       const user = await get('SELECT chips FROM users WHERE id = ?', [userId]);
-      if (!Number.isSafeInteger(user.chips - stake + stake * 4)) throw fail(400, 'Le solde maximal serait dépassé.');
-      const debit = await run('UPDATE users SET chips = chips - ? WHERE id = ? AND chips >= ?', [stake, userId, stake]);
+      if (!isMoney(roundMoney(user.chips - stake + stake * 4))) throw fail(400, 'Le solde maximal serait dépassé.');
+      const debit = await run('UPDATE users SET chips = ROUND(chips - ?, 2) WHERE id = ? AND chips >= ?', [stake, userId, stake]);
       if (!debit.changes) throw fail(400, 'Solde insuffisant.');
       const outcome = generateRace();
       const id = crypto.randomUUID();

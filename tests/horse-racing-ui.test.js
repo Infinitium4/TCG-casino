@@ -15,14 +15,14 @@ function setup(fetch) {
     appendChild(child) { this.children.push(child); }, replaceChildren(...children) { this.children = children; }, scrollIntoView() {} });
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   let key = 0;
-  const context = vm.createContext({
+  const context = vm.createContext(Object.assign({}, require('../underground/js/money'), {
     fetch, accountUser: { id: 1 }, crypto: { getRandomValues: array => array.fill(++key) },
     document: { getElementById: get, createElement: element, querySelector: element },
     sessionStorage: { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     getPlayer: () => ({ chips: 1000 }), savePlayer() {}, updateTopbar() {}, formatChips: String,
     performance: { now: () => 0 }, window: { matchMedia: () => ({ matches: true }) },
     loadAccountData: async () => {}, renderHomeView() {}, renderLeaderboard() {}, renderProfileView() {}
-  });
+  }));
   const source = fs.readFileSync(path.join(__dirname, '../underground/js/horses.js'), 'utf8');
   vm.runInContext(source.replace('return { initialize, setActive };', 'globalThis.api = { state, accept, bet, start, refresh }; return { initialize, setActive };'), context);
   context.api.state.horses = HORSES;

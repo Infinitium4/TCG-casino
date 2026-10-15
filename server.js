@@ -1,4 +1,5 @@
-﻿  const { initializeClickerSchema, registerClickerRoutes } = require('./clicker');
+const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./underground/js/money');
+  const { initializeClickerSchema, registerClickerRoutes } = require('./clicker');
   const { initializeRegistrationCaptcha, createRegistrationCaptcha } = require('./registration-captcha');
   const express = require('express');
   const { rateLimit } = require('express-rate-limit');
@@ -32,18 +33,18 @@
   const CRASH_BETTING_WINDOW_MS = 1000;
   const CRASH_TIME_SCALE_MS = CRASH_TEST_MODE ? 500 : 12000;
   const CRASH_MAX_BET = 1_000_000;
-  const MAX_CHIPS = Number.MAX_SAFE_INTEGER;
+  const MAX_CHIPS = MAX_MONEY;
   const GAME_DEFAULTS = {
-    tower: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    horses: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    plinko: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    dice: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    mines: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    roulette: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    blackjack: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    poker: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    slots: { enabled: true, minBet: 1, maxBet: 1_000_000 },
-    crash: { enabled: CRASH_ENABLED, minBet: 1, maxBet: CRASH_MAX_BET },
+    tower: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    horses: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    plinko: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    dice: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    mines: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    roulette: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    blackjack: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    poker: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    slots: { enabled: true, minBet: 0.01, maxBet: 1_000_000 },
+    crash: { enabled: CRASH_ENABLED, minBet: 0.01, maxBet: CRASH_MAX_BET },
   };
 
   if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
@@ -528,7 +529,7 @@
       },
       startRound(betAmount) {
         const stake = Number(betAmount);
-        if (this.status === 'in-progress' || !Number.isInteger(stake) || stake <= 0) return false;
+        if (this.status === 'in-progress' || !isMoney(stake) || stake <= 0) return false;
         if (this.players.length < this.minPlayers || this.players.some((player) => player.chips < stake)) return false;
 
         this.deck = shuffleDeck(createDeck());
@@ -540,7 +541,7 @@
         this.dealerRevealed = false;
 
         for (const player of this.players) {
-          player.chips -= stake;
+          player.chips = roundMoney(player.chips - stake);
           player.bet = stake;
           player.hand = [this.deck.pop(), this.deck.pop()];
           player.finished = isBlackjack(player.hand);
@@ -550,7 +551,7 @@
           player.payout = 0;
         }
 
-        this.lastAction = `Manche ${this.roundNumber} démarrée avec une mise de ${stake} jetons.`;
+        this.lastAction = `Manche ${this.roundNumber} démarrée avec une mise de ${stake} €.`;
         this.recentHistory.push(this.lastAction);
         this.currentTurn = this.players.findIndex((player) => !player.finished);
 
@@ -571,10 +572,10 @@
           if (hand.cards.length !== 2 || player.chips < hand.bet || hand.splitAces) return false;
           if (action === 'split' && (player.hands.length !== 1 || calculateBlackjackValue([hand.cards[0]]) !== calculateBlackjackValue([hand.cards[1]]))) return false;
           if (this.deck.length < (action === 'split' ? 2 : 1)) return false;
-          player.chips -= hand.bet;
-          player.bet += hand.bet;
+          player.chips = roundMoney(player.chips - hand.bet);
+          player.bet = roundMoney(player.bet + hand.bet);
           if (action === 'double') {
-            hand.bet *= 2;
+            hand.bet = roundMoney(hand.bet * 2);
             hand.cards.push(this.deck.pop());
             hand.finished = true;
             this.lastAction = `${player.username} double sa mise : ${calculateBlackjackValue(hand.cards)}.`;
@@ -630,12 +631,12 @@
             payout = hand.bet;
           } else if (playerBlackjack) {
             hand.outcome = 'blackjack';
-            payout = Math.floor(hand.bet * 2.5);
+            payout = moneyRatio(hand.bet, 5, 2);
           } else if (playerTotal > 21 || dealerBlackjack) {
             hand.outcome = 'loss';
           } else if (dealerTotal > 21 || playerTotal > dealerTotal) {
             hand.outcome = 'win';
-            payout = hand.bet * 2;
+            payout = moneyRatio(hand.bet, 2, 1);
           } else if (playerTotal === dealerTotal) {
             hand.outcome = 'push';
             payout = hand.bet;
@@ -646,9 +647,9 @@
           hand.payout = payout;
           hand.finished = true;
           }
-          player.payout = player.hands.reduce((sum, hand) => sum + hand.payout, 0);
+          player.payout = roundMoney(player.hands.reduce((sum, hand) => sum + hand.payout, 0));
           player.outcome = player.hands.length === 1 ? player.hands[0].outcome : player.payout > player.bet ? 'win' : player.payout === player.bet ? 'push' : 'loss';
-          player.chips += player.payout;
+          player.chips = roundMoney(player.chips + player.payout);
           player.finished = true;
         }
 
@@ -683,7 +684,7 @@
       dealerIndex: 0,
       smallBlindIndex: 0,
       bigBlindIndex: 0,
-      blinds: { small: 10, big: 20 },
+      blinds: { small: 0.01, big: 0.01 },
       recentHistory: [],
       addPlayer(player) {
         if (this.status === 'in-progress') return false;
@@ -821,13 +822,13 @@
 
         for (const level of levels) {
           const contributors = contributionEntries.filter((entry) => entry.totalContribution >= level);
-          const amount = (level - previousLevel) * contributors.length;
+          const amount = roundMoney((level - previousLevel) * contributors.length);
           const eligiblePlayers = contributors.map((entry) => entry.player).filter((player) => player && contenderSet.has(player));
           if (amount > 0) {
             if (eligiblePlayers.length) {
               pots.push({ amount, eligiblePlayers });
             } else if (pots.length) {
-              pots[pots.length - 1].amount += amount;
+              pots[pots.length - 1].amount = roundMoney(pots[pots.length - 1].amount + amount);
             } else if (contenders.length) {
               pots.push({ amount, eligiblePlayers: contenders });
             }
@@ -836,10 +837,10 @@
         }
 
         const recordedPot = pots.reduce((total, pot) => total + pot.amount, 0);
-        const untrackedAmount = Number(this.pot || 0) - recordedPot;
+        const untrackedAmount = roundMoney(Number(this.pot || 0) - recordedPot);
         if (untrackedAmount > 0) {
           if (pots.length) {
-            pots[0].amount += untrackedAmount;
+            pots[0].amount = roundMoney(pots[0].amount + untrackedAmount);
           } else if (contenders.length) {
             pots.push({ amount: untrackedAmount, eligiblePlayers: contenders });
           }
@@ -883,7 +884,7 @@
         const winner = activePlayers[0];
         const payout = Number(this.pot || 0);
         if (payout > 0) {
-          winner.chips = Number(winner.chips || 0) + payout;
+          winner.chips = roundMoney(Number(winner.chips || 0) + payout);
         }
         this.pot = 0;
         this.currentBet = 0;
@@ -943,16 +944,17 @@
             continue;
           }
           handNames.add(bestScore.name);
-          const splitValue = Math.floor(pot.amount / winners.length);
-          const remainder = pot.amount % winners.length;
+          const potCents = toCents(pot.amount);
+          const splitValue = Math.floor(potCents / winners.length);
+          const remainder = potCents % winners.length;
           winners.sort((first, second) => {
             const firstDistance = (this.getPlayerIndex(first.id) - this.dealerIndex + this.players.length) % this.players.length || this.players.length;
             const secondDistance = (this.getPlayerIndex(second.id) - this.dealerIndex + this.players.length) % this.players.length || this.players.length;
             return firstDistance - secondDistance;
           });
           winners.forEach((player, index) => {
-            const gain = splitValue + (index < remainder ? 1 : 0);
-            player.chips = Number(player.chips || 0) + gain;
+            const gain = (splitValue + (index < remainder ? 1 : 0)) / 100;
+            player.chips = roundMoney(Number(player.chips || 0) + gain);
             payouts.set(player, (payouts.get(player) || 0) + gain);
           });
         }
@@ -1033,21 +1035,21 @@
         const bigBlindPlayer = this.players[this.bigBlindIndex];
         if (smallBlindPlayer) {
           const smallBlind = Math.min(Number(smallBlindPlayer.chips || 0), this.blinds.small);
-          smallBlindPlayer.chips -= smallBlind;
+          smallBlindPlayer.chips = roundMoney(smallBlindPlayer.chips - smallBlind);
           smallBlindPlayer.bet = smallBlind;
           smallBlindPlayer.totalContribution = smallBlind;
           smallBlindPlayer.allIn = smallBlindPlayer.chips === 0;
           smallBlindPlayer.actionTakenThisRound = false;
-          this.pot += smallBlind;
+          this.pot = roundMoney(this.pot + smallBlind);
         }
         if (bigBlindPlayer) {
           const bigBlind = Math.min(Number(bigBlindPlayer.chips || 0), this.blinds.big);
-          bigBlindPlayer.chips -= bigBlind;
+          bigBlindPlayer.chips = roundMoney(bigBlindPlayer.chips - bigBlind);
           bigBlindPlayer.bet = bigBlind;
           bigBlindPlayer.totalContribution = bigBlind;
           bigBlindPlayer.allIn = bigBlindPlayer.chips === 0;
           bigBlindPlayer.actionTakenThisRound = false;
-          this.pot += bigBlind;
+          this.pot = roundMoney(this.pot + bigBlind);
         }
 
         this.currentBet = Math.max(smallBlindPlayer?.bet || 0, bigBlindPlayer?.bet || 0);
@@ -1109,6 +1111,7 @@
         this.recentHistory.push(this.lastAction);
       },
       applyAction(userId, type, amount = 0) {
+        if (['bet', 'raise'].includes(type) && (!isMoney(amount) || amount <= 0)) return { ok: false, message: 'Montant invalide.' };
         const playerIndex = this.getPlayerIndex(userId);
         if (playerIndex < 0) {
           return { ok: false, message: 'Joueur introuvable dans la table.' };
@@ -1145,7 +1148,7 @@
         }
 
         if (type === 'call') {
-          const amountToCall = Math.max(0, Number(this.currentBet || 0) - Number(player.bet || 0));
+          const amountToCall = Math.max(0, roundMoney(Number(this.currentBet || 0) - Number(player.bet || 0)));
           if (amountToCall <= 0) {
             player.actionTakenThisRound = true;
             this.lastAction = `${player.username} check.`;
@@ -1155,10 +1158,10 @@
           }
 
           const chipValue = Math.min(Number(player.chips || 0), amountToCall);
-          player.chips = Math.max(0, Number(player.chips || 0) - chipValue);
-          player.bet = Number(player.bet || 0) + chipValue;
-          player.totalContribution = Number(player.totalContribution || 0) + chipValue;
-          this.pot += chipValue;
+          player.chips = roundMoney(Math.max(0, Number(player.chips || 0) - chipValue));
+          player.bet = roundMoney(Number(player.bet || 0) + chipValue);
+          player.totalContribution = roundMoney(Number(player.totalContribution || 0) + chipValue);
+          this.pot = roundMoney(this.pot + chipValue);
           if (Number(player.chips || 0) <= 0) {
             player.allIn = true;
           }
@@ -1175,19 +1178,19 @@
             return { ok: false, message: 'Le montant de mise est invalide.' };
           }
           if (betAmount > Number(player.chips || 0)) {
-            return { ok: false, message: 'Tu n’as pas assez de jetons.' };
+            return { ok: false, message: 'Tu n’as pas assez de €.' };
           }
 
-          const minimumRaise = Math.max(1, (this.currentBet > 0 ? this.currentBet + this.blinds.big : this.blinds.big) - Number(player.bet || 0));
+          const minimumRaise = Math.max(0.01, roundMoney((this.currentBet > 0 ? this.currentBet + this.blinds.big : this.blinds.big) - Number(player.bet || 0)));
           if (betAmount < minimumRaise) {
             return { ok: false, message: `Le montant doit être au moins ${minimumRaise}.` };
           }
 
           const previousBet = this.currentBet;
-          player.chips = Math.max(0, Number(player.chips || 0) - betAmount);
-          player.bet = Number(player.bet || 0) + betAmount;
-          player.totalContribution = Number(player.totalContribution || 0) + betAmount;
-          this.pot += betAmount;
+          player.chips = roundMoney(Math.max(0, Number(player.chips || 0) - betAmount));
+          player.bet = roundMoney(Number(player.bet || 0) + betAmount);
+          player.totalContribution = roundMoney(Number(player.totalContribution || 0) + betAmount);
+          this.pot = roundMoney(this.pot + betAmount);
           this.currentBet = Math.max(this.currentBet, player.bet);
           this.resetActionsAfterRaise(player, previousBet);
           if (Number(player.chips || 0) <= 0) {
@@ -1203,13 +1206,13 @@
         if (type === 'all-in') {
           const allInValue = Number(player.chips || 0);
           if (allInValue <= 0) {
-            return { ok: false, message: 'Tu n’as plus de jetons.' };
+            return { ok: false, message: 'Tu n’as plus de €.' };
           }
           const previousBet = this.currentBet;
           player.chips = 0;
-          player.bet = Number(player.bet || 0) + allInValue;
-          player.totalContribution = Number(player.totalContribution || 0) + allInValue;
-          this.pot += allInValue;
+          player.bet = roundMoney(Number(player.bet || 0) + allInValue);
+          player.totalContribution = roundMoney(Number(player.totalContribution || 0) + allInValue);
+          this.pot = roundMoney(this.pot + allInValue);
           this.currentBet = Math.max(this.currentBet, player.bet);
           this.resetActionsAfterRaise(player, previousBet);
           player.allIn = true;
@@ -1234,7 +1237,7 @@
   function addGameHistory(userId, gameName, bet, result, payout, net) {
     return run(
       'INSERT INTO game_history (user_id, game_name, bet, result, payout, net) VALUES (?, ?, ?, ?, ?, ?)',
-      [userId, String(gameName), Number(bet), String(result), Number(payout || 0), Number(net || 0)]
+      [userId, String(gameName), roundMoney(Number(bet)), String(result), roundMoney(Number(payout || 0)), roundMoney(Number(net || 0))]
     );
   }
 
@@ -1247,7 +1250,7 @@
       if (user.is_bank) {
         throw new Error('Le solde du compte banque ne peut pas être modifié par une action de jeu.');
       }
-      const nextValue = Math.max(0, Number(user.chips) + Number(delta));
+      const nextValue = Math.max(0, roundMoney(Number(user.chips) + Number(delta)));
       await run('UPDATE users SET chips = ? WHERE id = ?', [nextValue, userId]);
       return nextValue;
     });
@@ -1265,8 +1268,8 @@
 
   async function recordBankSettlement(userId, gameName, playerNet, playerUsername = null) {
     const net = Number(playerNet);
-    if (!Number.isSafeInteger(net)) {
-      throw new Error('Résultat de partie non entier pour le règlement banque.');
+    if (!isMoney(net)) {
+      throw new Error('Résultat de partie invalide pour le règlement banque.');
     }
 
     const bank = await getBankAccount();
@@ -1279,8 +1282,8 @@
       ? { username: playerUsername }
       : await get('SELECT username FROM users WHERE id = ?', [userId]);
     const bankDelta = -net;
-    await run('UPDATE users SET chips = chips + ? WHERE id = ? AND is_bank = 1', [bankDelta, bank.id]);
-    await run('UPDATE users SET chips = chips + ? WHERE id = ? AND is_bank = 1', [bankDelta, gameBank.id]);
+    await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ? AND is_bank = 1', [bankDelta, bank.id]);
+    await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ? AND is_bank = 1', [bankDelta, gameBank.id]);
     await run(`
       INSERT INTO bank_ledger (player_user_id, player_username, game_name, player_net, bank_delta)
       VALUES (?, ?, ?, ?, ?)
@@ -1306,7 +1309,7 @@
 
     await withDatabaseTransaction(async () => {
       for (const player of table.players) {
-        const net = player.payout - player.bet;
+        const net = roundMoney(player.payout - player.bet);
         await run('UPDATE users SET chips = ? WHERE id = ?', [player.chips, player.id]);
         const result = player.hands?.length > 1
           ? player.hands.map((hand, index) => `Main ${index + 1} : ${resultLabels[hand.outcome] || 'Défaite'} (mise ${hand.bet})`).join(' · ')
@@ -1364,7 +1367,7 @@
       minPlayers: table.minPlayers,
       currentBet: table.currentBet || 0,
       pot: table.pot || 0,
-      blinds: { ...(table.blinds || { small: 10, big: 20 }) },
+      blinds: { ...(table.blinds || { small: 0.01, big: 0.01 }) },
       board: table.board || [],
       round: table.round || 'waiting',
       dealerIndex: table.dealerIndex ?? 0,
@@ -1408,6 +1411,8 @@
   }
 
   async function startPokerRound(table) {
+    const settings = await getGameSettings('poker');
+    table.blinds = { small: Math.max(0.01, moneyRatio(settings.minBet, 1, 2)), big: settings.minBet };
     return withDatabaseTransaction(async () => {
       for (const player of table.players) {
         if (await hasOtherActiveBet(player.id)) return false;
@@ -1582,8 +1587,8 @@
 
   async function placeCrashBet(userId, stake) {
     const settings = await getGameSettings('crash');
-    if (!Number.isSafeInteger(stake) || stake < settings.minBet || stake > settings.maxBet) {
-      throw crashActionError(400, `La mise doit être comprise entre ${settings.minBet} et ${settings.maxBet} jetons.`);
+    if (!isMoney(stake) || stake < settings.minBet || stake > settings.maxBet) {
+      throw crashActionError(400, `La mise doit être comprise entre ${settings.minBet} et ${settings.maxBet} €.`);
     }
 
     const result = await withDatabaseTransaction(async () => {
@@ -1625,7 +1630,7 @@
       if (Number(user.chips) < stake) {
         throw crashActionError(400, 'Solde insuffisant pour cette mise.');
       }
-      const debit = await run('UPDATE users SET chips = chips - ? WHERE id = ? AND chips >= ?', [stake, userId, stake]);
+      const debit = await run('UPDATE users SET chips = ROUND(chips - ?, 2) WHERE id = ? AND chips >= ?', [stake, userId, stake]);
       if (debit.changes !== 1) {
         throw crashActionError(400, 'Solde insuffisant pour cette mise.');
       }
@@ -1639,7 +1644,7 @@
         INSERT INTO crash_bets (id, round_id, user_id, username, stake, status)
         VALUES (?, ?, ?, ?, ?, 'active')
       `, [bet.id, round.id, userId, user.username, stake]);
-      return { bet, round, balance: Number(user.chips) - stake, duplicate: false };
+      return { bet, round, balance: roundMoney(Number(user.chips) - stake), duplicate: false };
     });
     if (!result.duplicate) {
       activeCrashRounds.set(result.round.id, result.round);
@@ -1700,9 +1705,9 @@
         throw crashActionError(409, 'Le retrait est trop tardif ou ce pari n’est plus actif.');
       }
       const multiplier = getCrashMultiplierAt(receivedAt, Number(bet.started_at));
-      const payout = Math.floor(Number(bet.stake) * multiplier);
-      const net = payout - Number(bet.stake);
-      if (!Number.isSafeInteger(payout) || payout < 0) {
+      const payout = moneyRatio(Number(bet.stake), Math.round(multiplier * 100), 100);
+      const net = roundMoney(payout - Number(bet.stake));
+      if (!isMoney(payout) || payout < 0) {
         throw crashActionError(400, 'Le gain calculé est invalide.');
       }
       const updated = await run(`
@@ -1714,7 +1719,7 @@
         throw crashActionError(409, 'Ce pari a déjà été réglé.');
       }
       const credit = await run(
-        'UPDATE users SET chips = chips + ? WHERE id = ? AND chips <= ?',
+        'UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ? AND chips <= ?',
         [payout, userId, MAX_CHIPS - payout]
       );
       if (credit.changes !== 1) {
@@ -2116,6 +2121,13 @@
         VALUES (?, ?, ?, ?)
       `, [game, defaults.enabled ? 1 : 0, defaults.minBet, defaults.maxBet]);
     }
+    await withDatabaseTransaction(async () => {
+      const migrated = await get("SELECT setting_value FROM casino_platform_settings WHERE setting_key = 'cent_precision_v1'");
+      if (!migrated) {
+        await run('UPDATE casino_game_settings SET min_bet = 0.01 WHERE min_bet = 1');
+        await run("INSERT INTO casino_platform_settings (setting_key, setting_value) VALUES ('cent_precision_v1', 'done')");
+      }
+    });
     await initializePlinkoSchema(run);
     await initializeDiceSchema(run);
     await initializeMinesSchema(run);
@@ -2777,7 +2789,7 @@
   app.post('/api/admin/chips/distribute', requireAuth, requireAdmin, handleAsync(async (req, res) => {
     const amount = Number(req.body?.amount);
     const reason = String(req.body?.reason || '').trim().slice(0, 240);
-    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000 || !reason) {
+    if (!isMoney(amount) || amount < 0.01 || amount > 1_000_000 || !reason) {
       return res.status(400).json({ error: 'Montant ou motif invalide.' });
     }
     const outcome = await withDatabaseTransaction(async () => {
@@ -2786,7 +2798,7 @@
         return { error: 'La distribution dépasserait le solde maximal d’un joueur.' };
       }
       for (const player of players) {
-        await run('UPDATE users SET chips = chips + ? WHERE id = ?', [amount, player.id]);
+        await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ?', [amount, player.id]);
         await recordAdminAction(req.adminUserId, 'token_distribution', reason, {
           userId: player.id,
           username: player.username,
@@ -2809,8 +2821,8 @@
     const maxBet = req.body?.maxBet ?? current.maxBet;
     const reason = String(req.body?.reason || '').trim().slice(0, 240);
     if (typeof enabled !== 'boolean' || typeof maintenance !== 'boolean' ||
-        !Number.isSafeInteger(minBet) || !Number.isSafeInteger(maxBet) ||
-        minBet < 1 || maxBet < minBet || maxBet > MAX_CHIPS || !reason) {
+        !isMoney(minBet) || !isMoney(maxBet) ||
+        minBet < 0.01 || maxBet < minBet || maxBet > MAX_CHIPS || !reason) {
       return res.status(400).json({ error: 'Réglages ou motif invalides.' });
     }
     await run(`
@@ -3003,7 +3015,7 @@
     const delta = Number(req.body?.delta);
     const reason = String(req.body?.reason || '').trim().slice(0, 240);
     if (!Number.isSafeInteger(targetId) || targetId <= 0 ||
-        !Number.isSafeInteger(delta) || delta === 0 || Math.abs(delta) > 1_000_000_000 ||
+        !isMoney(delta) || delta === 0 || Math.abs(delta) > 1_000_000_000 ||
         !reason) {
       return res.status(400).json({ error: 'Montant ou motif invalide.' });
     }
@@ -3019,8 +3031,8 @@
             target.username.toLowerCase() === PRIMARY_ADMIN_USERNAME.toLowerCase()) {
           return { status: 400, error: 'Le solde de ce compte protégé ne peut pas être modifié ici.' };
         }
-        const newBalance = Number(target.chips) + delta;
-        if (!Number.isSafeInteger(newBalance) || newBalance < 0 || newBalance > MAX_CHIPS) {
+        const newBalance = roundMoney(Number(target.chips) + delta);
+        if (!isMoney(newBalance) || newBalance < 0 || newBalance > MAX_CHIPS) {
           return { status: 400, error: `Le solde résultant doit être compris entre 0 et ${MAX_CHIPS}.` };
         }
         await run('UPDATE users SET chips = ? WHERE id = ?', [newBalance, targetId]);
@@ -3348,7 +3360,7 @@
     try {
       const stake = req.body?.stake;
       if (typeof stake !== 'number') {
-        throw crashActionError(400, 'La mise doit être un nombre entier.');
+        throw crashActionError(400, 'La mise doit être un montant numérique.');
       }
       const result = await placeCrashBet(req.session.userId, stake);
       await broadcastCrashState();
@@ -3526,8 +3538,8 @@
 
     const betAmount = Number(req.body?.betAmount);
     const settings = await getGameSettings('blackjack');
-    if (!Number.isSafeInteger(betAmount) || betAmount < settings.minBet || betAmount > settings.maxBet) {
-      return res.status(400).json({ error: `La mise doit être comprise entre ${settings.minBet} et ${settings.maxBet} jetons.` });
+    if (!isMoney(betAmount) || betAmount < settings.minBet || betAmount > settings.maxBet) {
+      return res.status(400).json({ error: `La mise doit être comprise entre ${settings.minBet} et ${settings.maxBet} €.` });
     }
     let start;
     try {
@@ -3638,7 +3650,7 @@
       return res.status(400).json({ error: 'Une table doit contenir au moins 3 joueurs.' });
     }
     const settings = await getGameSettings('poker');
-    table.blinds = { small: Math.max(1, Math.floor(settings.minBet / 2)), big: settings.minBet };
+    table.blinds = { small: Math.max(0.01, moneyRatio(settings.minBet, 1, 2)), big: settings.minBet };
     try {
       if (!await startPokerRound(table)) {
         return res.status(409).json({
@@ -3661,8 +3673,8 @@
     const action = String(req.body.action || '').toLowerCase();
     const amount = Number(req.body.amount || 0);
     const settings = await getGameSettings('poker');
-    if (['bet', 'raise'].includes(action) && (!Number.isSafeInteger(amount) || amount > settings.maxBet)) {
-      return res.status(400).json({ error: `La mise maximale est de ${settings.maxBet} jetons.` });
+    if (['bet', 'raise'].includes(action) && (!isMoney(amount) || amount > settings.maxBet)) {
+      return res.status(400).json({ error: `La mise maximale est de ${settings.maxBet} €.` });
     }
     const result = table.applyAction(req.session.userId, action, amount);
     if (!result.ok) {
@@ -3702,9 +3714,9 @@
     const normalizedPayout = Number(payout);
     const normalizedNet = Number(net);
     if (!['roulette', 'slots'].includes(normalizedGame) ||
-        !Number.isSafeInteger(normalizedBet) || normalizedBet < 0 ||
-        !Number.isSafeInteger(normalizedPayout) || normalizedPayout < 0 ||
-        !Number.isSafeInteger(normalizedNet) || normalizedNet !== normalizedPayout - normalizedBet ||
+        !isMoney(normalizedBet) || normalizedBet < 0 ||
+        !isMoney(normalizedPayout) || normalizedPayout < 0 ||
+        !isMoney(normalizedNet) || toCents(normalizedNet) !== toCents(normalizedPayout) - toCents(normalizedBet) ||
         typeof result !== 'string' || result.length > 80) {
       return res.status(400).json({ error: 'Payload invalide.' });
     }
@@ -3717,7 +3729,7 @@
       return res.status(503).json({ error: 'Les mises sont temporairement suspendues.' });
     }
     if (normalizedBet < gameSettings.minBet || normalizedBet > gameSettings.maxBet) {
-      return res.status(400).json({ error: `La mise doit être comprise entre ${gameSettings.minBet} et ${gameSettings.maxBet} jetons.` });
+      return res.status(400).json({ error: `La mise doit être comprise entre ${gameSettings.minBet} et ${gameSettings.maxBet} €.` });
     }
 
     try {
@@ -3728,8 +3740,8 @@
         if (normalizedBet > Number(user.chips)) {
           return { status: 400, error: 'La mise dépasse le solde du compte.' };
         }
-        const newChips = Number(user.chips) + normalizedNet;
-        if (!Number.isSafeInteger(newChips) || newChips < 0 || newChips > MAX_CHIPS) {
+        const newChips = roundMoney(Number(user.chips) + normalizedNet);
+        if (!isMoney(newChips) || newChips < 0 || newChips > MAX_CHIPS) {
           return { status: 400, error: 'Le solde après la partie est invalide.' };
         }
         await addGameHistory(req.session.userId, normalizedGame, normalizedBet, result, normalizedPayout, normalizedNet);

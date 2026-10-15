@@ -1,3 +1,4 @@
+const { isMoney, roundMoney, moneyRatio } = require('./underground/js/money');
 const crypto = require('node:crypto');
 const { positionAt, evaluatePlacement } = require('./underground/js/tower-motion');
 const DEFAULT_MULTIPLIERS = [1.08, 1.22, 1.4, 1.64, 1.95, 2.35, 2.9, 3.65];
@@ -52,14 +53,14 @@ function registerTowerRoutes(deps) {
       score: row.floor * 100 + JSON.parse(row.platforms).filter(platform => platform.perfect).length * 25 };
   };
   async function settle(row, status, now, reason = '') {
-    const payout = status === 'CASHOUT' ? Math.floor(row.stake * Math.round(JSON.parse(row.multipliers)[row.floor - 1] * 100) / 100) : 0;
+    const payout = status === 'CASHOUT' ? moneyRatio(row.stake, Math.round(JSON.parse(row.multipliers)[row.floor - 1] * 100), 100) : 0;
     const user = await get('SELECT username, chips FROM users WHERE id = ?', [row.user_id]);
-    if (!user || !Number.isSafeInteger(user.chips + payout)) throw fail(400, 'Le solde maximal serait dépassé.');
+    if (!user || !isMoney(roundMoney(user.chips + payout))) throw fail(400, 'Le solde maximal serait dépassé.');
     const updated = await run("UPDATE tower_games SET status = ?, payout = ?, updated_at = ? WHERE id = ? AND status IN ('PLAYING', 'PLACING')", [status, payout, now, row.id]);
     if (!updated.changes) throw fail(409, 'Cette partie est déjà réglée.');
-    await run('UPDATE users SET chips = chips + ? WHERE id = ?', [payout, row.user_id]);
-    await addGameHistory(row.user_id, 'tower', row.stake, `${status === 'CASHOUT' ? 'Encaissé' : 'Perdu'} · ${row.floor} étages${reason ? ` · ${reason}` : ''}`, payout, payout - row.stake);
-    await recordBankSettlement(row.user_id, 'tower', payout - row.stake, user.username);
+    await run('UPDATE users SET chips = ROUND(chips + ?, 2) WHERE id = ?', [payout, row.user_id]);
+    await addGameHistory(row.user_id, 'tower', row.stake, `${status === 'CASHOUT' ? 'Encaissé' : 'Perdu'} · ${row.floor} étages${reason ? ` · ${reason}` : ''}`, payout, roundMoney(payout - row.stake));
+    await recordBankSettlement(row.user_id, 'tower', roundMoney(payout - row.stake), user.username);
     return { ...row, status, payout, updated_at: now };
   }
   async function expireUser(userId, now) {
@@ -85,7 +86,7 @@ function registerTowerRoutes(deps) {
       const { requestId, gameId, floor, stake } = req.body || {};
       const request = action === 'start' ? { stake } : action === 'place' ? { gameId, floor } : { gameId };
       if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{16,80}$/.test(requestId) ||
-          (action === 'start' ? !Number.isSafeInteger(stake) || stake < 1 || stake > 1_000_000 : typeof gameId !== 'string' || !/^[a-f0-9-]{36}$/.test(gameId) || action === 'place' && (!Number.isInteger(floor) || floor < 0 || floor >= 8))) {
+          (action === 'start' ? !isMoney(stake) || stake < 0.01 || stake > 1_000_000 : typeof gameId !== 'string' || !/^[a-f0-9-]{36}$/.test(gameId) || action === 'place' && (!Number.isInteger(floor) || floor < 0 || floor >= 8))) {
         return res.status(400).json({ error: 'Paramètres Tower Rush invalides.' });
       }
       try {
@@ -106,7 +107,7 @@ function registerTowerRoutes(deps) {
             if (stake < settings.minBet || stake > settings.maxBet) throw fail(400, 'Mise hors des limites autorisées.');
             if (isUserInActiveTable(userId) || await hasActiveCrashBet(userId) || await get("SELECT id FROM horse_races WHERE user_id = ? AND status != 'settled'", [userId])) throw fail(409, 'Termine ta partie en cours avant de construire une tour.');
             if (await get("SELECT id FROM tower_games WHERE user_id = ? AND status IN ('PLAYING', 'PLACING')", [userId])) throw fail(409, 'Tu as déjà une tour en cours.');
-            const debit = await run('UPDATE users SET chips = chips - ? WHERE id = ? AND chips >= ?', [stake, userId, stake]);
+            const debit = await run('UPDATE users SET chips = ROUND(chips - ?, 2) WHERE id = ? AND chips >= ?', [stake, userId, stake]);
             if (!debit.changes) throw fail(400, 'Solde insuffisant.');
             const id = crypto.randomUUID(), readyAt = now + 500;
             await run(`INSERT INTO tower_games (id, user_id, stake, status, platforms, motion, multipliers, ready_at, expires_at, created_at, updated_at)
