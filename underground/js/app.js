@@ -26,7 +26,7 @@ async function initializeApp() {
     console.error("Impossible de charger les paramètres des jeux:", error);
   }
 
-  await crashModule.initialize();
+  const crashReady = crashModule.initialize().catch(error => console.error('Initialisation Crash :', error));
   plinkoModule.initialize();
   diceModule.initialize();
   minesModule.initialize();
@@ -55,6 +55,7 @@ async function initializeApp() {
   pokerModule.initialize();
   slotsModule.initialize();
   adminModule.initialize(accountUser.isAdmin, accountUser.supportMode, accountUser.username, accountUser.isPrimaryAdmin);
+  await crashReady;
 }
 
 function applyGameAvailability() {
@@ -132,6 +133,7 @@ function showView(viewName) {
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.toggle("active", button.dataset.view === viewName);
   });
+  adminModule.setActive?.(viewName === "admin");
   crashModule.setActive(viewName === "crash");
   plinkoModule.setActive(viewName === "plinko");
   diceModule.setActive(viewName === "dice");
@@ -383,10 +385,17 @@ function renderHistoryList(container, historyList, compact = false) {
     .join("");
 }
 
+let leaderboardRequest = null;
+function loadLeaderboard() {
+  if (!leaderboardRequest) leaderboardRequest = fetch('/api/leaderboard')
+    .then(response => { if (!response.ok) throw new Error('Classement indisponible'); return response.json(); })
+    .finally(() => { leaderboardRequest = null; });
+  return leaderboardRequest;
+}
+
 function renderLeaderboardMini() {
   const container = document.getElementById("homeLeaderboard");
-  fetch("/api/leaderboard")
-    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Classement indisponible")))
+  loadLeaderboard()
     .then(({ leaderboard }) => {
       container.replaceChildren(...leaderboard.slice(0, 5).map((row, index) => {
         const entry = document.createElement("div");
@@ -406,9 +415,7 @@ function renderLeaderboardMini() {
 async function renderLeaderboard() {
   const container = document.getElementById("leaderboardBoard");
   try {
-    const response = await fetch("/api/leaderboard");
-    if (!response.ok) throw new Error("Classement indisponible");
-    const { leaderboard } = await response.json();
+    const { leaderboard } = await loadLeaderboard();
     container.replaceChildren(...leaderboard.map((row, index) => {
         const entry = document.createElement("div");
         entry.className = "leaderboard-row";

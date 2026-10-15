@@ -6,6 +6,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   const http = require('http');
   const session = require('express-session');
   const bcrypt = require('bcryptjs');
+  const { createPasswordService } = require('./password-service');
+  const passwordService = createPasswordService();
   const sqlite3 = require('sqlite3').verbose();
   const path = require('path');
   const fs = require('fs');
@@ -103,6 +105,18 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     path.join(__dirname, 'public'),
     path.join(__dirname, 'TCG-casino', 'public')
   );
+
+  // Public immutable code/assets do not need a session lookup or SQLite touch.
+  app.get('/assets/fps/models.bin', (req, res, next) => {
+    const archive = path.join(GAME_DIR, 'assets/fps/models.bin.gz');
+    res.vary('Accept-Encoding');
+    if (!req.acceptsEncodings('gzip') || !fs.existsSync(archive)) return next();
+    res.set('Content-Encoding', 'gzip');res.type('application/octet-stream');res.sendFile(archive);
+  });
+  for (const directory of ['js', 'css', 'assets']) {
+    app.use('/' + directory, express.static(path.join(GAME_DIR, directory), { index: false, fallthrough: true }));
+  }
+  app.use('/auth-assets', express.static(AUTH_DIR, { index: false }));
 
   const sessionStore = new SQLiteStore({
     db: 'sessions.sqlite',
@@ -2518,12 +2532,6 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     return isPng || isJpeg || isWebp ? `data:image/${match[1]};base64,${match[2]}` : null;
   }
 
-  app.get('/assets/fps/models.bin', (req, res, next) => {
-    const archive = path.join(GAME_DIR, 'assets/fps/models.bin.gz');
-    res.vary('Accept-Encoding');
-    if (!req.acceptsEncodings('gzip') || !fs.existsSync(archive)) return next();
-    res.set('Content-Encoding', 'gzip');res.type('application/octet-stream');res.sendFile(archive);
-  });
   app.use(express.static(GAME_DIR, { index: false }));
   app.use('/auth-assets', express.static(AUTH_DIR));
 
@@ -2593,6 +2601,14 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     message: { error: 'Trop de tentatives de création de compte. Réessaie plus tard.' }
   });
 
+  const loginLimiter = rateLimit({
+    windowMs: 60000,
+    limit: 30,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: { error: 'Trop de tentatives de connexion. Patiente une minute avant de réessayer.' }
+  });
+
   const registrationCaptcha = createRegistrationCaptcha({ run, get, withDatabaseTransaction, secret: SESSION_SECRET });
   const captchaLimiter = rateLimit({ windowMs: REGISTRATION_RATE_WINDOW_MS, limit: REGISTRATION_CAPTCHA_RATE_LIMIT,
     standardHeaders: 'draft-8', legacyHeaders: false,
@@ -2642,7 +2658,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         return res.status(409).json({ error: 'Ce pseudo est déjà utilisé.' });
       }
 
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await passwordService.hash(password, 10);
       const created = await run(
         'INSERT INTO users (username, password_hash, avatar, chips) VALUES (?, ?, ?, 0)',
         [username, passwordHash, '🎲']
@@ -2654,12 +2670,13 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
       const user = await getUserById(created.id);
       return res.status(201).json({ ok: true, user });
     } catch (error) {
+      if (error.code === 'PASSWORD_BUSY') return res.set('Retry-After', '2').status(429).json({ error: error.message });
       console.error('Erreur register:', error);
       return res.status(500).json({ error: 'Erreur lors de l’inscription.' });
     }
   }));
 
-  app.post('/api/login', async (req, res) => {
+  app.post('/api/login', loginLimiter, async (req, res) => {
     const username = String(req.body.username || '').trim();
     const password = String(req.body.password || '');
 
@@ -2668,12 +2685,12 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     }
 
     try {
-      const user = await get('SELECT * FROM users WHERE username = ?', [username]);
+      const user = await get('SELECT id, username, password_hash, avatar, chips, created_at, is_admin, is_banned, is_bank, suspended_until FROM users WHERE username = ?', [username]);
       if (!user) {
         return res.status(404).json({ error: 'Compte introuvable.' });
       }
 
-      const valid = await bcrypt.compare(password, user.password_hash);
+      const valid = await passwordService.compare(password, user.password_hash);
       if (!valid) {
         return res.status(401).json({ error: 'Mot de passe incorrect.' });
       }
@@ -2706,6 +2723,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         }
       });
     } catch (error) {
+      if (error.code === 'PASSWORD_BUSY') return res.set('Retry-After', '2').status(429).json({ error: error.message });
       console.error('Erreur login:', error);
       return res.status(500).json({ error: 'Erreur lors de la connexion.' });
     }

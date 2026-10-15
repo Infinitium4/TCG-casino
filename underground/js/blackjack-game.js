@@ -1,6 +1,6 @@
 const blackjackGame = (() => {
   const tableId = window.location.pathname.split('/').filter(Boolean).pop();
-  const state = { table: null, socket: null, poller: null, actionPending: false, requestVersion: 0 };
+  const state = { table: null, socket: null, poller: null, actionPending: false, requestVersion: 0, refreshPromise: null, refreshAgain: false };
 
   function getCurrentUserId() {
     return Number(accountUser?.id ?? getPlayer()?.id ?? 0);
@@ -316,6 +316,16 @@ const blackjackGame = (() => {
   }
 
   async function refreshTable() {
+    if(state.actionPending)return;
+    if(state.refreshPromise){state.refreshAgain=true;return state.refreshPromise;}
+    state.refreshPromise=fetchTable().finally(()=>{
+      state.refreshPromise=null;
+      if(state.refreshAgain){state.refreshAgain=false;refreshTable();}
+    });
+    return state.refreshPromise;
+  }
+
+  async function fetchTable() {
     if (state.actionPending) return;
     const requestVersion = ++state.requestVersion;
     try {
@@ -341,8 +351,10 @@ const blackjackGame = (() => {
 
   function attachSocket() {
     if (!window.io) return;
-    state.socket = io();
-    state.socket.on('connect', () => state.socket.emit('blackjack:table:join', { tableId }));
+    state.socket = window.casinoRealtime?.getSocket() || io();
+    const subscribe = () => state.socket.emit('blackjack:table:join', { tableId });
+    if (window.casinoRealtime) window.casinoRealtime.onReady(subscribe);
+    else state.socket.on('connect', subscribe);
     state.socket.on('blackjack:table:update', (table) => {
       if (String(table.id) === String(tableId)) refreshTable();
     });

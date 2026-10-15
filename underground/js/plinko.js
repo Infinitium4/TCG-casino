@@ -217,7 +217,7 @@ const plinkoModule = (() => {
       const max = Math.min(state.balance, config.settings.maxBet, 1_000_000);
       input.value = Math.min(max, Math.max(config.settings.minBet, button.dataset.plinkoAdjust === 'max' ? max : roundMoney(Number(input.value) * Number(button.dataset.plinkoAdjust))));
     }));
-    state.socket = window.io ? io() : null;
+    state.socket = window.io ? (window.casinoRealtime?.getSocket() || io()) : null;
     state.socket?.on('session:ready', () => { if (state.active) state.socket.emit('plinko:subscribe'); });
     state.socket?.on('plinko:drop', drop => {
       state.recent = [drop, ...state.recent.filter(entry => entry.id !== drop.id)].slice(0, 20); renderRecent();

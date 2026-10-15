@@ -52,13 +52,15 @@ const crashModule = (() => {
     document.addEventListener('visibilitychange', updateAnimation);
 
     if (window.io) {
-      state.socket = io();
-      state.socket.on('connect', () => {
+      state.socket = window.casinoRealtime?.getSocket() || io();
+      const subscribe = () => {
         if (!state.active) return;
         state.socket.emit('crash:sync', (payload) => {
           if (payload?.ok) updateState(payload);
         });
-      });
+      };
+      if (window.casinoRealtime) window.casinoRealtime.onReady(subscribe);
+      else state.socket.on('connect', subscribe);
       state.socket.on('crash:state', updateState);
       state.socket.on('crash:error', (payload) => {
         setFeedback(payload?.message || 'La connexion au jeu Crash a échoué.', true);

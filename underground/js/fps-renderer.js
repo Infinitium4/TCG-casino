@@ -6,9 +6,9 @@ window.FpsRenderer = class FpsRenderer {
     const gl=this.gl=canvas.getContext('webgl',{antialias:true,alpha:false,powerPreference:'high-performance'});
     if(!gl)throw Error('WebGL n’est pas disponible. Active l’accélération graphique de ton navigateur.');
     const vertex=`attribute vec3 position;attribute vec3 normal;attribute vec3 color;attribute float glow;
-      uniform mat4 matrix;uniform vec3 eye;varying vec3 tint;varying float fog;varying vec3 surfaceNormal;varying vec3 viewDirection;varying float emission;
-      void main(){tint=color;surfaceNormal=normal;viewDirection=eye-position;emission=glow;
-      fog=1.-exp(-length(position-eye)*.026);gl_Position=matrix*vec4(position,1.);}`;
+      uniform mat4 matrix;uniform mat4 model;uniform vec3 eye;varying vec3 tint;varying float fog;varying vec3 surfaceNormal;varying vec3 viewDirection;varying float emission;
+      void main(){vec4 world=model*vec4(position,1.);tint=color;surfaceNormal=mat3(model)*normal;viewDirection=eye-world.xyz;emission=glow;
+      fog=1.-exp(-length(world.xyz-eye)*.026);gl_Position=matrix*world;}`;
     const fragment=`precision mediump float;varying vec3 tint;varying float fog;varying vec3 surfaceNormal;varying vec3 viewDirection;varying float emission;
       void main(){vec3 n=normalize(surfaceNormal),v=normalize(viewDirection),l=normalize(vec3(-.4,.9,.6));
       float diffuse=.30+.65*max(0.,dot(n,l))+.13*max(0.,dot(n,normalize(vec3(.6,.2,-.7))));
@@ -21,6 +21,7 @@ window.FpsRenderer = class FpsRenderer {
     if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('Initialisation graphique impossible.');
     gl.useProgram(program);gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);
     this.matrix=gl.getUniformLocation(program,'matrix');this.eye=gl.getUniformLocation(program,'eye');
+    this.model=gl.getUniformLocation(program,'model');this.identity=new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
     this.locations=['position','normal','color','glow'].map(name=>gl.getAttribLocation(program,name));
     this.staticBuffer=gl.createBuffer();this.dynamicBuffer=gl.createBuffer();
     const geometry=[];this.buildArena(geometry);
@@ -168,7 +169,7 @@ window.FpsRenderer = class FpsRenderer {
     box(0,.115,-.30,.018,.065,.025,polymer);box(0,.145,-.30,.045,.015,.025,edge);
     for(const z of [-.11,.09])tube(.051,.005,z,.008,.007,edge);
   }
-  character(out,p,skin,time=0,showcase=false){
+  characterVertices(p,skin,time=0,showcase=false){
     this.characterCache ||= new Map();
     const pose=p.moving&&!showcase?'soldier-run-'+Math.floor(time/80)%8:'soldier-idle',key=skin.id+pose;
     if(!this.characterCache.has(key)){
@@ -184,13 +185,26 @@ window.FpsRenderer = class FpsRenderer {
       }else this.characterModel(vertices,{x:0,y:0,yaw:0,height:0,health:100,protectedUntil:0},skin,0,false);
       this.characterCache.set(key,new Float32Array(vertices));
     }
-    const vertices=this.characterCache.get(key),c=Math.cos(p.yaw),s=Math.sin(p.yaw),h=p.height||0;
+    return this.characterCache.get(key);
+  }
+  character(out,p,skin,time=0,showcase=false){
+    const vertices=this.characterVertices(p,skin,time,showcase),c=Math.cos(p.yaw),s=Math.sin(p.yaw),h=p.height||0;
     for(let i=0;i<vertices.length;i+=10){
       const x=vertices[i],z=vertices[i+2],nx=vertices[i+3],nz=vertices[i+5];
       out.push(p.x+x*c-z*s,h+vertices[i+1],p.y+x*s+z*c,nx*c-nz*s,vertices[i+4],nx*s+nz*c,vertices[i+6],vertices[i+7],vertices[i+8],vertices[i+9]);
     }
     if(showcase)this.ellipsoid(out,p.x,h+.015,p.y,.39,.015,.25,[.035,.025,.018],p.yaw);
     if(p.protectedUntil>Date.now())this.box(out,p.x,h+.03,p.y,.8,.035,.8,skin.trim,p.yaw,0,.5);
+  }
+  characterMatrix(p){
+    const c=Math.cos(p.yaw),s=Math.sin(p.yaw);
+    return new Float32Array([c,0,s,0,0,1,0,0,-s,0,c,0,p.x,p.height||0,p.y,1]);
+  }
+  drawCharacter(p,skin,time,showcase){
+    const gl=this.gl,vertices=this.characterVertices(p,skin,time,showcase);
+    this.characterBuffers ||= new Map();let buffer=this.characterBuffers.get(vertices);
+    if(!buffer){buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,vertices,gl.STATIC_DRAW);this.characterBuffers.set(vertices,buffer);}
+    gl.uniformMatrix4fv(this.model,false,this.characterMatrix(p));this.bind(buffer);gl.drawArrays(gl.TRIANGLES,0,vertices.length/10);
   }
   characterModel(out,p,skin,time=0,showcase=false){
     if(['athlete','sport'].includes(skin.style))return this.signatureModel(out,p,skin,showcase);
@@ -423,7 +437,7 @@ window.FpsRenderer = class FpsRenderer {
     const camera=[eye[0],eye[1]+bob,eye[2]];
     gl.clearColor(.045,.028,.022,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(this.program);
     const matrix=this.viewMatrix(camera,yaw,pitch+recoil*.025,width/height,aim?1.35:1);
-    gl.uniformMatrix4fv(this.matrix,false,matrix);gl.uniform3fv(this.eye,camera);
+    gl.uniformMatrix4fv(this.matrix,false,matrix);gl.uniform3fv(this.eye,camera);gl.uniformMatrix4fv(this.model,false,this.identity);
     if(!showcase){this.bind(this.staticBuffer);gl.drawArrays(gl.TRIANGLES,0,this.staticCount);}
     const dynamic=[];
     if(showcase){
@@ -441,8 +455,11 @@ window.FpsRenderer = class FpsRenderer {
     for(const p of players) {
       if(p.id===me?.id||p.health<=0)continue;
       const skin=FpsSkins.find(s=>s.id===p.skin)||FpsSkins[0];
-      this.character(dynamic,p,skin,time,showcase);
+      this.drawCharacter(p,skin,time,showcase);
+      if(showcase)this.ellipsoid(dynamic,p.x,(p.height||0)+.015,p.y,.39,.015,.25,[.035,.025,.018],p.yaw);
+      if(p.protectedUntil>Date.now())this.box(dynamic,p.x,(p.height||0)+.03,p.y,.8,.035,.8,skin.trim,p.yaw,0,.5);
     }
+    gl.uniformMatrix4fv(this.model,false,this.identity);
     for(const chest of chests){
       const x=chest.x,z=chest.z,h=chest.height,opened=chest.readyAt>serverNow;
       if(this.assets){this.assets.append(dynamic,'crate-medium',[x,h,z],[1.45,1.5,.65]);this.box(dynamic,x,h+.35,z+.33,.12,.07,.02,opened?[.12,.16,.12]:[.9,.6,.2],0,0,opened?0:.6);continue;}

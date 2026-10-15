@@ -1,0 +1,95 @@
+{
+  "measuredAt": "2026-10-15T20:46:10.480Z",
+  "reports": [
+    {
+      "page": "/game",
+      "initial": {
+        "title": "UNDERGROUND",
+        "text": "UNDERGROUND\nPRIVATE CLUB\nJETONS\n1 500,00\n🕶️\nDIAGNOSTIC\n⚙\nDÉCONNEXION\nACCUEIL\nROULETTE\nCOURSES HIPPIQUES\nBLACKJACK\nPOKER\nMACHINE À SOUS\nCRASH\nPLINKO\nCLICKER\nDICE\nMINES\nTOWER RUSH\nNEON BREACH · FPS\nCLASSEMENT\nPROFIL\nADMINISTRATION\n\nREPÀIRE SECRET\n\nLA CHANCE N'ENTRE PAS ICI PAR HASARD.\n\nBienvenue dans le repaire. Choisis ta table et tente ta chance.\n\n🏇\nCourses hippiques\n\nCinq champions, une ligne d’arrivée. Choisis ton cheval et vise un gain ×4.\n\nENTRER À L’HIPPODROME\n◉\nPlinko\n\n16 rebonds. Une ca",
+        "ready": "complete",
+        "images": 2
+      },
+      "delta": {
+        "TaskDuration": 0.003059000000000034,
+        "ScriptDuration": 0.0006910000000000006,
+        "LayoutDuration": 0.00015199999999999936,
+        "RecalcStyleDuration": 0.00004700000000000017,
+        "LayoutCount": 1,
+        "RecalcStyleCount": 1,
+        "JSHeapUsedSize": 1601572
+      },
+      "errors": [],
+      "requests": [
+        "/game",
+        "/css/style.css",
+        "/css/plinko.css",
+        "/css/dice.css",
+        "/css/mines.css",
+        "/css/tower.css",
+        "/css/clicker.css",
+        "/css/horses.css",
+        "/css/bunker.css",
+        "/underground-mark.svg",
+        "/socket.io/socket.io.js",
+        "/js/realtime.js?v=1",
+        "/js/money.js",
+        "/js/utils.js",
+        "/js/screen-time.js",
+        "/js/storage.js",
+        "/js/roulette.js",
+        "/js/crash.js",
+        "/js/plinko.js",
+        "/js/dice.js",
+        "/js/mines.js",
+        "/js/tower-motion.js",
+        "/js/tower.js",
+        "/js/clicker.js",
+        "/js/blackjack.js",
+        "/js/poker.js",
+        "/js/slots.js",
+        "/js/admin.js",
+        "/js/horses.js",
+        "/js/app.js",
+        "/js/general-chat.js?v=1",
+        "/js/platform-maintenance.js?v=1",
+        "/css/general-chat.css?v=1",
+        "/api/chat",
+        "/api/maintenance",
+        "/api/me",
+        "/api/history",
+        "/socket.io/?EIO=4&transport=polling&t=0dkm7qwm",
+        "/socket.io/?EIO=4&transport=polling&t=0dkmggpr&sid=7j7nFrrkOCanmTtTAAAA",
+        "/socket.io/?EIO=4&transport=polling&t=0dkmimu7&sid=7j7nFrrkOCanmTtTAAAA",
+        "/api/game-settings",
+        "/api/screen-time/heartbeat",
+        "/api/chat",
+        "/api/crash/status",
+        "/api/horses/state",
+        "/api/leaderboard",
+        "/api/blackjack/tables",
+        "/api/poker/tables",
+        "/api/crash/state",
+        "/api/maintenance"
+      ],
+      "hotspots": [
+        {
+          "function": "(idle)",
+          "file": "",
+          "hits": 3158
+        },
+        {
+          "function": "(program)",
+          "file": "",
+          "hits": 2
+        }
+      ]
+    }
+  ],
+  "smoke": {
+    "adminAccounts": 13,
+    "blackjackTable": true,
+    "blackjackStarted": true,
+    "dealerCards": 2,
+    "errors": []
+  }
+}

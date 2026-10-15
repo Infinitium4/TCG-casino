@@ -277,10 +277,12 @@ const pokerGame = (() => {
       return;
     }
 
-    state.socket = io();
-    state.socket.on('connect', () => {
+    state.socket = window.casinoRealtime?.getSocket() || io();
+    const subscribe = () => {
       state.socket.emit('poker:table:join', { tableId });
-    });
+    };
+    if (window.casinoRealtime) window.casinoRealtime.onReady(subscribe);
+    else state.socket.on('connect', subscribe);
 
     state.socket.on('poker:table:update', (payload) => {
       if (String(payload.id) === String(tableId)) {

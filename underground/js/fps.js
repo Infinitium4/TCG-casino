@@ -321,19 +321,22 @@
     await refreshFpsShop();
     const arenaArt=FpsRenderer.arenaPreview?.();
     const modeArt=document.querySelector?.('.mode-art');if(arenaArt&&modeArt){modeArt.style.backgroundImage='url('+arenaArt+')';modeArt.classList.add('has-art');}
-    renderer=new FpsRenderer($('arena'));socket=io();
+    renderer=new FpsRenderer($('arena'));socket=window.casinoRealtime?.getSocket()||io();
     const invitedRoom=new URLSearchParams(location.search).get('room');let inviteUsed=false;
     socket.on('fps:state',accept);
     socket.on('fps:presence',users=>{onlineUsers=users;renderOnline();});
     socket.on('fps:invitation',invite=>{pendingInvite=invite;text('invitationFrom',invite.from+' t’invite à jouer');text('invitationRoom',invite.roomName);$('invitationToast').hidden=false;});
     socket.on('fps:kicked',payload=>backToLobby(payload?.message||'Tu as été expulsé de ce salon.'));
-    socket.on('connect',()=>{
+    const connected=()=>{
       socket.emit('fps:lobby');
       if(practice)return;
       if(joined&&roomId) {
         const previous=roomId;backToLobby('Reconnexion au salon…');join({roomId:previous});
       }else{refreshRooms();if(invitedRoom&&!inviteUsed){inviteUsed=true;join({roomId:invitedRoom});}}
-    });
+    };
+    if(window.casinoRealtime)window.casinoRealtime.onReady(connected);
+    else socket.on('connect',connected);
+
     socket.on('connect_error',()=>{if(practice)return;hint('Connexion au serveur impossible. Tu peux quand même utiliser Tester en solo.');showPause();});
     socket.on('disconnect',()=>{if(practice)return;clearInput();if(locked())document.exitPointerLock();showPause();});
     $('testSolo').addEventListener('click',startPractice);

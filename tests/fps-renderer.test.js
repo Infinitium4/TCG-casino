@@ -30,3 +30,16 @@ test('the multilevel arena generates valid geometry above both floor levels',()=
     assert.ok(Math.abs(world.rayWorld([x,4,z],[0,-1,0])-1)<.001);
   }
 });
+test('GPU character transforms match the existing world geometry and unchanged poses upload only once',()=>{
+  const r=renderer(),skin=skins[0],p={x:2,y:7,height:3,yaw:.7,health:100};
+  const local=r.characterVertices(p,skin,0,false),worldVertices=[];r.character(worldVertices,p,skin,0,false);
+  const matrix=r.characterMatrix(p);
+  for(let i=0;i<local.length;i+=Math.max(10,Math.floor(local.length/640)*10)){
+    const x=local[i],y=local[i+1],z=local[i+2];
+    for(const [axis,value] of [[0,matrix[0]*x+matrix[8]*z+matrix[12]],[1,y+matrix[13]],[2,matrix[2]*x+matrix[10]*z+matrix[14]]])assert.ok(Math.abs(value-worldVertices[i+axis])<1e-6);
+  }
+  let uploads=0,draws=0;
+  r.bind=()=>{};r.gl={createBuffer:()=>({}),bindBuffer(){},bufferData(){uploads++;},uniformMatrix4fv(){},drawArrays(){draws++;}};
+  r.drawCharacter(p,skin,0,false);r.drawCharacter({...p,x:4},skin,16,false);r.drawCharacter({...p,yaw:1},skin,32,false);
+  assert.equal(uploads,1);assert.equal(draws,3);
+});

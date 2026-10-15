@@ -456,6 +456,13 @@ const adminModule = (() => {
     }
   }
 
+  let loaded=false;
+  function setActive(active) {
+    if(!active||!state.username)return;
+    if(!loaded){loaded=true;loadAccounts();loadBank();loadOverview();loadSettings();loadAudit();}
+    else loadOverview();
+  }
+
   function initialize(isAdmin, supportMode, username, isPrimaryAdmin) {
     const navButton = document.getElementById('adminNavButton');
     const supportBanner = document.getElementById('supportModeBanner');
@@ -588,13 +595,9 @@ const adminModule = (() => {
       } catch(error) {feedback.textContent = error.message;}
       finally {button.disabled = false;}
     });
-    loadAccounts();
-    loadBank();
-    loadOverview();
-    loadSettings();
-    loadAudit();
+    setActive(document.getElementById('adminView')?.classList.contains('active'));
     window.setInterval(() => { if (!document.hidden && document.getElementById('adminView')?.classList.contains('active')) loadOverview(); }, 5000);
   }
 
-  return { initialize };
+  return { initialize, setActive };
 })();

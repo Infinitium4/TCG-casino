@@ -1,0 +1,216 @@
+{
+  "measuredAt": "2026-10-15T20:43:06.876Z",
+  "reports": [
+    {
+      "page": "/game",
+      "initial": {
+        "title": "UNDERGROUND",
+        "text": "UNDERGROUND\nPRIVATE CLUB\nJETONS\n1 500,00\n🕶️\nDIAGNOSTIC\n⚙\nDÉCONNEXION\nACCUEIL\nROULETTE\nCOURSES HIPPIQUES\nBLACKJACK\nPOKER\nMACHINE À SOUS\nCRASH\nPLINKO\nCLICKER\nDICE\nMINES\nTOWER RUSH\nNEON BREACH · FPS\nCLASSEMENT\nPROFIL\nADMINISTRATION\n\nREPÀIRE SECRET\n\nLA CHANCE N'ENTRE PAS ICI PAR HASARD.\n\nBienvenue dans le repaire. Choisis ta table et tente ta chance.\n\n🏇\nCourses hippiques\n\nCinq champions, une ligne d’arrivée. Choisis ton cheval et vise un gain ×4.\n\nENTRER À L’HIPPODROME\n◉\nPlinko\n\n16 rebonds. Une ca",
+        "ready": "complete",
+        "images": 2
+      },
+      "delta": {
+        "TaskDuration": 0.003230999999999984,
+        "ScriptDuration": 0.0005600000000000015,
+        "LayoutDuration": 0.00019000000000000267,
+        "RecalcStyleDuration": 0.000086000000000001,
+        "LayoutCount": 1,
+        "RecalcStyleCount": 1,
+        "JSHeapUsedSize": 1602752
+      },
+      "errors": [],
+      "requests": [
+        "/game",
+        "/css/style.css",
+        "/css/plinko.css",
+        "/css/dice.css",
+        "/css/mines.css",
+        "/css/tower.css",
+        "/css/clicker.css",
+        "/css/horses.css",
+        "/css/bunker.css",
+        "/underground-mark.svg",
+        "/socket.io/socket.io.js",
+        "/js/realtime.js?v=1",
+        "/js/money.js",
+        "/js/utils.js",
+        "/js/screen-time.js",
+        "/js/storage.js",
+        "/js/roulette.js",
+        "/js/crash.js",
+        "/js/plinko.js",
+        "/js/dice.js",
+        "/js/mines.js",
+        "/js/tower-motion.js",
+        "/js/tower.js",
+        "/js/clicker.js",
+        "/js/blackjack.js",
+        "/js/poker.js",
+        "/js/slots.js",
+        "/js/admin.js",
+        "/js/horses.js",
+        "/js/app.js",
+        "/js/general-chat.js?v=1",
+        "/js/platform-maintenance.js?v=1",
+        "/css/general-chat.css?v=1",
+        "/api/chat",
+        "/api/maintenance",
+        "/api/me",
+        "/api/history",
+        "/socket.io/?EIO=4&transport=polling&t=09k9w520",
+        "/api/game-settings",
+        "/api/screen-time/heartbeat",
+        "/socket.io/?EIO=4&transport=polling&t=09ka9pip&sid=lSoWOxOWQ9sNPKTtAAAA",
+        "/socket.io/?EIO=4&transport=polling&t=09kabtcm&sid=lSoWOxOWQ9sNPKTtAAAA",
+        "/api/chat",
+        "/api/crash/status",
+        "/api/crash/state",
+        "/api/horses/state",
+        "/api/leaderboard",
+        "/api/blackjack/tables",
+        "/api/poker/tables",
+        "/api/maintenance"
+      ],
+      "hotspots": [
+        {
+          "function": "(idle)",
+          "file": "",
+          "hits": 3165
+        },
+        {
+          "function": "(program)",
+          "file": "",
+          "hits": 3
+        }
+      ]
+    },
+    {
+      "page": "/fps",
+      "initial": {
+        "title": "NEON BREACH · UNDERGROUND",
+        "text": "U\nUNDERGROUND\nNEON BREACH\nJOUER\nVESTIAIRE\nBOUTIQUE\nJETONS CASINO\n1 500 €\nRetour au casino ↗\n\nUNDERGROUND / COLLECTION 02\n\nNEON\nBREACH\n\nTON GROUPE. TON TERRAIN.\n\nTHE FOUNDRY · RELOADED\n01\nThe Foundry\n\nMatch à mort · Jusqu’à 8 joueurs\n\n03 MINUTES\n20 ÉLIMINATIONS\nNOMME TON GROUPE\nCRÉER MON GROUPE\n↗\nRejoindre un salon\n▶\nTester en solo\nArène vide · sans bots · temps illimité\n↗\n\nAccès gratuit · Skins cosmétiques\nClavier et souris recommandés\n\nPRÊT POUR L’ARÈNE\nDIAGNOSTIC\nUnderground\nTON STYLE. TA SIGN",
+        "ready": "complete",
+        "images": 9
+      },
+      "delta": {
+        "TaskDuration": 0.2381850000000001,
+        "ScriptDuration": 0.126475,
+        "LayoutDuration": 0,
+        "RecalcStyleDuration": 0.0000499999999999997,
+        "LayoutCount": 0,
+        "RecalcStyleCount": 1,
+        "JSHeapUsedSize": 61833336
+      },
+      "errors": [],
+      "requests": [
+        "/fps",
+        "/css/fps.css",
+        "/css/fps-lobby.css?v=art-5",
+        "/socket.io/socket.io.js",
+        "/js/realtime.js?v=1",
+        "/js/money.js",
+        "/js/utils.js",
+        "/js/screen-time.js",
+        "/js/storage.js",
+        "/js/fps-shared.js?v=perf-7",
+        "/js/fps-skins.js?v=portraits-6",
+        "/js/fps-assets.js?v=art-5",
+        "/js/fps-audio.js?v=art-5",
+        "/js/fps-vfx.js?v=art-5",
+        "/js/fps-renderer.js?v=gpu-8",
+        "/js/fps-loot.js?v=art-5",
+        "/js/fps-practice.js?v=art-5",
+        "/js/fps-shop.js?v=portraits-6",
+        "/js/fps.js?v=perf-7",
+        "/js/general-chat.js?v=1",
+        "/js/platform-maintenance.js?v=1",
+        "/api/me",
+        "/api/history",
+        "/css/general-chat.css?v=1",
+        "/api/chat",
+        "/api/maintenance",
+        "/favicon.ico",
+        "/socket.io/?EIO=4&transport=polling&t=09qsztqp",
+        "/socket.io/?EIO=4&transport=polling&t=09qt70xy&sid=saclIGLAwXZRmKmnAAAB",
+        "/socket.io/?EIO=4&transport=polling&t=09qt8264&sid=saclIGLAwXZRmKmnAAAB",
+        "/assets/fps/models.json?v=art-5",
+        "/assets/fps/models.bin?v=art-5",
+        "/api/screen-time/heartbeat",
+        "/api/chat",
+        "/api/fps/shop",
+        "/api/fps/rooms",
+        "/api/fps/rooms",
+        "/assets/fps/kenney-particles/muzzle_01.png",
+        "/assets/fps/kenney-particles/muzzle_03.png",
+        "/assets/fps/kenney-particles/spark_05.png",
+        "/assets/fps/kenney-particles/smoke_04.png",
+        "/assets/fps/kenney-particles/scorch_01.png",
+        "/assets/fps/kenney-particles/trace_01.png",
+        "/api/maintenance",
+        "/api/fps/rooms"
+      ],
+      "hotspots": [
+        {
+          "function": "(idle)",
+          "file": "",
+          "hits": 3017
+        },
+        {
+          "function": "(program)",
+          "file": "",
+          "hits": 73
+        },
+        {
+          "function": "ellipsoid",
+          "file": "/js/fps-renderer.js?v=gpu-8",
+          "hits": 31
+        },
+        {
+          "function": "box",
+          "file": "/js/fps-renderer.js?v=gpu-8",
+          "hits": 11
+        },
+        {
+          "function": "upload",
+          "file": "/js/fps-renderer.js?v=gpu-8",
+          "hits": 7
+        },
+        {
+          "function": "draw",
+          "file": "/js/fps-renderer.js?v=gpu-8",
+          "hits": 6
+        },
+        {
+          "function": "requestAnimationFrame",
+          "file": "",
+          "hits": 6
+        },
+        {
+          "function": "frame",
+          "file": "/js/fps.js?v=perf-7",
+          "hits": 5
+        },
+        {
+          "function": "point",
+          "file": "/js/fps-renderer.js?v=gpu-8",
+          "hits": 5
+        },
+        {
+          "function": "clear",
+          "file": "",
+          "hits": 3
+        },
+        {
+          "function": "(garbage collector)",
+          "file": "",
+          "hits": 2
+        },
+        {
+          "function": "point",
+          "file": "/js/fps-renderer.js?v=gpu-8",
+          "hits": 1
+        }
+      ]
+    }
+  ]
+}
