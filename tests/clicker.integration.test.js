@@ -157,7 +157,19 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
   const challengeSvg = decodeURIComponent(challenge.body.image.slice(challenge.body.image.indexOf(',') + 1));
   assert.match(challengeSvg, /<path d=/);
   assert.doesNotMatch(challengeSvg, /<text/);
-  const registration = { username: 'captcha-player', password: 'player-password', captchaId: challenge.body.id, captchaAnswer: 'ABC234' };
+  const registration = {
+    username: 'captcha-player',
+    password: 'player-password',
+    passwordConfirmation: 'player-password',
+    captchaId: challenge.body.id,
+    captchaAnswer: 'ABC234'
+  };
+  const passwordMismatch = await request('/api/register', {
+    method: 'POST',
+    body: JSON.stringify({ ...registration, passwordConfirmation: 'different-password' })
+  });
+  assert.equal(passwordMismatch.response.status, 400);
+  assert.match(passwordMismatch.body.error, /ne correspondent pas/);
   // Direct requests without a session-bound challenge cannot create an account.
   assert.equal((await request('/api/register', { method: 'POST', body: JSON.stringify(registration) })).response.status, 400);
   for (let attempt = 0; attempt < 5; attempt++) {

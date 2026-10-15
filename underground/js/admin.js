@@ -433,15 +433,8 @@ const adminModule = (() => {
 
     if (button.dataset.adminAction === 'delete') {
       if (!window.confirm(`Supprimer définitivement le compte ${account.username} et son historique de parties ? Cette action est irréversible.`)) return;
-      if (window.prompt(`Pour confirmer, saisis exactement le pseudo : ${account.username}`) !== account.username) {
-        window.alert('Le pseudo ne correspond pas. Suppression annulée.');
-        return;
-      }
-      const reason = window.prompt('Motif obligatoire pour le journal administratif :');
-      if (!reason?.trim()) return;
       await request(`/api/admin/accounts/${accountId}`, {
-        method: 'DELETE',
-        body: JSON.stringify({ reason })
+        method: 'DELETE'
       });
       document.getElementById('adminDetailTitle').textContent = 'Détails du compte';
       document.getElementById('adminAccountDetails').replaceChildren();

@@ -2561,6 +2561,21 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   }));
 
   app.post('/api/register', registrationLimiter, handleAsync(async (req, res) => {
+    const username = String(req.body.username || '').trim();
+    const password = String(req.body.password || '');
+    const passwordConfirmation = String(req.body.passwordConfirmation || '');
+
+    if (!username || username.length < 3) {
+      return res.status(400).json({ error: 'Le pseudo doit contenir au moins 3 caractères.' });
+    }
+
+    if (password.length < 4) {
+      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 4 caractères.' });
+    }
+    if (password !== passwordConfirmation) {
+      return res.status(400).json({ error: 'Les mots de passe ne correspondent pas.' });
+    }
+
     const captchaResult = await registrationCaptcha.consume(req.sessionID, req.body?.captchaId, req.body?.captchaAnswer);
     if (captchaResult.status !== 'valid') {
       if (captchaResult.status === 'incorrect') {
@@ -2576,17 +2591,6 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         return res.status(400).json({ error: 'Cette image a expiré. Charge une nouvelle image.', captchaStatus: captchaResult.status });
       }
       return res.status(400).json({ error: 'CAPTCHA absent ou invalide. Charge une nouvelle image.', captchaStatus: 'not_found' });
-    }
-
-    const username = String(req.body.username || '').trim();
-    const password = String(req.body.password || '');
-
-    if (!username || username.length < 3) {
-      return res.status(400).json({ error: 'Le pseudo doit contenir au moins 3 caractères.' });
-    }
-
-    if (password.length < 4) {
-      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 4 caractères.' });
     }
 
     try {
@@ -3163,9 +3167,9 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
 
   app.delete('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(async (req, res) => {
     const targetId = Number(req.params.id);
-    const reason = String(req.body?.reason || '').trim().slice(0, 240);
-    if (!Number.isSafeInteger(targetId) || targetId <= 0 || !reason) {
-      return res.status(400).json({ error: 'Identifiant ou motif de suppression invalide.' });
+    const reason = 'Suppression confirmée par un administrateur.';
+    if (!Number.isSafeInteger(targetId) || targetId <= 0) {
+      return res.status(400).json({ error: 'Identifiant de compte invalide.' });
     }
     if (targetId === req.adminUserId) {
       return res.status(400).json({ error: 'Tu ne peux pas supprimer ton propre compte administrateur.' });

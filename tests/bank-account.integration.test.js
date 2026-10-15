@@ -98,6 +98,17 @@ test('internal bank settles solo game results and stays protected from account m
 
   const adminCookie = await login('test-admin', 'test-admin-password');
   const admin2Cookie = await login('test-admin-2', 'test-admin-2-password');
+  const disposablePlayer = await createPlayerFixture(baseUrl, dataDir, {
+    username: 'delete-with-confirm-only', password: 'player-pass'
+  });
+  const confirmedDeletion = await request(`/api/admin/accounts/${disposablePlayer.body.user.id}`, {
+    cookie: adminCookie,
+    method: 'DELETE'
+  });
+  assert.equal(confirmedDeletion.response.status, 200, confirmedDeletion.body.error);
+  assert.equal((await request('/api/login', {
+    method: 'POST', body: JSON.stringify({ username: 'delete-with-confirm-only', password: 'player-pass' })
+  })).response.status, 404);
   const primaryAdminProfile = await request('/api/me', { cookie: adminCookie });
   const secondaryAdminProfile = await request('/api/me', { cookie: admin2Cookie });
   assert.equal(primaryAdminProfile.body.isPrimaryAdmin, true);

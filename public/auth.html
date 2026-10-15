@@ -58,6 +58,8 @@
       form { display: none; }
       form.active { display: block; }
       label { display: block; margin-bottom: 12px; color: var(--muted); }
+      .password-visibility { display: flex; align-items: center; gap: 8px; margin-top: -4px; }
+      .password-visibility input { width: auto; margin: 0; }
       .captcha-tools { display: flex; align-items: center; gap: 10px; }
       .captcha-image {
         display: block;
@@ -139,6 +141,14 @@
           Mot de passe
           <input name="password" type="password" placeholder="Minimum 4 caractères" required />
         </label>
+        <label>
+          Confirmer le mot de passe
+          <input name="passwordConfirmation" type="password" placeholder="Répète le mot de passe" required />
+        </label>
+        <label class="password-visibility">
+          <input id="showRegisterPasswords" type="checkbox" />
+          Afficher les mots de passe
+        </label>
         <label for="captchaAnswer">Recopie les 6 caractères de l’image
           <div class="captcha-tools">
             <img id="captchaImage" class="captcha-image" alt="CAPTCHA visuel" hidden />
@@ -162,6 +172,21 @@
       const messageEl = document.getElementById('message');
       const captchaImage = document.getElementById('captchaImage');
       const captchaStatus = document.getElementById('captchaStatus');
+      const passwordInput = forms.register.password;
+      const passwordConfirmationInput = forms.register.passwordConfirmation;
+      document.getElementById('showRegisterPasswords').addEventListener('change', (event) => {
+        const type = event.target.checked ? 'text' : 'password';
+        passwordInput.type = type;
+        passwordConfirmationInput.type = type;
+      });
+      function validatePasswordConfirmation() {
+        passwordConfirmationInput.setCustomValidity(
+          passwordConfirmationInput.value && passwordConfirmationInput.value !== passwordInput.value
+            ? 'Les mots de passe ne correspondent pas.' : ''
+        );
+      }
+      passwordInput.addEventListener('input', validatePasswordConfirmation);
+      passwordConfirmationInput.addEventListener('input', validatePasswordConfirmation);
       let captchaId = null;
       async function refreshCaptcha() {
         captchaId = null;
@@ -241,6 +266,7 @@
         const payload = {
           username: forms.register.username.value,
           password: forms.register.password.value,
+          passwordConfirmation: forms.register.passwordConfirmation.value,
           captchaId,
           captchaAnswer: forms.register.captchaAnswer.value
         };
