@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
+    "build:fps": "node scripts/build-fps-assets.cjs",
     "build:crs": "tsc -p tsconfig.crs.json && node scripts/copy-crs.cjs"
   },
   "dependencies": {

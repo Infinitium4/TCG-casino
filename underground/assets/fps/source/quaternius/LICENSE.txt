@@ -1,0 +1,8 @@
+Toon Shooter Game Kit by Quaternius
+https://quaternius.com/packs/toonshootergamekit.html
+
+CC0 1.0 Universal (public domain dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The author's pack page identifies these models and animations as CC0 and permits
+personal and commercial use. The original soldier glTF is preserved in this folder.

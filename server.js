@@ -20,6 +20,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   const { initializeTowerSchema, registerTowerRoutes } = require('./tower');
   const { initializeScreenTimeSchema, registerScreenTimeRoutes } = require('./screen-time');
   const { registerFps } = require('./fps');
+  const { initializeFpsShopSchema, registerFpsShop } = require('./fps-shop');
+  const { initializeGeneralChatSchema, registerGeneralChat } = require('./general-chat');
 
   const app = express();
   const server = http.createServer(app);
@@ -2152,6 +2154,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     await initializeTowerSchema(run);
     await initializeClickerSchema(run);
     await initializeScreenTimeSchema(run);
+    await initializeFpsShopSchema(run);
+    await initializeGeneralChatSchema(run);
     await initializeRegistrationCaptcha(run, all);
     await initializeHorseRacingSchema(run);
     await run(`
@@ -2484,6 +2488,12 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     return isPng || isJpeg || isWebp ? `data:image/${match[1]};base64,${match[2]}` : null;
   }
 
+  app.get('/assets/fps/models.bin', (req, res, next) => {
+    const archive = path.join(GAME_DIR, 'assets/fps/models.bin.gz');
+    res.vary('Accept-Encoding');
+    if (!req.acceptsEncodings('gzip') || !fs.existsSync(archive)) return next();
+    res.set('Content-Encoding', 'gzip');res.type('application/octet-stream');res.sendFile(archive);
+  });
   app.use(express.static(GAME_DIR, { index: false }));
   app.use('/auth-assets', express.static(AUTH_DIR));
 
@@ -3428,6 +3438,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   registerClickerRoutes({ app, requireAuth, handleAsync, run, get, withDatabaseTransaction, isUserInActiveTable });
   registerScreenTimeRoutes({ app, requireAuth, handleAsync, run, get, withDatabaseTransaction });
   registerFps({ app, io, requireAuth, handleAsync, get, gameDir: GAME_DIR, path });
+  registerGeneralChat({ app, io, requireAuth, requireAdmin, handleAsync, run, get, all, withDatabaseTransaction });
+  registerFpsShop({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction, isUserInActiveTable });
   registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerMinesRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,

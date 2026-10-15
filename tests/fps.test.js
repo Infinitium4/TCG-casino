@@ -44,16 +44,61 @@ test('reload blocks shooting until the server timer ends and stale movement stop
   room.input(1,{yaw:0,pitch:0,forward:1,strafe:0},4100);room.tick(4500);assert.equal(a.y,10.5);
 });
 test('rooms contain only joined humans, host transfers, and matches reset on the server',()=>{
-  const room=new Arena('test','Test',1,1000);room.add(1,'Alice',1000);
+  const room=new Arena('test','Test',1,1000);room.waiting=true;room.add(1,'Alice',1000);
   room.tick(2000);assert.equal(room.players.size,1);
   for(let i=2;i<=5;i++)room.add(i,'Player '+i,2000);
+  assert.equal(room.start(1000),true);
   room.tick(3000);assert.equal(room.players.size,5);
   assert.deepEqual([...room.players.keys()],[1,2,3,4,5]);
   room.remove(1);assert.equal(room.hostId,2);
   room.players.get(2).kills=8;room.tick(1000+MATCH_MS);assert.equal(room.winner,'Player 2');
   room.tick(1000+MATCH_MS+10000);assert.equal(room.finishedAt,0);assert.equal(room.players.get(2).kills,0);
+  assert.equal(room.waiting,true);
+});
+
+test('solo matches start with one human, remain active and reset after the timer',()=>{
+  const room=new Arena('lobby','Lobby',1,1000);room.waiting=true;
+  room.tick(999999);assert.equal(room.finishedAt,0);
+  assert.equal(room.start(999999),false);
+  room.add(1,'Alice',999999);assert.equal(room.start(1000000),true);
+  assert.equal(room.endsAt,1000000+MATCH_MS);assert.equal(room.waiting,false);
+  room.tick(1000050);assert.equal(room.waiting,false);assert.equal(room.players.size,1);
+  const p=room.players.get(1);const before={x:p.x,y:p.y};
+  room.input(1,{yaw:0,pitch:0,forward:1,strafe:0,fire:true},1000100);room.tick(1000100);
+  assert.ok(Math.hypot(p.x-before.x,p.y-before.y)>0);assert.equal(p.ammo,MAGAZINE-1);
+  room.tick(room.endsAt);assert.ok(room.finishedAt);room.tick(room.finishedAt+10000);assert.equal(room.waiting,true);
+});
+
+test('ramps reach the upper floor and return to ground using shared movement',()=>{
+  for(const [start,yaw,end] of [[9.5,0,2],[10.5,Math.PI,18]]){
+    const p={x:11,y:start,yaw,height:0,velocity:0,grounded:true};
+    for(let i=0;i<Math.ceil(Math.abs(end-start)/W.SPEED/.025);i++)W.step(p,{forward:1},.025);
+    assert.ok(Math.abs(p.height-W.UPPER)<.01);assert.ok(p.grounded);
+    p.yaw+=Math.PI;for(let i=0;i<90;i++)W.step(p,{forward:1},.025);
+    assert.ok(p.height<.01);assert.ok(p.grounded);
+  }
+});
+
+test('upper floors stop falls and ceilings stop jumps from underneath',()=>{
+  const p={x:5,y:2,yaw:0,height:4,velocity:0,grounded:false};
+  for(let i=0;i<60;i++)W.step(p,{},.025);
+  assert.equal(p.height,3);assert.equal(p.grounded,true);
+  Object.assign(p,{height:0,velocity:0,grounded:true});
+  for(let i=0;i<12;i++){W.step(p,{jump:i===0},.025);assert.ok(p.height+W.BODY_HEIGHT<=2.78+.001);}
+  assert.equal(W.free(3.5,3.5,0),false);assert.equal(W.free(3.5,3.5,3),true);
+});
+
+test('bullets account for elevation, deck ceilings and solid ramps',()=>{
+  const shooter={id:1,x:11,y:10,height:0,yaw:0,pitch:0,health:100};
+  const target={id:2,x:11,y:2,height:3,health:100};
+  assert.equal(W.trace(shooter,[target]).target,null);
+  assert.ok(W.rayWorld([5,1.55,2],[0,1,0])<1.3);
+  assert.ok(W.rayWorld([11,1,10],[0,0,-1])<4);
+  // Above the low cover, an unobstructed horizontal shot can reach another player.
+  Object.assign(shooter,{x:6,y:4,height:3,yaw:Math.PI/2});Object.assign(target,{x:9,y:4});
+  assert.equal(W.trace(shooter,[target]).target,target);
 });
 test('every spawn is walkable and shots cannot leave the arena',()=>{
-  for(const [x,y] of W.SPAWNS)assert.equal(W.free(x,y),true);
-  for(let angle=0;angle<6.3;angle+=.2)assert.ok(W.rayWall(10.5,10.5,Math.sin(angle),-Math.cos(angle))<30);
+  for(const [x,y,h=0] of W.SPAWNS){assert.equal(W.free(x,y,h),true);assert.equal(W.floorHeight(x,y,h),h);}
+  for(let angle=0;angle<6.3;angle+=.2)assert.ok(W.rayWall(10.5,10.5,Math.sin(angle),-Math.cos(angle))<W.SIZE*Math.SQRT2);
 });
