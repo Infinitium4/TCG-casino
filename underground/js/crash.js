@@ -11,6 +11,9 @@ const crashModule = (() => {
     active: false,
     animationFrame: null,
     requestPending: false,
+    pollTimer: null,
+    refreshPromise: null,
+    actionError: null,
     lastOutcome: null
   };
 
@@ -64,20 +67,24 @@ const crashModule = (() => {
       });
     }
 
-    refreshState();
+    await refreshState();
     return true;
   }
 
-  async function refreshState() {
-    try {
-      const response = await fetch('/api/crash/state');
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'Impossible de charger le jeu Crash.');
-      updateState(payload);
-    } catch (error) {
-      console.error(error);
-      setFeedback(error.message || 'Le jeu Crash est temporairement indisponible.', true);
-    }
+  function refreshState() {
+    if (state.refreshPromise) return state.refreshPromise;
+    state.refreshPromise = (async () => {
+      try {
+        const response = await fetch('/api/crash/state', { cache: 'no-store' });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Impossible de charger le jeu Crash.');
+        updateState(payload);
+      } catch (error) {
+        console.error(error);
+        setFeedback(error.message || 'Le jeu Crash est temporairement indisponible.', true);
+      }
+    })().finally(() => { state.refreshPromise = null; });
+    return state.refreshPromise;
   }
 
   function updateState(payload) {
@@ -122,7 +129,15 @@ const crashModule = (() => {
     if (!state.round) return 1;
     const status = getRoundStatus(state.round, now);
     if (status === 'crashed') {
+      if (state.round.crashMultiplier == null && Number(state.round.timeScaleMs) > 0) {
+        const elapsed = Math.max(0, Number(state.round.crashAt) - Number(state.round.startedAt));
+        return Math.max(1, Math.floor(Math.exp(elapsed / state.round.timeScaleMs) * 100) / 100);
+      }
       return Number(state.round.crashMultiplier || state.round.multiplier || 1);
+    }
+    if (status === 'running' && Number(state.round.timeScaleMs) > 0) {
+      const elapsed = Math.max(0, now + state.serverOffset - Number(state.round.startedAt));
+      return Math.max(1, Math.floor(Math.exp(elapsed / state.round.timeScaleMs) * 100) / 100);
     }
     return Number(state.round.multiplier || 1);
   }
@@ -208,8 +223,8 @@ const crashModule = (() => {
     } else {
       phaseLabel.textContent = 'Vol terminé';
       message.textContent = state.ownBet?.status === 'lost'
-        ? `Crash à ${Number(round.crashMultiplier || round.multiplier || 1).toFixed(2)}x. Ta mise est perdue.`
-        : `Crash à ${Number(round.crashMultiplier || round.multiplier || 1).toFixed(2)}x. Lance une nouvelle partie quand tu veux.`;
+        ? `Crash à ${multiplier.toFixed(2)}x. Ta mise est perdue.`
+        : `Crash à ${multiplier.toFixed(2)}x. Lance une nouvelle partie quand tu veux.`;
     }
   }
 
@@ -253,6 +268,7 @@ const crashModule = (() => {
     } else if (ownBet?.status === 'active') {
       setFeedback(roundStatus === 'running' ? 'Ta partie est en jeu. Tu peux retirer à tout moment.' : 'Mise acceptée. Décollage imminent.', false);
     }
+    if (state.actionError) setFeedback(state.actionError, true);
   }
 
   function renderBets() {
@@ -306,6 +322,7 @@ const crashModule = (() => {
 
   async function submitAction() {
     if (state.requestPending) return;
+    state.actionError = null;
     const bet = state.ownBet;
     if (bet?.status === 'active' && getRoundStatus(state.round) === 'running') {
       await cashout(bet.id);
@@ -337,7 +354,8 @@ const crashModule = (() => {
       await refreshState();
     } catch (error) {
       console.error(error);
-      setFeedback(error.message || 'Impossible de lancer la partie.', true);
+      state.actionError = error.message || 'Impossible de lancer la partie.';
+      setFeedback(state.actionError, true);
     } finally {
       state.requestPending = false;
       renderControls();
@@ -345,6 +363,7 @@ const crashModule = (() => {
   }
 
   async function cashout(betId) {
+    state.actionError = null;
     state.requestPending = true;
     renderControls();
     try {
@@ -364,7 +383,8 @@ const crashModule = (() => {
       await refreshState();
     } catch (error) {
       console.error(error);
-      setFeedback(error.message || 'Impossible de retirer les gains.', true);
+      state.actionError = error.message || 'Impossible de retirer les gains.';
+      setFeedback(state.actionError, true);
       await refreshState();
     } finally {
       state.requestPending = false;
@@ -376,7 +396,10 @@ const crashModule = (() => {
     state.animationFrame = null;
     if (state.ownBet?.status === 'cashed_out') return;
     synchronizeRoundDeadline();
-    if (!state.active || document.hidden || !state.round || !['betting', 'running'].includes(getRoundStatus(state.round))) return;
+    if (!state.active || document.hidden || !state.round) return;
+    renderRound();
+    renderControls();
+    if (!['betting', 'running'].includes(getRoundStatus(state.round))) return;
     if (getRoundStatus(state.round) === 'betting') {
       renderRound();
       renderControls();
@@ -417,6 +440,14 @@ const crashModule = (() => {
 
   function setActive(active) {
     state.active = active;
+    if (state.pollTimer !== null) clearInterval(state.pollTimer);
+    state.pollTimer = null;
+    if (active && state.enabled) {
+      refreshState();
+      state.pollTimer = setInterval(() => {
+        if (!document.hidden) refreshState();
+      }, 1000);
+    }
     updateAnimation();
   }
 
