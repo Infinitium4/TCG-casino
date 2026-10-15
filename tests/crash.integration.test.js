@@ -278,6 +278,16 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   assert.equal(historyBeforeRestart.body.history[0].net, -80);
 
   await stopServer();
+  // Reproduce a legacy bet left behind after its account was removed.
+  const db = new (require('sqlite3').Database)(path.join(dataDir, 'database.sqlite'));
+  const sql = (query, params = []) => new Promise((resolve, reject) =>
+    db.run(query, params, error => error ? reject(error) : resolve()));
+  await sql(`INSERT INTO crash_rounds
+    (id, status, betting_ends_at, started_at, crash_at, crash_multiplier)
+    VALUES ('orphan-round', 'running', 1, 1, 2, 2)`);
+  await sql(`INSERT INTO crash_bets (id, round_id, user_id, username, stake, status)
+    VALUES ('orphan-bet', 'orphan-round', 999999, 'removed-player', 25, 'active')`);
+  await new Promise(resolve => db.close(resolve));
   await startServer();
   const login = await request('/api/login', {
     method: 'POST',
@@ -291,4 +301,15 @@ test('Crash debits once, accepts one authoritative cashout, settles losses, and 
   const persistedCrashHistory = await request('/api/crash/state', { cookie: login.cookie });
   assert.equal(persistedCrashHistory.response.status, 200);
   assert.ok(persistedCrashHistory.body.history.some((entry) => entry.id === crashed.round.id || entry.multiplier === 2));
+  const verifiedDb = new (require('sqlite3').Database)(path.join(dataDir, 'database.sqlite'));
+  const read = query => new Promise((resolve, reject) =>
+    verifiedDb.get(query, (error, row) => error ? reject(error) : resolve(row)));
+  try {
+    assert.equal((await read("SELECT status FROM crash_bets WHERE id = 'orphan-bet'")).status, 'lost');
+    const settlement = await read("SELECT player_user_id, bank_delta FROM bank_ledger WHERE player_username = 'removed-player'");
+    assert.equal(settlement.player_user_id, null);
+    assert.equal(settlement.bank_delta, 25);
+  } finally {
+    await new Promise(resolve => verifiedDb.close(resolve));
+  }
 });
