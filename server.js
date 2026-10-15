@@ -1763,8 +1763,13 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         WHERE round_id = ? AND status = 'active'
       `, [round.id]);
       for (const bet of activeBets) {
-        await addGameHistory(bet.user_id, 'crash', Number(bet.stake), 'Crash', 0, -Number(bet.stake));
-        await recordBankSettlement(bet.user_id, 'crash', -Number(bet.stake), bet.username);
+        // Legacy databases may contain bets whose account has been removed.
+        // Keep the bank settlement without inserting history for a missing user.
+        const player = await get('SELECT id FROM users WHERE id = ?', [bet.user_id]);
+        if (player) {
+          await addGameHistory(player.id, 'crash', Number(bet.stake), 'Crash', 0, -Number(bet.stake));
+        }
+        await recordBankSettlement(player?.id ?? null, 'crash', -Number(bet.stake), bet.username);
       }
       round.status = 'crashed';
       round.crashedAt = round.crashAt;
