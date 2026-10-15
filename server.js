@@ -1251,7 +1251,9 @@
   }
 
   async function getBankAccount() {
-    const bank = await get('SELECT id, username, chips FROM users WHERE is_bank = 1');
+    const bank = await get(`SELECT u.id, u.username, u.chips
+      FROM casino_bank_accounts a JOIN users u ON u.id = a.user_id
+      WHERE a.game_name = 'global' AND u.is_bank = 1`);
     if (!bank) {
       throw new Error('Compte banque introuvable. Vérifie BANK_USERNAME.');
     }
@@ -1265,11 +1267,17 @@
     }
 
     const bank = await getBankAccount();
+    const gameBank = await get(`SELECT u.id, u.username FROM casino_bank_accounts a
+      JOIN users u ON u.id = a.user_id WHERE a.game_name = ? AND u.is_bank = 1`, [String(gameName)]);
+    if (!gameBank) {
+      throw new Error(`Compte banque introuvable pour le jeu ${gameName}.`);
+    }
     const player = playerUsername
       ? { username: playerUsername }
       : await get('SELECT username FROM users WHERE id = ?', [userId]);
     const bankDelta = -net;
     await run('UPDATE users SET chips = chips + ? WHERE id = ? AND is_bank = 1', [bankDelta, bank.id]);
+    await run('UPDATE users SET chips = chips + ? WHERE id = ? AND is_bank = 1', [bankDelta, gameBank.id]);
     await run(`
       INSERT INTO bank_ledger (player_user_id, player_username, game_name, player_net, bank_delta)
       VALUES (?, ?, ?, ?, ?)
@@ -2127,6 +2135,12 @@
         FOREIGN KEY(player_user_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS casino_bank_accounts (
+        game_name TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE RESTRICT
+      )
+    `);
 
     const auditColumns = await all('PRAGMA table_info(admin_audit)');
     const auditForeignKeys = await all('PRAGMA foreign_key_list(admin_audit)');
@@ -2239,6 +2253,39 @@
       console.log(`Compte banque interne créé : ${bankUsername}`);
     } else {
       await run('UPDATE users SET is_bank = 1, is_admin = 0, is_banned = 0 WHERE id = ?', [bank.id]);
+    }
+
+    const globalBank = await get('SELECT user_id FROM casino_bank_accounts WHERE game_name = ?', ['global']);
+    if (globalBank && Number(globalBank.user_id) !== Number(bank.id)) {
+      throw new Error('Le compte banque global est associé à un autre compte interne.');
+    }
+    await run('INSERT OR IGNORE INTO casino_bank_accounts (game_name, user_id) VALUES (?, ?)', ['global', bank.id]);
+
+    for (const gameName of Object.keys(GAME_DEFAULTS)) {
+      const mapped = await get(`SELECT u.id, u.is_bank FROM casino_bank_accounts a
+        JOIN users u ON u.id = a.user_id WHERE a.game_name = ?`, [gameName]);
+      if (mapped) {
+        if (!mapped.is_bank) throw new Error(`Le compte banque de ${gameName} n’est pas un compte interne.`);
+        continue;
+      }
+      const username = `${bankUsername}-${gameName}`;
+      let gameBank = await get('SELECT id, is_admin, is_bank FROM users WHERE username = ?', [username]);
+      if (gameBank?.is_admin || (gameBank && !gameBank.is_bank)) {
+        throw new Error(`Le pseudo ${username} est déjà utilisé par un compte non bancaire.`);
+      }
+      if (!gameBank) {
+        const historical = await get('SELECT COALESCE(SUM(bank_delta), 0) AS balance FROM bank_ledger WHERE game_name = ?', [gameName]);
+        const randomPassword = crypto.randomBytes(48).toString('hex');
+        const passwordHash = await bcrypt.hash(randomPassword, 10);
+        const created = await run(
+          'INSERT INTO users (username, password_hash, avatar, chips, is_bank) VALUES (?, ?, ?, ?, 1)',
+          [username, passwordHash, '🏦', Number(historical.balance)]
+        );
+        gameBank = { id: created.id };
+      } else {
+        await run('UPDATE users SET is_bank = 1, is_admin = 0, is_banned = 0 WHERE id = ?', [gameBank.id]);
+      }
+      await run('INSERT INTO casino_bank_accounts (game_name, user_id) VALUES (?, ?)', [gameName, gameBank.id]);
     }
   }
 
@@ -2794,8 +2841,11 @@
     });
   }));
 
-  app.get('/api/admin/bank', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+  async function getBankReport() {
     const bank = await getBankAccount();
+    const gameBanks = await all(`SELECT a.game_name AS game, u.id, u.username, u.chips
+      FROM casino_bank_accounts a JOIN users u ON u.id = a.user_id
+      WHERE a.game_name != 'global' AND u.is_bank = 1 ORDER BY a.game_name`);
     const recent = await all(`
       SELECT player_username, game_name, player_net, bank_delta, created_at
       FROM bank_ledger ORDER BY id DESC LIMIT 30
@@ -2806,15 +2856,43 @@
         COALESCE(SUM(CASE WHEN bank_delta < 0 THEN bank_delta ELSE 0 END), 0) AS paid
       FROM bank_ledger
     `);
-    res.json({
+    return {
       bank,
+      gameBanks,
       totals: {
         settlements: Number(totals.settlements),
         collected: Number(totals.collected),
         paid: Number(totals.paid)
       },
       recent
-    });
+    };
+  }
+
+  app.get('/api/admin/bank', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+    res.json(await getBankReport());
+  }));
+
+  app.post('/api/admin/bank/reset', requireAuth, requireAdmin, handleAsync(async (req, res) => {
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!reason || reason.length > 240) {
+      return res.status(400).json({ error: 'Un motif de 1 à 240 caractères est obligatoire.' });
+    }
+    try {
+      const resetAccounts = await withDatabaseTransaction(async () => {
+        await getBankAccount();
+        const banks = await all('SELECT id FROM users WHERE is_bank = 1');
+        await run('UPDATE users SET chips = 0 WHERE is_bank = 1');
+        await recordAdminAction(req.adminUserId, 'bank_reset', reason, {
+          username: 'Banque globale et comptes par jeu',
+          amount: banks.length
+        });
+        return banks.length;
+      });
+      res.json({ ok: true, resetAccounts, ...(await getBankReport()) });
+    } catch (error) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      throw error;
+    }
   }));
 
   app.get('/api/admin/accounts/:id', requireAuth, requireAdmin, handleAsync(async (req, res) => {

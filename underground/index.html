@@ -654,8 +654,14 @@
             <section class="admin-detail-panel">
               <h3>Banque du casino</h3>
               <p id="adminBankSummary" class="admin-note">Chargement du compte banque...</p>
+              <details class="admin-log">
+                <summary>Soldes des banques par jeu</summary>
+                <ul id="adminGameBanks" class="admin-detail-list"></ul>
+              </details>
               <details class="admin-log"><summary>Derniers règlements de la banque</summary><ul id="adminBankLedger" class="admin-detail-list"></ul></details>
-              <p class="admin-note">Les pertes des joueurs augmentent le solde de la banque; leurs gains le diminuent. La banque peut donc être négative. Le poker entre joueurs ne génère pas de revenu casino sans rake.</p>
+              <div class="admin-wallet-control"><div><strong>Remise à zéro</strong><p class="admin-note">Remet à zéro la banque globale et les soldes de chaque jeu. Le journal des règlements est conservé.</p></div><button id="adminBankResetBtn" class="danger-button" type="button">Remettre les banques à zéro</button></div>
+              <p id="adminBankResetStatus" class="admin-note" role="status" aria-live="polite"></p>
+              <p class="admin-note">Les pertes des joueurs augmentent le solde des banques; leurs gains le diminuent. Un solde peut être négatif. Le poker entre joueurs ne génère pas de revenu casino sans rake.</p>
             </section>
             <form id="adminSearchForm" class="admin-search">
               <h3>Gestion des comptes</h3>

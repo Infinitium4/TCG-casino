@@ -71,12 +71,18 @@ const adminModule = (() => {
   async function loadBank() {
     const summary = document.getElementById('adminBankSummary');
     const ledger = document.getElementById('adminBankLedger');
-    if (!summary || !ledger) return;
+    const gameBanks = document.getElementById('adminGameBanks');
+    if (!summary || !ledger || !gameBanks) return;
     summary.textContent = 'Chargement de la banque...';
     ledger.replaceChildren();
     try {
       const payload = await request('/api/admin/bank');
-      summary.textContent = `${payload.bank.username} · solde ${formatChips(payload.bank.chips)} · collecté ${formatChips(payload.totals.collected)} · payé aux joueurs ${formatChips(Math.abs(payload.totals.paid))} · ${payload.totals.settlements} règlement(s)`;
+      summary.textContent = `${payload.bank.username} · solde global ${formatChips(payload.bank.chips)} · historique cumulé : collecté ${formatChips(payload.totals.collected)} · payé ${formatChips(Math.abs(payload.totals.paid))} · ${payload.totals.settlements} règlement(s)`;
+      const gameLabels = { blackjack: 'Blackjack', crash: 'Crash', dice: 'Dice', horses: 'Courses hippiques', mines: 'Mines', plinko: 'Plinko', poker: 'Poker', roulette: 'Roulette', slots: 'Machine à sous', tower: 'Tower Rush' };
+      gameBanks.replaceChildren(...payload.gameBanks.map(bank => element(
+        'li', '', `${gameLabels[bank.game] || bank.game} · ${formatChips(bank.chips)} jetons · ${bank.username}`
+      )));
+      if (!payload.gameBanks.length) gameBanks.append(element('li', '', 'Aucune banque de jeu configurée.'));
       if (!payload.recent.length) {
         ledger.append(element('li', '', 'Aucun règlement enregistré.'));
         return;
@@ -504,6 +510,24 @@ const adminModule = (() => {
       loadOverview();
       loadAudit();
       loadSettings();
+    });
+    document.getElementById('adminBankResetBtn').addEventListener('click', async event => {
+      if (!window.confirm('Remettre à zéro le solde global et tous les soldes par jeu ? Le journal historique sera conservé.')) return;
+      const reason = window.prompt('Motif de la remise à zéro :');
+      if (!reason?.trim()) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      const status = document.getElementById('adminBankResetStatus');
+      status.textContent = 'Remise à zéro en cours…';
+      try {
+        const payload = await request('/api/admin/bank/reset', { method: 'POST', body: JSON.stringify({ reason }) });
+        await loadBank();
+        status.textContent = `${payload.resetAccounts} compte(s) banque remis à zéro. Historique conservé.`;
+      } catch (error) {
+        status.textContent = error.message || 'Impossible de remettre les banques à zéro.';
+      } finally {
+        button.disabled = false;
+      }
     });
     document.getElementById('adminLoadMoreBtn').addEventListener('click', () => loadAccounts(false));
     document.getElementById('adminAccountsBody').addEventListener('click', async (event) => {

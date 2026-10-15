@@ -107,6 +107,9 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal(admin2Bank.response.status, 200, admin2Bank.body.error);
   assert.equal(adminBank.body.bank.username, 'casino-bank');
   assert.equal(adminBank.body.bank.chips, 0);
+  assert.deepEqual(adminBank.body.gameBanks.map(bank => bank.game).sort(),
+    ['blackjack', 'crash', 'dice', 'horses', 'mines', 'plinko', 'poker', 'roulette', 'slots', 'tower']);
+  assert.ok(adminBank.body.gameBanks.every(bank => bank.chips === 0 && bank.username.startsWith('casino-bank-')));
 
   const registered = await request('/api/register', {
     method: 'POST',
@@ -197,6 +200,15 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal(settled.body.totals.collected, 100);
   assert.equal(settled.body.totals.paid, -200);
   assert.equal(settled.body.recent.length, 2);
+  assert.equal(settled.body.gameBanks.find(bank => bank.game === 'slots').chips, 100);
+  assert.equal(settled.body.gameBanks.find(bank => bank.game === 'roulette').chips, -200);
+  assert.equal(settled.body.gameBanks.reduce((sum, bank) => sum + bank.chips, 0), settled.body.bank.chips);
+  const unauthorizedBankReset = await request('/api/admin/bank/reset', {
+    cookie: playerCookie,
+    method: 'POST',
+    body: JSON.stringify({ reason: 'Unauthorized reset' })
+  });
+  assert.equal(unauthorizedBankReset.response.status, 403);
 
   const leaderboard = await request('/api/leaderboard');
   assert.equal(leaderboard.response.status, 200);
@@ -376,4 +388,25 @@ test('internal bank settles solo game results and stays protected from account m
   assert.equal((await request('/api/admin/bank', { cookie: adminCookie })).body.bank.chips, bankBeforeReset);
   const resetAudit = (await request('/api/admin/audit?limit=100', { cookie: adminCookie })).body.entries;
   assert.ok(resetAudit.some(entry => entry.action === 'account_reset' && entry.target_username === 'bank-test-player'));
+  const banksBeforeZero = (await request('/api/admin/bank', { cookie: adminCookie })).body;
+  assert.ok(banksBeforeZero.gameBanks.some(bank => bank.chips !== 0));
+  const invalidBankReset = await request('/api/admin/bank/reset', {
+    cookie: admin2Cookie,
+    method: 'POST',
+    body: JSON.stringify({ reason: ' ' })
+  });
+  assert.equal(invalidBankReset.response.status, 400);
+  const bankReset = await request('/api/admin/bank/reset', {
+    cookie: admin2Cookie,
+    method: 'POST',
+    body: JSON.stringify({ reason: 'Réinitialisation banque test' })
+  });
+  assert.equal(bankReset.response.status, 200, bankReset.body.error);
+  assert.equal(bankReset.body.bank.chips, 0);
+  assert.equal(bankReset.body.resetAccounts, 11);
+  assert.ok(bankReset.body.gameBanks.every(bank => bank.chips === 0));
+  assert.equal(bankReset.body.totals.settlements, banksBeforeZero.totals.settlements);
+  assert.equal(bankReset.body.recent.length, banksBeforeZero.recent.length);
+  const bankResetAudit = (await request('/api/admin/audit?limit=100', { cookie: adminCookie })).body.entries;
+  assert.ok(bankResetAudit.some(entry => entry.action === 'bank_reset' && entry.target_username === 'Banque globale et comptes par jeu'));
 });
