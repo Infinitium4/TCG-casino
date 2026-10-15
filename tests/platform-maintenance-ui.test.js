@@ -32,3 +32,9 @@ test('the principal admin and players settling existing bets retain controls; th
   await login.update({enabled:true,authenticated:true,canManage:false,hasActiveGame:false,message:'Maintenance'});
   assert.equal(login.host.hidden,false);assert.equal(login.page.inert,true);
 });
+test('a principal admin never retains the maintenance banner after reopening or on an already-open casino',async()=>{
+  const state={enabled:false,authenticated:true,canManage:true,canAccessAdmin:true,hasActiveGame:false,message:'Maintenance'};
+  const ui=setup(state);await flush();assert.equal(ui.host.hidden,true);assert.equal(ui.classes.has('banner'),false);
+  await ui.update({...state,enabled:true});assert.equal(ui.host.hidden,false);assert.equal(ui.classes.has('banner'),true);
+  await ui.update(state);assert.equal(ui.host.hidden,true);assert.equal(ui.classes.has('banner'),false);assert.equal(ui.page.inert,false);
+});

@@ -27,7 +27,7 @@ async function main(){
     const reports=[];
     for(const page of ['/game',...(process.env.PERF_FPS==='true'?['/fps']:[])]){
       errors.length=0;requests.length=0;await call('Page.navigate',{url:base+page});await sleep(3000);
-      const initial=await evaluate("({title:document.title,text:document.body.innerText.slice(0,500),ready:document.readyState,images:document.images.length})");
+      const initial=await evaluate("({title:document.title,text:document.body.innerText.slice(0,500),ready:document.readyState,images:document.images.length,maintenanceVisible:!!document.getElementById('platform-maintenance')&&getComputedStyle(document.getElementById('platform-maintenance')).display!=='none'})");
       await call('Profiler.enable');await call('Profiler.start');
       const a=(await call('Performance.getMetrics')).metrics;await sleep(5000);const b=(await call('Performance.getMetrics')).metrics;
       const profile=(await call('Profiler.stop')).profile;
