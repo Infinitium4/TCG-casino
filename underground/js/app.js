@@ -39,6 +39,17 @@ async function initializeApp() {
   renderHomeView();
   renderProfileView();
   renderLeaderboard();
+  document.getElementById("refreshLeaderboardBtn").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "Actualisation…";
+    try {
+      await renderLeaderboard();
+    } finally {
+      button.disabled = false;
+      button.textContent = "Actualiser";
+    }
+  });
   rouletteModule.initialize();
   blackjackModule.initialize();
   pokerModule.initialize();
@@ -390,12 +401,13 @@ function renderLeaderboardMini() {
     .catch(() => { container.textContent = "Classement indisponible."; });
 }
 
-function renderLeaderboard() {
+async function renderLeaderboard() {
   const container = document.getElementById("leaderboardBoard");
-  fetch("/api/leaderboard")
-    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Classement indisponible")))
-    .then(({ leaderboard }) => {
-      container.replaceChildren(...leaderboard.map((row, index) => {
+  try {
+    const response = await fetch("/api/leaderboard");
+    if (!response.ok) throw new Error("Classement indisponible");
+    const { leaderboard } = await response.json();
+    container.replaceChildren(...leaderboard.map((row, index) => {
         const entry = document.createElement("div");
         entry.className = "leaderboard-row";
         const rank = document.createElement("span");
@@ -408,9 +420,10 @@ function renderLeaderboard() {
         balance.innerHTML = `<small>Solde</small><br /><strong>${formatChips(row.chips)}</strong>`;
         entry.append(rank, identity, wins, balance);
         return entry;
-      }));
-    })
-    .catch(() => { container.textContent = "Classement indisponible."; });
+    }));
+  } catch {
+    container.textContent = "Classement indisponible.";
+  }
 }
 
 function renderProfileView() {
