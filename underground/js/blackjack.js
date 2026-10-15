@@ -43,7 +43,7 @@ const blackjackModule = (() => {
           window.location.href = `/blackjack/game/${joinedTable.id}`;
           return;
         }
-      } else if (!state.tables.some((table) => String(table.id) === String(state.currentTableId))) {
+      } else {
         state.currentTableId = null;
       }
 
@@ -92,6 +92,8 @@ const blackjackModule = (() => {
       `;
     }).join('');
 
+    if (typeof renderTableModeration === 'function') state.tables.forEach(table => renderTableModeration(listNode, 'blackjack', table, refreshTables));
+
     listNode.querySelectorAll('[data-blackjack-table]').forEach((button) => {
       button.addEventListener('click', () => joinTable(button.dataset.blackjackTable));
     });
@@ -120,6 +122,8 @@ const blackjackModule = (() => {
         <small>${formatChips(player.chips)} €</small>
       </div>
     `).join('');
+
+    if (typeof renderTableModeration === 'function') renderTableModeration(playersNode, 'blackjack', table, refreshTables);
 
     boardNode.textContent = `L’hôte choisit la mise commune. Chaque joueur doit avoir assez de € (${table.players.length}/${table.maxPlayers} places).`;
     stakeInput.disabled = !isHost;

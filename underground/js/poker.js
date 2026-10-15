@@ -85,7 +85,7 @@ const pokerModule = (() => {
           window.location.href = `/poker/game/${detectedTable.id}`;
           return;
         }
-      } else if (!state.currentTableId || !state.tables.some((table) => String(table.id) === String(state.currentTableId))) {
+      } else {
         state.currentTableId = null;
       }
 
@@ -150,6 +150,8 @@ const pokerModule = (() => {
       })
       .join("");
 
+    if (typeof renderTableModeration === 'function') state.tables.forEach(table => renderTableModeration(listNode, 'poker', table, refreshTables));
+
     listNode.querySelectorAll("[data-table-id]").forEach((button) => {
       button.addEventListener("click", async () => {
         const tableId = button.dataset.tableId;
@@ -210,6 +212,8 @@ const pokerModule = (() => {
         </div>
       `)
       .join("");
+
+    if (typeof renderTableModeration === 'function') renderTableModeration(playersNode, 'poker', currentTable, refreshTables);
 
     boardNode.textContent = `Le lancement est possible dès 3 joueurs. ${currentTable.players.length}/${currentTable.minPlayers} joueurs présents.`;
     leaveButton.disabled = false;

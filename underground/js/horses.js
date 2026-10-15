@@ -82,6 +82,7 @@ const horsesModule = (() => {
       join.addEventListener('click', () => tableAction(`/api/horses/tables/${table.id}/join`));
       row.append(label, join); return row;
     }));
+    if (typeof renderTableModeration === 'function' && accountUser.isAdmin) state.tables.forEach(table => renderTableModeration(el('horseTables'), 'horses', table, refresh));
     if (!state.tables.length) el('horseTables').textContent = 'Aucune table ouverte. Crée la première et invite tes amis à la rejoindre.';
     el('horsePlayers').replaceChildren(...(state.table?.players || []).map(player => {
       const row = document.createElement('div'); row.className = player.stake ? 'is-ready' : '';
@@ -89,6 +90,7 @@ const horsesModule = (() => {
       const bet = document.createElement('small'); bet.textContent = player.stake ? `${horse(player.horseId).name} · ${player.stake} € · ×${(player.oddsCents / 100).toFixed(2)}` : 'Choisit son cheval…';
       row.append(name, bet); return row;
     }));
+    if (state.table && typeof renderTableModeration === 'function') renderTableModeration(el('horsePlayers'), 'horses', state.table, refresh);
     if (state.table) {
       const host = state.table.players.find(player => player.id === state.table.hostId);
       el('horseTableTitle').textContent = `Table de ${host?.username || 'course'} · ${state.table.players.length}/8 joueurs`;
