@@ -11,6 +11,7 @@
   const SQLiteStore = require('connect-sqlite3')(session);
   const { initializePlinkoSchema, registerPlinkoRoutes } = require('./plinko');
   const { initializeDiceSchema, registerDiceRoutes } = require('./dice');
+  const { initializeMinesSchema, registerMinesRoutes } = require('./mines');
   const { initializeHorseRacingSchema, registerHorseRacingRoutes } = require('./horse-racing');
   const { initializeTowerSchema, registerTowerRoutes } = require('./tower');
 
@@ -34,6 +35,7 @@
     horses: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     plinko: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     dice: { enabled: true, minBet: 1, maxBet: 1_000_000 },
+    mines: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     roulette: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     blackjack: { enabled: true, minBet: 1, maxBet: 1_000_000 },
     poker: { enabled: true, minBet: 1, maxBet: 1_000_000 },
@@ -2105,6 +2107,7 @@
     }
     await initializePlinkoSchema(run);
     await initializeDiceSchema(run);
+    await initializeMinesSchema(run);
     await initializeTowerSchema(run);
     await initializeHorseRacingSchema(run);
     await run(`
@@ -3270,6 +3273,8 @@
   registerPlinkoRoutes({ app, io, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
+    getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
+  registerMinesRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerHorseRacingRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement, databaseReady });

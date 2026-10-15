@@ -29,6 +29,7 @@ async function initializeApp() {
   await crashModule.initialize();
   plinkoModule.initialize();
   diceModule.initialize();
+  minesModule.initialize();
   towerModule.initialize();
   horsesModule.initialize();
   bindNavigation();
@@ -119,6 +120,7 @@ function showView(viewName) {
   crashModule.setActive(viewName === "crash");
   plinkoModule.setActive(viewName === "plinko");
   diceModule.setActive(viewName === "dice");
+  minesModule.setActive(viewName === "mines");
   towerModule.setActive(viewName === "tower");
   horsesModule.setActive(viewName === "horses");
 }
