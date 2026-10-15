@@ -1,5 +1,5 @@
 const adminModule = (() => {
-  const state = { accounts: [], offset: 0, total: 0, search: '', isPrimaryAdmin: false, username: '', bettingPaused: false };
+  const state = { accounts: [], offset: 0, total: 0, search: '', isPrimaryAdmin: false, username: '', bettingPaused: false, maintenance: false };
 
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -180,6 +180,10 @@ const adminModule = (() => {
     try {
       const payload = await request('/api/admin/settings');
       state.bettingPaused = payload.bettingPaused;
+      state.maintenance = Boolean(payload.maintenance?.enabled);
+      document.getElementById('adminMaintenanceStatus').textContent = state.maintenance ? 'Maintenance globale active : le casino est fermé aux nouvelles parties.' : 'Le casino est ouvert.';
+      document.getElementById('adminMaintenanceMessage').value = payload.maintenance?.message || 'Le casino est temporairement en maintenance.';
+      document.getElementById('adminMaintenanceToggle').textContent = state.maintenance ? 'Rouvrir tout le casino' : 'Mettre tout le casino en maintenance';
       const pauseButton = document.getElementById('adminEmergencyPauseBtn');
       pauseButton.hidden = !state.isPrimaryAdmin;
       pauseButton.textContent = state.bettingPaused ? 'Reprendre les mises' : 'Arrêter temporairement les mises';
@@ -570,6 +574,19 @@ const adminModule = (() => {
       } catch (error) {
         window.alert(error.message || 'Impossible de modifier l’arrêt d’urgence.');
       }
+    });
+    document.getElementById('adminMaintenanceForm').addEventListener('submit', async event => {
+      event.preventDefault();if (!state.isPrimaryAdmin) return;
+      const button = document.getElementById('adminMaintenanceToggle'), feedback = document.getElementById('adminMaintenanceFeedback');
+      const enabled = !state.maintenance;
+      button.disabled = true;feedback.textContent = '';
+      try {
+        await request('/api/admin/maintenance', {method:'POST', body:JSON.stringify({enabled, message:document.getElementById('adminMaintenanceMessage').value.trim(), reason:document.getElementById('adminMaintenanceReason').value.trim()})});
+        document.getElementById('adminMaintenanceReason').value = '';
+        await loadSettings();await loadAudit();window.dispatchEvent(new CustomEvent('platform-maintenance:changed'));
+        feedback.textContent = enabled ? 'Maintenance globale activée.' : 'Le casino est de nouveau ouvert.';
+      } catch(error) {feedback.textContent = error.message;}
+      finally {button.disabled = false;}
     });
     loadAccounts();
     loadBank();

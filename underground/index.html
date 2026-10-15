@@ -664,6 +664,15 @@
               <h3>Contrôles de l’admin principal</h3>
               <div class="admin-wallet-control"><div><strong>Argent infini</strong><p id="adminInfiniteStatus" class="admin-note">Mode réservé à admin1. Les € sont réapprovisionnés automatiquement.</p></div><button id="adminInfiniteMoneyBtn" class="primary-button" type="button">Activer sur mon compte</button></div>
               <h4>Jeux, limites et maintenance</h4>
+              <form id="adminMaintenanceForm" class="admin-detail-panel">
+                <h4>Maintenance de tout le casino</h4>
+                <p id="adminMaintenanceStatus" class="admin-note" role="status"></p>
+                <label class="input-group"><span>Message visible pour les joueurs</span><input id="adminMaintenanceMessage" maxlength="300" required value="Le casino est temporairement en maintenance. Reviens dans quelques instants."></label>
+                <label class="input-group"><span>Motif pour le journal de sécurité</span><input id="adminMaintenanceReason" maxlength="240" required placeholder="Ex. mise à jour du casino"></label>
+                <p class="admin-note">Bloque les nouvelles parties et les achats sur tout le site. Les mises en cours peuvent être réglées. Ton accès administrateur reste ouvert.</p>
+                <button id="adminMaintenanceToggle" class="primary-button" type="submit">Mettre tout le casino en maintenance</button>
+                <p id="adminMaintenanceFeedback" role="status"></p>
+              </form>
               <div id="adminGameSettings" class="admin-game-settings"></div>
               <details class="admin-log"><summary>Journal de sécurité</summary><ul id="adminGlobalAudit" class="admin-detail-list"></ul></details>
             </section>
@@ -820,5 +829,6 @@
     <script src="js/horses.js"></script>
     <script src="js/app.js"></script>
     <script src="/js/general-chat.js?v=1"></script>
-  </body>
+  <script src="/js/platform-maintenance.js?v=1"></script>
+</body>
 </html>

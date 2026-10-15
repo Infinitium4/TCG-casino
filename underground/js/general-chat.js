@@ -35,7 +35,7 @@
     data.messages.forEach(message=>receive(message));render();
     if(first){try{$('draft').value=sessionStorage.getItem('chat-draft-'+user.id)||'';}catch{}updateCount();}
     if(!socket&&typeof window.io==='function'){
-      socket=window.io({forceNew:true});socket.on('connect',()=>{socket.emit('general-chat:subscribe');$('status').textContent='● En direct · Tous les joueurs';refresh();});
+      socket=window.io({forceNew:true});socket.on('maintenance:changed',()=>window.dispatchEvent(new CustomEvent('platform-maintenance:changed')));socket.on('connect',()=>{socket.emit('general-chat:subscribe');$('status').textContent='● En direct · Tous les joueurs';refresh();});
       socket.on('general-chat:message',message=>receive(message,true));socket.on('disconnect',()=>{$('status').textContent='Reconnexion au salon…';});
     }
   }catch(error){if(error.status===401||error.status===403){user=null;socket?.disconnect();socket=null;messages.clear();$('messages').replaceChildren();$('form').hidden=true;$('status').textContent=error.status===401?'Connecte-toi pour rejoindre la conversation.':error.message;}else $('status').textContent='Connexion interrompue. Nouvelle tentative automatique…';}finally{refreshing=false;}}

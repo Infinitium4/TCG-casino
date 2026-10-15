@@ -22,6 +22,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   const { registerFps } = require('./fps');
   const { initializeFpsShopSchema, registerFpsShop } = require('./fps-shop');
   const { initializeGeneralChatSchema, registerGeneralChat } = require('./general-chat');
+  const { registerPlatformMaintenance } = require('./platform-maintenance');
 
   const app = express();
   const server = http.createServer(app);
@@ -139,6 +140,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
       res.status(500).json({ error: 'Le service de comptes est indisponible.' });
     });
   });
+
+  app.use((req, res, next) => maintenance.guard(req, res, next));
 
   const io = new Server(server, {
     cors: { origin: true, credentials: true },
@@ -2156,6 +2159,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     await initializeScreenTimeSchema(run);
     await initializeFpsShopSchema(run);
     await initializeGeneralChatSchema(run);
+    await maintenance.initialize();
     await initializeRegistrationCaptcha(run, all);
     await initializeHorseRacingSchema(run);
     await run(`
@@ -2788,6 +2792,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         updatedAt: row.updated_at
       })),
       bettingPaused: await isBettingPaused(),
+      maintenance: maintenance.getState(),
       canManage: req.isPrimaryAdmin
     });
   }));
@@ -3438,6 +3443,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   registerClickerRoutes({ app, requireAuth, handleAsync, run, get, withDatabaseTransaction, isUserInActiveTable });
   registerScreenTimeRoutes({ app, requireAuth, handleAsync, run, get, withDatabaseTransaction });
   registerFps({ app, io, requireAuth, handleAsync, get, gameDir: GAME_DIR, path });
+  const maintenance = registerPlatformMaintenance({ app, io, get, run, withDatabaseTransaction, requireAuth, requireAdmin, requirePrimaryAdmin, handleAsync, recordAdminAction, primaryUsername: PRIMARY_ADMIN_USERNAME,
+    hasActiveGame: async (id) => isUserInActiveTable(id) || await hasOtherActiveBet(id) || Boolean(await get("SELECT id FROM mines_games WHERE user_id=? AND status='active' LIMIT 1", [id])) || Boolean(await get("SELECT id FROM horse_races WHERE user_id=? AND status!='settled' LIMIT 1", [id])) });
   registerGeneralChat({ app, io, requireAuth, requireAdmin, handleAsync, run, get, all, withDatabaseTransaction });
   registerFpsShop({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction, isUserInActiveTable });
   registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,

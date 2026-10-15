@@ -173,7 +173,7 @@ window.FpsRenderer = class FpsRenderer {
     const pose=p.moving&&!showcase?'soldier-run-'+Math.floor(time/80)%8:'soldier-idle',key=skin.id+pose;
     if(!this.characterCache.has(key)){
       const vertices=[];
-      if(this.assets&&skin.style!=='portrait'){
+      if(this.assets&&!['portrait','athlete','sport'].includes(skin.style)){
         this.assets.append(vertices,pose,[0,0,0],1,0,0,skin);
         const mount=this.assets.meshes.get(pose).mount;
         if(mount){const d=mount.forward;this.rifle(vertices,mount.point.map((v,i)=>v+d[i]*.12),Math.atan2(d[0],-d[2]),Math.asin(d[1]),skin,.75);}
@@ -193,6 +193,7 @@ window.FpsRenderer = class FpsRenderer {
     if(p.protectedUntil>Date.now())this.box(out,p.x,h+.03,p.y,.8,.035,.8,skin.trim,p.yaw,0,.5);
   }
   characterModel(out,p,skin,time=0,showcase=false){
+    if(['athlete','sport'].includes(skin.style))return this.signatureModel(out,p,skin,showcase);
     const a=p.yaw,h=p.height||0,c=Math.cos(a),s=Math.sin(a),tint=skin.body.map(v=>v*.62+.025),trim=skin.trim.map(v=>v*.7),dark=[.045,.05,.055];
     const point=(x,y,z)=>[p.x+x*c-z*s,h+y,p.y+x*s+z*c];
     const oval=(x,y,z,rx,ry,rz,color,glow=0)=>this.ellipsoid(out,...point(x,y,z),rx,ry,rz,color,a,glow);
@@ -307,6 +308,76 @@ window.FpsRenderer = class FpsRenderer {
     this.rifle(out,point(.12,.9,-.27),a,.12,skin,.72);
     if(showcase){oval(0,.015,0,.39,.015,.25,[.035,.025,.018]);}
     if(p.protectedUntil>Date.now())box(0,.03,0,.8,.035,.8,trim,0,.5);
+  }
+  signatureModel(out,p,skin,showcase=false){
+    const a=p.yaw,c=Math.cos(a),s=Math.sin(a),h=p.height||0,muscular=skin.style==='athlete';
+    const point=(x,y,z)=>[p.x+x*c-z*s,h+y,p.y+x*s+z*c];
+    const oval=(x,y,z,rx,ry,rz,color)=>this.ellipsoid(out,...point(x,y,z),rx,ry,rz,color,a);
+    const box=(x,y,z,sx,sy,sz,color)=>this.box(out,...point(x,y,z),sx,sy,sz,color,a);
+    const flesh=muscular?[.73,.48,.33]:[.70,.49,.37],shade=flesh.map(v=>v*.82),light=flesh.map(v=>v*1.06);
+    const fabric=[.035,.039,.046],denim=[.075,.082,.09],hair=muscular?[.16,.10,.055]:[.038,.027,.021];
+    // Broad shoulders taper into a narrower waist. Separate pectorals, deltoids and abs.
+    oval(0,1.04,0,muscular?.245:.215,.285,.13,muscular?flesh:fabric);
+    oval(0,.78,0,.17,.13,.13,muscular?flesh:fabric);
+    for(const side of [-1,1]){
+      oval(side*.125,1.19,-.075,muscular?.15:.115,.105,.105,muscular?light:fabric);
+      if(muscular){
+        for(let row=0;row<3;row++)oval(side*.062,1.045-row*.075,-.126,.06,.043,.027,row===0?light:flesh);
+        for(let row=0;row<3;row++)oval(side*(.18-row*.015),1.04-row*.07,-.06,.042,.055,.055,shade);
+        oval(side*.27,1.23,0,.115,.12,.125,light);
+        oval(side*.29,1.10,0,.09,.14,.085,flesh);
+        oval(side*.29,1.00,-.055,.073,.075,.075,shade);
+        oval(side*.10,1.295,-.05,.115,.021,.035,light);
+      }else{
+        oval(side*.255,1.20,0,.10,.105,.105,fabric);
+        oval(side*.275,1.10,0,.085,.13,.088,fabric);
+        box(side*.275,1.17,-.085,.033,.095,.014,skin.trim);
+        box(side*.25,1.18,-.094,.07,.015,.012,skin.trim);
+      }
+      const elbow=point(side*.28,.99,-.10),hand=point(side<0?-.015:.13,side<0?.88:.79,side<0?-.51:-.19);
+      const dx=hand[0]-elbow[0],dy=hand[1]-elbow[1],dz=hand[2]-elbow[2],length=Math.hypot(dx,dy,dz);
+      this.cylinder(out,(hand[0]+elbow[0])/2,(hand[1]+elbow[1])/2,(hand[2]+elbow[2])/2,muscular?.067:.057,length,flesh,Math.atan2(-dx,dz),Math.asin(-dy/length));
+      this.ellipsoid(out,...elbow,.065,.065,.065,flesh,a);this.ellipsoid(out,...hand,.06,.05,.073,flesh,a);
+      for(let finger=0;finger<4;finger++)box((side<0?-.04:.10)+finger*.019,side<0?.87:.78,side<0?-.565:-.23,.014,.03,.026,shade);
+      oval(side*.115,.51,0,.105,.25,.105,muscular?denim:fabric);
+      oval(side*.12,.235,.015,.078,.20,.08,muscular?denim:fabric);
+      oval(side*.12,.07,-.055,.095,.068,.15,fabric);
+      box(side*.12,.025,-.055,.18,.025,.26,[.28,.28,.27]);
+      box(side*.16,.50,-.08,.008,.34,.008,muscular?[.18,.17,.14]:[.13,.13,.14]);
+    }
+    box(0,.755,-.115,.32,.033,.025,[.025,.022,.019]);box(0,.755,-.135,.037,.03,.012,[.56,.49,.34]);
+    if(!muscular){
+      // Ribbed black sports shirt, gold sleeve details and a small club crest.
+      for(let i=-4;i<=4;i++)box(i*.037,1.06,-.128,.004,.29,.006,[.065,.069,.077]);
+      box(-.115,1.19,-.17,.044,.06,.012,skin.trim);box(-.115,1.19,-.18,.023,.033,.006,fabric);
+      box(0,1.31,-.08,.16,.023,.06,[.018,.018,.021]);
+    }
+    oval(0,1.355,0,.075,.11,.075,flesh);
+    oval(0,1.565,0,.143,.19,.135,flesh);oval(0,1.435,-.023,.10,.075,.10,shade);
+    for(const side of [-1,1]){
+      oval(side*.145,1.56,0,.026,.05,.025,flesh);
+      oval(side*.063,1.59,-.12,.037,.018,.012,[.88,.86,.80]);
+      oval(side*.063,1.59,-.132,.014,.014,.008,[.16,.10,.055]);oval(side*.063,1.591,-.139,.007,.010,.004,[.018,.016,.014]);
+      oval(side*.063,1.628,-.116,.043,.011,.012,hair);
+      oval(side*.075,1.51,-.075,.045,.035,.016,light);
+      // Short moustache and chin stubble echo both reference portraits.
+      oval(side*.023,1.48,-.126,.025,.008,.007,hair);
+    }
+    oval(0,1.55,-.137,.022,.044,.028,flesh);oval(0,1.46,-.121,.045,.008,.009,[.40,.20,.16]);
+    oval(0,1.417,-.085,.056,.018,.024,muscular?shade:hair);
+    oval(0,1.715,.012,.148,muscular?.075:.045,.137,hair);
+    if(muscular){
+      for(let row=0;row<3;row++)for(let i=0;i<7;i++){
+        const x=(i-3)*.043,y=1.735+Math.sin(i*2.3+row)*.018,z=-.09+row*.065;
+        oval(x,y,z,.043,.038,.043,[.19+(i%3)*.016,.125+(i%3)*.01,.07]);
+      }
+      for(let i=0;i<5;i++)oval((i-2)*.047,1.68+Math.sin(i)*.01,-.113,.043,.05,.024,hair);
+    }else{
+      for(const side of [-1,1])oval(side*.13,1.66,.012,.018,.057,.10,hair);
+    }
+    // Keep the standard gameplay silhouette and weapon position for all paid skins.
+    this.rifle(out,point(.12,.9,-.27),a,.12,skin,.72);
+    if(showcase)oval(0,.015,0,.39,.015,.25,[.035,.025,.018]);
   }
   bind(buffer) {
     const gl=this.gl;gl.bindBuffer(gl.ARRAY_BUFFER,buffer);

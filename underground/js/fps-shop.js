@@ -1,6 +1,6 @@
 window.refreshFpsShop=async function(){
   const cards=document.getElementById('skinCards'),feedback=document.getElementById('shopFeedback');
-  const money=value=>Number(value).toLocaleString('fr-FR',{maximumFractionDigits:2})+' jetons';
+  const money=value=>Number(value).toLocaleString('fr-FR',{maximumFractionDigits:2})+' \u20ac';
   async function request(url,body){
     const response=await fetch(url,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'});
     const data=await response.json();if(!response.ok)throw Error(data.error||'Boutique indisponible.');return data;
@@ -35,7 +35,7 @@ window.refreshFpsShop=async function(){
       const name=document.createElement('h3');name.textContent=skin.name;
       const price=document.createElement('p');price.className='skin-price';price.textContent=owned?'Dans ton vestiaire':money(skin.price);
       const button=document.createElement('button');button.className=equipped?'secondary':'primary';button.type='button';
-      button.textContent=equipped?'Équipé':owned?'Équiper':skin.price===0?'Débloquer gratuitement':data.balance<skin.price?'Jetons insuffisants':'Acheter · '+money(skin.price);
+      button.textContent=equipped?'Équipé':owned?'Équiper':skin.price===0?'Débloquer gratuitement':data.balance<skin.price?'Solde insuffisant':'Acheter · '+money(skin.price);
       button.disabled=equipped||(!owned&&data.balance<skin.price);
       button.addEventListener('click',async()=>{
         for(const b of cards.querySelectorAll('button'))b.disabled=true;

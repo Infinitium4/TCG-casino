@@ -24,7 +24,7 @@ test('skins debit once under concurrency, reject unowned equips and insufficient
     }throw Error(output);
   }
   await start();
-  const player=await createPlayerFixture(base,dataDir,{username:'skin-buyer',password:'test-password'},600);
+  const player=await createPlayerFixture(base,dataDir,{username:'skin-buyer',password:'test-password'},2100);
   const other=await createPlayerFixture(base,dataDir,{username:'other-buyer',password:'test-password'},100);
   async function request(route,skinId,cookie=player.cookie){
     const response=await fetch(base+'/api/fps/shop'+route,{method:skinId?'POST':'GET',headers:{Cookie:cookie,...(skinId?{'Content-Type':'application/json'}:{})},...(skinId?{body:JSON.stringify({skinId})}:{})});
@@ -45,7 +45,17 @@ test('skins debit once under concurrency, reject unowned equips and insufficient
   await stop();await start();state=(await request('')).body;
   assert.equal(state.balance,100);assert.equal(state.equipped,'emerald');assert.ok(state.owned.includes('emerald'));
   assert.equal((await request('/equip','classic')).body.equipped,'classic');
-  const portrait=await request('/buy','smile');assert.equal(portrait.status,200);assert.equal(portrait.body.balance,100);
-  assert.equal((await request('/buy','smile')).body.owned.filter(id=>id==='smile').length,1);
-  assert.equal((await request('/equip','smile')).body.equipped,'smile');
+  assert.equal((await request('/buy','smile')).status,409);
+  const collector=await createPlayerFixture(base,dataDir,{username:'portrait-collector',password:'test-password'},6500);
+  const portrait=await request('/buy','smile',collector.cookie);assert.equal(portrait.status,200);assert.equal(portrait.body.balance,4500);
+  assert.equal(portrait.body.skins.find(s=>s.id==='smile').name,'Elouan');
+  assert.equal((await request('/buy','smile',collector.cookie)).body.owned.filter(id=>id==='smile').length,1);
+  assert.equal((await request('/equip','smile',collector.cookie)).body.equipped,'smile');
+  const titans=await Promise.all([request('/buy','titan',collector.cookie),request('/buy','titan',collector.cookie)]);
+  assert.ok(titans.every(r=>r.status===200));assert.equal(titans[0].body.balance,2100);
+  assert.equal((await request('/buy','striker',collector.cookie)).body.balance,0);
+  assert.equal((await request('/equip','striker',collector.cookie)).body.equipped,'striker');
+  await stop();await start();const collection=(await request('',null,collector.cookie)).body;
+  assert.equal(collection.balance,0);assert.equal(collection.equipped,'striker');
+  for(const id of ['smile','titan','striker'])assert.ok(collection.owned.includes(id));
 });
