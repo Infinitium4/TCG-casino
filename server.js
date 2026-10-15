@@ -1476,6 +1476,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
       startedAt: round.startedAt,
       crashAt: round.crashAt,
       serverNow: now,
+      timeScaleMs: CRASH_TIME_SCALE_MS,
       multiplier: running
         ? getCrashMultiplierAt(now, round.startedAt)
         : crashed ? round.crashMultiplier : 1
@@ -1583,8 +1584,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     };
   }
 
-  async function broadcastCrashState() {
-    if (activeCrashRounds.size === 0 || io.engine.clientsCount === 0) return;
+  async function broadcastCrashState(force = false) {
+    if ((!force && activeCrashRounds.size === 0) || io.engine.clientsCount === 0) return;
     for (const socket of io.sockets.sockets.values()) {
       const userId = socket.data.user?.id;
       if (userId) {
@@ -1805,6 +1806,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         (async () => {
           try {
             const now = Date.now();
+            let finishedRound = false;
             for (const round of activeCrashRounds.values()) {
               if (round.status === 'betting' && now >= round.startedAt) {
                 const started = await run(
@@ -1816,9 +1818,10 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
               if (round.status === 'running' && now >= round.crashAt) {
                 await finishCrashRound(round);
                 activeCrashRounds.delete(round.id);
+                finishedRound = true;
               }
             }
-            await broadcastCrashState();
+            await broadcastCrashState(finishedRound);
           } catch (error) {
             console.error('Erreur du moteur Crash :', error);
           } finally {
