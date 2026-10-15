@@ -5,6 +5,7 @@
   let lastSnapshot=0,offset=0,audio=null,audioPack=null,muted=false,roomId=null,scoresOpen=false;
   const keys=new Set(),display=new Map(),effects=[],feed=[];
   let firing=false,aiming=false;
+  let lastLobbyFrame=0,lastRadar=-Infinity,feedSignature='';
   let lobbyTab='play',lobbySkin='classic',onlineUsers=[],pendingInvite=null,partySignature='';
   function selectLobbyTab(tab){
     sound('ui');
@@ -41,7 +42,7 @@
   }
   function locked(){return document.pointerLockElement===$('arena');}
   function hint(message){$('feedback').textContent=message;}
-  function text(id,value){$(id).textContent=value;}
+  function text(id,value){const node=$(id);if(node.textContent!==String(value))node.textContent=value;}
   function sound(kind) {
     if(muted||!audio||audio.state!=='running')return;
     if(audioPack?.play(kind))return;
@@ -204,8 +205,10 @@
     renderFeed();
   }
   function renderFeed() {
+    const visible=feed.filter(f=>f.until>Date.now()),signature=visible.map(item=>item.id+':'+item.until).join(',');
+    if(signature===feedSignature)return;feedSignature=signature;
     $('killfeed').replaceChildren();
-    for(const item of feed.filter(f=>f.until>Date.now())) {
+    for(const item of visible) {
       const row=document.createElement('div'),killer=document.createElement('strong');killer.textContent=item.killer;
       const victim=document.createElement('span');victim.textContent=` ${item.headshot?'⌖':'→'} ${item.victim}`;
       row.append(killer,victim);$('killfeed').append(row);
@@ -239,6 +242,7 @@
   }
   function sendInput(){if(joined&&!practice&&socket?.connected)socket.volatile.emit('fps:input',currentInput());}
   function radar(me) {
+    const now=performance.now();if(now-lastRadar<100)return;lastRadar=now;
     const ctx=$('radar').getContext('2d'),scale=160/W.SIZE;
     ctx.clearRect(0,0,160,160);
     for(let y=0;y<W.MAP.length;y++)for(let x=0;x<W.MAP[y].length;x++)if(W.MAP[y][x]!=='0') {
@@ -255,6 +259,9 @@
     }
   }
   function frame(timestamp) {
+    if(document.hidden){lastFrame=timestamp;requestAnimationFrame(frame);return;}
+    if(!joined&&timestamp-lastLobbyFrame<1000/30){requestAnimationFrame(frame);return;}
+    lastLobbyFrame=timestamp;
     const dt=Math.min(.05,(timestamp-lastFrame)/1000);lastFrame=timestamp;
     if(practice){practice.tick(currentInput(),dt);accept(practice.snapshot());predicted={...practice.player};}
     if(joined&&state&&predicted&&!state.waiting) {

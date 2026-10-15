@@ -54,6 +54,7 @@ const crashModule = (() => {
     if (window.io) {
       state.socket = io();
       state.socket.on('connect', () => {
+        if (!state.active) return;
         state.socket.emit('crash:sync', (payload) => {
           if (payload?.ok) updateState(payload);
         });
@@ -440,12 +441,14 @@ const crashModule = (() => {
 
   function setActive(active) {
     state.active = active;
+    if (active) state.socket?.emit('crash:sync', payload => { if (payload?.ok) updateState(payload); });
+    else state.socket?.emit('crash:unsubscribe');
     if (state.pollTimer !== null) clearInterval(state.pollTimer);
     state.pollTimer = null;
     if (active && state.enabled) {
       refreshState();
       state.pollTimer = setInterval(() => {
-        if (!document.hidden) refreshState();
+        if (!document.hidden && !state.socket?.connected) refreshState();
       }, 1000);
     }
     updateAnimation();

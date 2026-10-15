@@ -35,6 +35,7 @@ jobs:
             --exclude='.git/' \
             --exclude='node_modules/' \
             --exclude='*.sqlite' \
+            --exclude='*.sqlite-*' \
             --exclude='actions-runner/' \
             "$GITHUB_WORKSPACE/" "$APP_DIR/"
 

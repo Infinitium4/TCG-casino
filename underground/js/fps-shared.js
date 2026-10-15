@@ -136,6 +136,14 @@
     }
     return { target,distance,headshot,normal:worldHit.normal,hitWorld:!target&&worldHit.distance<79.999,hitPlayer:Boolean(target),end:{x:shooter.x+dx*horizontal*distance,y:1.55+(shooter.height||0)+vertical*distance,z:shooter.y+dy*horizontal*distance} };
   }
+  // Static collision planes are shared by all shots and grenade checks.
+  const boxPlanes=(x0,x1,y0,y1,z0,z1)=>[[1,0,0,x1],[-1,0,0,-x0],[0,1,0,y1],[0,-1,0,-y0],[0,0,1,z1],[0,0,-1,-z0]];
+  const rayShapes=[
+    ...solidCells.map(([x,z,height])=>boxPlanes(x,x+1,0,height,z,z+1)),
+    ...PLATFORMS.map(p=>boxPlanes(p.x0,p.x1,UPPER-.22,UPPER,p.z0,p.z1)),
+    ...RAILS.map(r=>boxPlanes(r.x0,r.x1,r.y0,r.y1,r.z0,r.z1)),
+    ...RAMPS.map(r=>[[1,0,0,r.x1],[-1,0,0,-r.x0],[0,-1,0,0],[0,1,-r.slope,r.intercept],[0,0,1,r.z1],[0,0,-1,-r.z0]])
+  ];
   function rayWorld(origin,direction,max=80,details=false){
     let distance=max,normal=direction.map(v=>-v);
     const clip=planes=>{
@@ -149,11 +157,7 @@
       }
       if(far>=0&&near<distance){distance=near;normal=entryNormal;}
     };
-    const box=(x0,x1,y0,y1,z0,z1)=>clip([[1,0,0,x1],[-1,0,0,-x0],[0,1,0,y1],[0,-1,0,-y0],[0,0,1,z1],[0,0,-1,-z0]]);
-    for(const [x,z,height] of solidCells)box(x,x+1,0,height,z,z+1);
-    for(const p of PLATFORMS)box(p.x0,p.x1,UPPER-.22,UPPER,p.z0,p.z1);
-    for(const r of RAILS)box(r.x0,r.x1,r.y0,r.y1,r.z0,r.z1);
-    for(const r of RAMPS)clip([[1,0,0,r.x1],[-1,0,0,-r.x0],[0,-1,0,0],[0,1,-r.slope,r.intercept],[0,0,1,r.z1],[0,0,-1,-r.z0]]);
+    for(const planes of rayShapes)clip(planes);
     if(direction[1]<0&&-origin[1]/direction[1]<distance){distance=-origin[1]/direction[1];normal=[0,1,0];}
     return details?{distance,normal}:distance;
   }

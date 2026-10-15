@@ -371,7 +371,7 @@ const blackjackGame = (() => {
     }
     attachSocket();
     await refreshTable();
-    state.poller = setInterval(refreshTable, 2500);
+    state.poller = setInterval(() => { if (!document.hidden) refreshTable(); }, 2500);
     document.getElementById('goLobbyBtn').addEventListener('click', leaveTable);
   }
 

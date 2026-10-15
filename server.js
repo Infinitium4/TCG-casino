@@ -177,6 +177,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
       process.exit(1);
     }
     console.log('Base SQLite connectée');
+    db.configure('busyTimeout', 5000);
     db.run('PRAGMA foreign_keys = ON', (pragmaError) => {
       if (pragmaError) {
         rejectDatabaseReady(pragmaError);
@@ -1593,10 +1594,15 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
 
   async function broadcastCrashState(force = false) {
     if ((!force && activeCrashRounds.size === 0) || io.engine.clientsCount === 0) return;
-    for (const socket of io.sockets.sockets.values()) {
-      const userId = socket.data.user?.id;
+    const subscribers = io.sockets.adapter.rooms.get('crash:watchers');
+    if (!subscribers) return;
+    const states = new Map();
+    for (const socketId of subscribers) {
+      const socket = io.sockets.sockets.get(socketId);
+      const userId = socket?.data.user?.id;
       if (userId) {
-        socket.emit('crash:state', await getCrashState(userId));
+        if (!states.has(userId)) states.set(userId, await getCrashState(userId));
+        socket.emit('crash:state', states.get(userId));
       }
     }
   }
@@ -1664,6 +1670,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     });
     if (!result.duplicate) {
       activeCrashRounds.set(result.round.id, result.round);
+      ensureCrashEngine();
     }
     return { ...result, round: publicCrashRound(result.round) };
   }
@@ -1811,7 +1818,11 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
       }
     }
 
-    if (!crashEngineTimer) {
+    ensureCrashEngine();
+  }
+
+  function ensureCrashEngine() {
+    if (activeCrashRounds.size && !crashEngineTimer) {
       crashEngineTimer = setInterval(() => {
         if (crashEngineBusy) return;
         crashEngineBusy = true;
@@ -1819,13 +1830,14 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
           try {
             const now = Date.now();
             let finishedRound = false;
+            let changed = false;
             for (const round of activeCrashRounds.values()) {
               if (round.status === 'betting' && now >= round.startedAt) {
                 const started = await run(
                   "UPDATE crash_rounds SET status = 'running' WHERE id = ? AND status = 'betting'",
                   [round.id]
                 );
-                if (started.changes) round.status = 'running';
+                if (started.changes) { round.status = 'running'; changed = true; }
               }
               if (round.status === 'running' && now >= round.crashAt) {
                 await finishCrashRound(round);
@@ -1833,7 +1845,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
                 finishedRound = true;
               }
             }
-            await broadcastCrashState(finishedRound);
+            if (changed || finishedRound) await broadcastCrashState(true);
+            if (!activeCrashRounds.size) { clearInterval(crashEngineTimer); crashEngineTimer = null; }
           } catch (error) {
             console.error('Erreur du moteur Crash :', error);
           } finally {
@@ -1852,15 +1865,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     socket.emit('session:ready', { user });
     socket.on('plinko:subscribe', () => socket.join('plinko:feed'));
     socket.on('plinko:unsubscribe', () => socket.leave('plinko:feed'));
-    try {
-      await databaseReady;
-      const settings = await getGameSettings('crash');
-      if ((settings?.enabled && !settings.maintenance) || await hasActiveCrashBet(user.id)) {
-        socket.emit('crash:state', await getCrashState(user.id));
-      }
-    } catch (error) {
-      socket.emit('crash:error', { message: error.message || 'État Crash indisponible.' });
-    }
+    socket.on('crash:unsubscribe', () => socket.leave('crash:watchers'));
     socket.on('crash:sync', async (acknowledge) => {
       try {
         await databaseReady;
@@ -1871,6 +1876,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
           }
           return;
         }
+        socket.join('crash:watchers');
         const state = await getCrashState(user.id);
         if (typeof acknowledge === 'function') acknowledge({ ok: true, ...state });
         socket.emit('crash:state', state);
@@ -2224,6 +2230,16 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
         await run('ALTER TABLE admin_audit_migrated RENAME TO admin_audit');
       });
     }
+
+    // Match hot history lookups and active-deadline scans without changing ledger data.
+    for (const sql of [
+      'CREATE INDEX IF NOT EXISTS history_user_recent ON game_history(user_id,id DESC)',
+      'CREATE INDEX IF NOT EXISTS crash_bets_user_recent ON crash_bets(user_id,created_at DESC)',
+      "CREATE INDEX IF NOT EXISTS crash_bets_round_active ON crash_bets(round_id) WHERE status='active'",
+      "CREATE INDEX IF NOT EXISTS horse_running_deadline ON horse_races(ends_at_ms) WHERE status='running'",
+      "CREATE INDEX IF NOT EXISTS horse_event_deadline ON horse_events(ends_at_ms) WHERE status='running'",
+      "CREATE INDEX IF NOT EXISTS tower_expiry ON tower_games(expires_at) WHERE status IN ('PLAYING','PLACING')"
+    ]) await run(sql);
 
     const adminUsername = PRIMARY_ADMIN_USERNAME;
     const secondAdminUsername = process.env.SECOND_ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin2');

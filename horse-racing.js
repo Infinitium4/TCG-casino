@@ -1,5 +1,6 @@
 const { isMoney, roundMoney, moneyRatio } = require('./underground/js/money');
 const crypto = require('node:crypto');
+const { createDeadlineScheduler } = require('./deadline-scheduler');
 const { initializeHorseTables, registerHorseTables } = require('./horse-tables');
 
 const HORSES = Object.freeze([
@@ -66,17 +67,22 @@ function registerHorseRacingRoutes(deps) {
     return handleAsync(async (req, res) => {
       try { await handler(req, res); }
       catch (error) { if (error.status) return res.status(error.status).json({ error: error.message }); throw error; }
+      finally { if(req.method==='POST') scheduler.refresh().catch(error=>console.error('Horse scheduler:',error)); }
     });
   }
   const tablesApi = registerHorseTables(deps, { HORSES, generateRace, publicRace, settle, route });
-  const settlementTimer = setInterval(() => {
-    databaseReady.then(() => withDatabaseTransaction(async () => {
+  const scheduler=createDeadlineScheduler({
+    nextDeadline:async()=>{
+      const row=await get("SELECT MIN(ends_at_ms) AS deadline FROM (SELECT ends_at_ms FROM horse_races WHERE status='running' UNION ALL SELECT ends_at_ms FROM horse_events WHERE status='running')");
+      return row?.deadline??null;
+    },
+    runDue:()=>withDatabaseTransaction(async () => {
       await tablesApi.settleDue();
       const due = await all("SELECT * FROM horse_races WHERE event_id IS NULL AND status = 'running' AND ends_at_ms <= ?", [Date.now()]);
       for (const row of due) await settle(row);
-    })).catch(error => console.error('Règlement hippique impossible :', error));
-  }, 1000);
-  settlementTimer.unref();
+    })
+  });
+  databaseReady.then(()=>scheduler.refresh()).catch(error=>console.error('Horse scheduler:',error));
   async function response(userId, row) {
     const user = await get('SELECT chips FROM users WHERE id = ?', [userId]);
     return { race: publicRace(row), balance: user.chips, serverNow: Date.now() };

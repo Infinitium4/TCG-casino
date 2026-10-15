@@ -1,0 +1,61 @@
+{
+  "measuredAt": "2026-10-15T18:27:15.496Z",
+  "environment": {
+    "platform": "win32",
+    "node": "v24.21.0",
+    "cpu": "AMD Ryzen AI 9 HX 370 w/ Radeon 890M           ",
+    "logicalCpus": 24
+  },
+  "http": {
+    "route": "/api/me",
+    "requests": 40,
+    "medianMs": 9.2,
+    "p95Ms": 13.36
+  },
+  "socketTraffic": {
+    "bytes": 331115,
+    "packets": 119
+  },
+  "results": [
+    {
+      "scenario": "idle",
+      "durationMs": 6003,
+      "cpuPercentOneCore": 0,
+      "rssMiB": 62.68,
+      "heapMiB": 11.67,
+      "timers": 7,
+      "sockets": 0,
+      "sqliteCalls": 24
+    },
+    {
+      "scenario": "fps-solo-moving-firing",
+      "durationMs": 6009,
+      "cpuPercentOneCore": 2.08,
+      "rssMiB": 70.85,
+      "heapMiB": 15.92,
+      "timers": 7,
+      "sockets": 1,
+      "sqliteCalls": 24
+    },
+    {
+      "scenario": "crash-connected",
+      "durationMs": 6008,
+      "cpuPercentOneCore": 2.081,
+      "rssMiB": 65.36,
+      "heapMiB": 14.07,
+      "timers": 7,
+      "sockets": 1,
+      "sqliteCalls": 65
+    },
+    {
+      "scenario": "after-disconnect",
+      "durationMs": 6007,
+      "cpuPercentOneCore": 2.081,
+      "rssMiB": 65.84,
+      "heapMiB": 13.78,
+      "timers": 7,
+      "sockets": 0,
+      "sqliteCalls": 24
+    }
+  ]
+}

@@ -159,7 +159,8 @@ function registerTowerRoutes(deps) {
   });
   databaseReady.then(async () => {
     await sweep();
-    const timer = setInterval(() => sweep().catch(error => console.error('Expiration Tower Rush :', error.message)), 30000);
+    let sweeping=false;
+    const timer = setInterval(() => { if(sweeping)return;sweeping=true;sweep().catch(error => console.error('Expiration Tower Rush :', error.message)).finally(()=>{sweeping=false;}); }, 30000);
     timer.unref();
   }).catch(error => console.error('Initialisation Tower Rush :', error.message));
 }

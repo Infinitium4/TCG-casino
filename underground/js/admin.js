@@ -593,7 +593,7 @@ const adminModule = (() => {
     loadOverview();
     loadSettings();
     loadAudit();
-    window.setInterval(loadOverview, 5000);
+    window.setInterval(() => { if (!document.hidden && document.getElementById('adminView')?.classList.contains('active')) loadOverview(); }, 5000);
   }
 
   return { initialize };

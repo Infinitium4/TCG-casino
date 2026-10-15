@@ -20,7 +20,7 @@ const blackjackModule = (() => {
 
     refreshTables();
     if (state.poller) clearInterval(state.poller);
-    state.poller = setInterval(refreshTables, 2500);
+    state.poller = setInterval(() => { if (!document.hidden && (state.currentTableId || document.getElementById('blackjackView')?.classList.contains('active'))) refreshTables(); }, 2500);
   }
 
   async function refreshTables() {

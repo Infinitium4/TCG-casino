@@ -356,7 +356,7 @@ const horsesModule = (() => {
     el('horseSound').addEventListener('change', () => { const player = getPlayer(); player.soundEnabled = el('horseSound').checked; savePlayer(player); unlockAudio(); });
     document.addEventListener('visibilitychange', () => { if (!document.hidden && state.active) refresh(); });
     new ResizeObserver(wake).observe(el('horseRaceCanvas'));
-    setInterval(() => { if (state.active) refresh(); }, 1000);
+    setInterval(() => { if (state.active && !document.hidden) refresh(); }, 1000);
     refresh();
   }
   return { initialize, setActive };

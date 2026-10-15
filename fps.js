@@ -107,6 +107,22 @@ class Arena {
 
 function registerFps({app,io,requireAuth,handleAsync,get,gameDir,path}) {
   const rooms=new Map(),membership=new Map();
+  let timer=null,timerPeriod=0,cleanupTimer=null;
+  function expireInvitations(){
+    const now=Date.now();
+    for(const [id,invite] of invitations)if(invite.expires<now||!rooms.has(invite.roomId))invitations.delete(id);
+    for(const [key,at] of inviteCooldowns)if(now-at>=60000)inviteCooldowns.delete(key);
+    if(!rooms.size&&(invitations.size||inviteCooldowns.size)&&!cleanupTimer){
+      cleanupTimer=setTimeout(()=>{cleanupTimer=null;expireInvitations();},60000);cleanupTimer.unref();
+    }
+  }
+  function schedule(){
+    const period=rooms.size?([...rooms.values()].some(room=>!room.waiting)?50:1000):0;
+    if(period===timerPeriod)return;
+    if(timer)clearInterval(timer);timer=null;timerPeriod=period;
+    if(period){timer=setInterval(tick,period);timer.unref();}
+    else expireInvitations();
+  }
   const lobbyUsers=new Map(),invitations=new Map(),inviteCooldowns=new Map();
   const presence=()=>[...lobbyUsers.entries()].map(([id,user])=>({id,name:user.name,roomId:[...membership.values()].find(m=>m.userId===id)?.roomId||null}));
   const broadcastPresence=()=>{const users=presence();for(const user of lobbyUsers.values())for(const id of user.sockets)io.sockets.sockets.get(id)?.emit('fps:presence',users);};
@@ -120,7 +136,7 @@ function registerFps({app,io,requireAuth,handleAsync,get,gameDir,path}) {
     const room=rooms.get(m.roomId);
     socket.leave(roomName(m.roomId));membership.delete(socket.id);
     if(room){room.remove(m.userId);if(!room.players.size)rooms.delete(room.id);}
-    broadcastPresence();
+    broadcastPresence();schedule();
   }
   io.on('connection',socket=>{
     const respond=(ack,payload)=>{if(typeof ack==='function')ack(payload);};
@@ -178,7 +194,7 @@ function registerFps({app,io,requireAuth,handleAsync,get,gameDir,path}) {
           if(previous){leave(previous);if(previous!==socket)previous.emit('fps:kicked',{message:'Partie ouverte dans un autre onglet.'});}
         }
         if(!socket.connected)return;
-        rooms.set(room.id,room);room.add(userId,user.username,Date.now());
+        rooms.set(room.id,room);room.add(userId,user.username,Date.now());schedule();
         room.players.get(userId).skin=SKINS.some(s=>s.id===loadout?.skin_id)?loadout.skin_id:'classic';
         if(!room.hostId)room.hostId=userId;
         membership.set(socket.id,{roomId:room.id,userId});socket.join(roomName(room.id));
@@ -193,7 +209,7 @@ function registerFps({app,io,requireAuth,handleAsync,get,gameDir,path}) {
       const m=membership.get(socket.id),room=rooms.get(m?.roomId);
       if(!room||room.hostId!==m.userId)return respond(ack,{error:'Seul l’hôte peut lancer le match.'});
       if(!room.start(Date.now()))return respond(ack,{error:'Le groupe doit contenir au moins un joueur et être dans le lobby.'});
-      respond(ack,{ok:true});
+      schedule();respond(ack,{ok:true});
     });
     socket.on('fps:kick',async(data,ack)=>{
       try {
@@ -210,16 +226,15 @@ function registerFps({app,io,requireAuth,handleAsync,get,gameDir,path}) {
     });
     socket.on('disconnect',()=>{
       leave(socket);const id=Number(socket.request.session.userId),entry=lobbyUsers.get(id);
-      if(entry){entry.sockets.delete(socket.id);if(!entry.sockets.size)lobbyUsers.delete(id);}broadcastPresence();
+      if(entry?.sockets.delete(socket.id)){if(!entry.sockets.size)lobbyUsers.delete(id);broadcastPresence();}
     });
   });
-  const timer=setInterval(()=>{
+  function tick(){
     const now=Date.now();
-    for(const [id,invite] of invitations)if(invite.expires<now)invitations.delete(id);
-    for(const [key,at] of inviteCooldowns)if(now-at>60000)inviteCooldowns.delete(key);
+    expireInvitations();
     for(const room of rooms.values()){room.tick(now,.05);io.to(roomName(room.id)).volatile.emit('fps:state',room.snapshot(now));}
-  },50);
-  timer.unref();
-  return {rooms,close(){clearInterval(timer);}};
+    schedule();
+  }
+  return {rooms,close(){if(timer)clearInterval(timer);if(cleanupTimer)clearTimeout(cleanupTimer);timer=null;cleanupTimer=null;timerPeriod=0;}};
 }
 module.exports={Arena,registerFps,MAGAZINE,RELOAD_MS,FIRE_MS,MATCH_MS};

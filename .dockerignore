@@ -6,3 +6,7 @@ node_modules
 database.sqlite
 *.sqlite
 npm-debug.log*
+
+*.sqlite-*
+performance-*.json
+tests

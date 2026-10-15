@@ -28,11 +28,11 @@
     if(!messages.size){const empty=document.createElement('p');empty.className='empty';empty.textContent='Le salon est ouvert. Lance la conversation !';fragment.append(empty);}
     area.replaceChildren(fragment);if(nearBottom)area.scrollTop=area.scrollHeight;
   }
-  function receive(message,live=false){const previous=messages.get(message.id);if(previous?.deleted&&!message.deleted)return;messages.set(message.id,message);if(messages.size>100){const oldest=Math.min(...messages.keys());messages.delete(oldest);}render();if(live&&!previous&&!open&&message.userId!==user?.id){unread++;$('unread').textContent=unread>99?'99+':String(unread);$('unread').hidden=false;}}
+  function receive(message,live=false,draw=true){const previous=messages.get(message.id);if(previous?.deleted&&!message.deleted)return;messages.set(message.id,message);if(messages.size>100){const oldest=Math.min(...messages.keys());messages.delete(oldest);}if(draw)render();if(live&&!previous&&!open&&message.userId!==user?.id){unread++;$('unread').textContent=unread>99?'99+':String(unread);$('unread').hidden=false;}}
   async function refresh(){if(refreshing)return;refreshing=true;try{
     const data=await api();const first=!user;user=data.user;canModerate=data.canModerate;
     $('form').hidden=false;$('draft').disabled=false;$('status').textContent=socket?.connected?'● En direct · Tous les joueurs':'Salon général · Tous les joueurs';
-    data.messages.forEach(message=>receive(message));render();
+    data.messages.forEach(message=>receive(message,false,false));render();
     if(first){try{$('draft').value=sessionStorage.getItem('chat-draft-'+user.id)||'';}catch{}updateCount();}
     if(!socket&&typeof window.io==='function'){
       socket=window.io({forceNew:true});socket.on('maintenance:changed',()=>window.dispatchEvent(new CustomEvent('platform-maintenance:changed')));socket.on('connect',()=>{socket.emit('general-chat:subscribe');$('status').textContent='● En direct · Tous les joueurs';refresh();});
