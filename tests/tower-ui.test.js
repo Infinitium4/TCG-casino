@@ -7,6 +7,8 @@ const { webcrypto } = require('node:crypto');
 const { createMotion, MULTIPLIERS } = require('../tower');
 function harness() {
   const nodes = new Map(), requests = [], storage = new Map(), events = new Map();
+  const html = fs.readFileSync(path.join(__dirname, '../underground/index.html'), 'utf8');
+  const ids = new Set(Array.from(html.matchAll(/\bid="([^"]+)"/g), match => match[1]));
   let player = { chips: 1000, soundEnabled: false }, clock = 1000;
   const ctx = new Proxy({ createLinearGradient: () => ({ addColorStop() {} }) }, { get(target, key) { return target[key] || (() => {}); } });
   const node = id => {
@@ -15,7 +17,7 @@ function harness() {
       append(child) { this.children.push(child); }, replaceChildren(...children) { this.children = children; }, getContext: () => ctx });
     return nodes.get(id);
   };
-  const context = vm.createContext({ document: { hidden: false, getElementById: node, querySelectorAll: () => [], querySelector: () => null,
+  const context = vm.createContext({ document: { hidden: false, getElementById: id => ids.has(id) ? node(id) : null, querySelectorAll: () => [], querySelector: () => null,
     addEventListener: (name, fn) => events.set(name, fn), createElement: tag => node(`${tag}-${nodes.size}`) },
     window: { devicePixelRatio: 1, matchMedia: () => ({ matches: false }) }, accountUser: { id: 7, username: 'Alice' },
     getPlayer: () => player, savePlayer: next => { player = next; }, updateTopbar() { node('topbarBalance').textContent = String(player.chips); },
@@ -34,6 +36,15 @@ function harness() {
     multipliers: MULTIPLIERS, multiplier: 1, nextMultiplier: MULTIPLIERS[0], readyAt: 0, expiresAt: 121000, createdAt: 1000 };
   return { game: context.game, nodes, requests, storage, events, playing, setClock: value => { clock = value; } };
 }
+
+test('Tower HUD renders against the elements present in the page', () => {
+  const h = harness();
+  h.game.hud();
+  assert.equal(h.nodes.get('towerFloor').textContent, '0 / 8');
+  assert.equal(h.nodes.get('towerMaxMultiplier').textContent, 'jusqu’à 3,65x');
+  assert.equal(h.nodes.get('towerLadder').children.length, 8);
+  assert.equal(Boolean(h.nodes.get('towerStart').disabled), false);
+});
 test('Tower sends one start on double click and unlocks Place only after ready time', async () => {
   const h = harness(), first = h.game.action('start'); await h.game.action('start');
   assert.equal(h.requests.length, 1);
