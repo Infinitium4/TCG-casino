@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="css/dice.css" />
     <link rel="stylesheet" href="css/mines.css" />
     <link rel="stylesheet" href="css/tower.css" />
+    <link rel="stylesheet" href="css/clicker.css" />
     <link rel="stylesheet" href="css/horses.css" />
     <link rel="stylesheet" href="/css/bunker.css" />
   </head>
@@ -55,6 +56,7 @@
         <button class="nav-item" data-view="slots" type="button">Machine à sous</button>
         <button class="nav-item" data-view="crash" type="button">Crash</button>
         <button class="nav-item" data-view="plinko" type="button">PLINKO</button>
+        <button class="nav-item" data-view="clicker" type="button">CLICKER</button>
         <button class="nav-item" data-view="dice" type="button">DICE</button>
         <button class="nav-item" data-view="mines" type="button">MINES</button>
         <button class="nav-item" data-view="tower" type="button">TOWER RUSH</button>
@@ -520,6 +522,17 @@
           </div>
         </section>
 
+        <section id="clickerView" class="view" aria-label="Clicker">
+          <div class="section-heading"><h2>Clicker</h2></div>
+          <div class="panel clicker-panel">
+            <p class="eyebrow">TON SOLDE</p><strong id="clickerBalance">—</strong>
+            <button id="clickerButton" class="gold-button" type="button" disabled>+1 JETON</button>
+            <p>Disponible si ton solde est inférieur à 1 000 jetons, sans limite quotidienne.</p>
+            <progress id="clickerProgress" max="1000" value="0" aria-label="Solde vers 1 000 jetons"></progress>
+            <p>Encore <strong id="clickerRemaining">—</strong> jetons avant un solde de 1 000</p>
+            <p id="clickerFeedback" role="status" aria-live="polite">Chaque clic validé rapporte 1 jeton.</p>
+          </div>
+        </section>
         <section id="diceView" class="view" aria-label="Dice">
           <div class="section-heading"><div><p class="eyebrow">CHOISIS TON SEUIL. TENTE TA CHANCE.</p><h1>DICE</h1></div><span class="status-box subtle">RTP théorique 99 %</span></div>
           <div class="dice-layout">
@@ -799,6 +812,7 @@
     <script src="js/mines.js"></script>
     <script src="js/tower-motion.js"></script>
     <script src="js/tower.js"></script>
+    <script src="js/clicker.js"></script>
     <script src="js/blackjack.js"></script>
     <script src="js/poker.js"></script>
     <script src="js/slots.js"></script>

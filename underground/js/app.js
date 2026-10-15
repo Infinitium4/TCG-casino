@@ -31,6 +31,7 @@ async function initializeApp() {
   diceModule.initialize();
   minesModule.initialize();
   towerModule.initialize();
+  clickerModule.initialize();
   horsesModule.initialize();
   bindNavigation();
   bindGlobalButtons();
@@ -122,6 +123,7 @@ function showView(viewName) {
   diceModule.setActive(viewName === "dice");
   minesModule.setActive(viewName === "mines");
   towerModule.setActive(viewName === "tower");
+  clickerModule.setActive(viewName === "clicker");
   horsesModule.setActive(viewName === "horses");
 }
 

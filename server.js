@@ -1,4 +1,5 @@
-﻿  const express = require('express');
+﻿  const { initializeClickerSchema, registerClickerRoutes } = require('./clicker');
+  const express = require('express');
   const http = require('http');
   const session = require('express-session');
   const bcrypt = require('bcryptjs');
@@ -2117,6 +2118,7 @@
     await initializeDiceSchema(run);
     await initializeMinesSchema(run);
     await initializeTowerSchema(run);
+    await initializeClickerSchema(run);
     await initializeHorseRacingSchema(run);
     await run(`
       INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
@@ -3350,6 +3352,7 @@
 
   registerPlinkoRoutes({ app, io, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
+  registerClickerRoutes({ app, requireAuth, handleAsync, run, get, withDatabaseTransaction, isUserInActiveTable });
   registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerMinesRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
