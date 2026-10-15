@@ -108,6 +108,7 @@ const blackjackGame = (() => {
   }
 
   function renderSeats(table) {
+    if (typeof renderTableModeration === 'function') renderTableModeration(document.getElementById('tableBanner')?.parentElement, 'blackjack', table, refreshTable);
     const currentUserId = getCurrentUserId();
     const seatsNode = document.getElementById('blackjackTableSeats');
     const existingSeats = new Map([...seatsNode.children].map((seat) => [seat.dataset.playerId, seat]));

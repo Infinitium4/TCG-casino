@@ -88,7 +88,7 @@ function registerHorseTables(deps, helpers) {
     return member;
   }
   async function state(userId) {
-    const user = await get('SELECT chips FROM users WHERE id = ?', [userId]);
+    const user = await get('SELECT chips, is_admin FROM users WHERE id = ?', [userId]);
     const member = await get('SELECT * FROM horse_table_members WHERE user_id = ?', [userId]);
     let table = null, race = null;
     if (member) {
@@ -110,6 +110,12 @@ function registerHorseTables(deps, helpers) {
       FROM horse_tables t JOIN users u ON u.id = t.host_id JOIN horse_events e ON e.id = t.event_id
       WHERE EXISTS(SELECT 1 FROM horse_table_members m WHERE m.table_id = t.id)
       ORDER BY t.created_at_ms DESC LIMIT 50`);
+    if (user.is_admin) {
+      for (const entry of tables) {
+        entry.players = await all(`SELECT u.id,u.username FROM horse_table_members m
+          JOIN users u ON u.id=m.user_id WHERE m.table_id=? ORDER BY m.joined_at_ms,u.id`, [entry.id]);
+      }
+    }
     // Settlement may have updated the balance during this snapshot.
     const balance = member ? (await get('SELECT chips FROM users WHERE id = ?', [userId])).chips : user.chips;
     return { table, tables, race, balance, serverNow: Date.now() };
@@ -203,7 +209,18 @@ function registerHorseTables(deps, helpers) {
     return state(userId);
   }));
   app.post('/api/horses/tables/:tableId/leave', requireAuth, endpoint(async req => {
-    const userId = req.session.userId, id = req.params.tableId;
+    return leaveMember(req.session.userId, req.params.tableId, req.session.userId);
+  }));
+  app.post('/api/horses/tables/:tableId/kick', requireAuth, endpoint(async req => {
+    const id = req.params.tableId, actorId = req.session.userId, playerId = req.body?.playerId;
+    const table = await get('SELECT * FROM horse_tables WHERE id=?', [id]);
+    if (!table) throw fail(404, 'Table introuvable.');
+    const actor = await get('SELECT is_admin FROM users WHERE id=?', [actorId]);
+    if (!actor || (!actor.is_admin && table.host_id !== actorId)) throw fail(403, 'Seul l’hôte ou un administrateur peut expulser un joueur.');
+    if (!Number.isSafeInteger(playerId) || playerId <= 0 || playerId === actorId) throw fail(400, 'Choisis un autre joueur à expulser.');
+    return leaveMember(playerId, id, actorId);
+  }));
+  async function leaveMember(userId, id, viewerId) {
     await membership(userId, id);
     await settleDue();
     const table = await get('SELECT * FROM horse_tables WHERE id=?', [id]);
@@ -219,8 +236,8 @@ function registerHorseTables(deps, helpers) {
     await run('DELETE FROM horse_table_members WHERE user_id=?', [userId]);
     const next = await get('SELECT user_id FROM horse_table_members WHERE table_id=? ORDER BY joined_at_ms,user_id LIMIT 1', [id]);
     if (next && table.host_id === userId) await run('UPDATE horse_tables SET host_id=? WHERE id=?', [next.user_id, id]);
-    return state(userId);
-  }));
+    return state(viewerId);
+  }
   return { state, settleDue };
 }
 

@@ -3633,6 +3633,34 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     res.json({ table: tableToPublicState(table, req.session.userId, true) });
   });
 
+  for (const [game, tables] of [['blackjack', blackjackTables], ['poker', pokerTables]]) {
+    app.post(`/api/${game}/tables/:id/kick`, requireAuth, handleAsync(async (req, res) => {
+      const actor = await get('SELECT id, is_admin FROM users WHERE id = ?', [req.session.userId]);
+      const table = tables.get(String(req.params.id));
+      if (!table) return res.status(404).json({ error: 'Table introuvable.' });
+      if (!actor || (!actor.is_admin && Number(table.hostId) !== Number(actor.id))) {
+        return res.status(403).json({ error: 'Seul l’hôte ou un administrateur peut expulser un joueur.' });
+      }
+      const playerId = req.body?.playerId;
+      if (!Number.isSafeInteger(playerId) || playerId <= 0 || playerId === Number(actor.id)) {
+        return res.status(400).json({ error: 'Choisis un autre joueur à expulser.' });
+      }
+      if (table.status === 'in-progress') {
+        return res.status(409).json({ error: 'Attends la fin de la manche pour expulser un joueur.' });
+      }
+      if (!table.removePlayer(playerId)) return res.status(404).json({ error: 'Ce joueur n’est pas dans la table.' });
+      if (!table.players.length) tables.delete(table.id);
+      for (const socket of io.sockets.sockets.values()) {
+        if (Number(socket.data.user?.id) === playerId) {
+          socket.emit(`${game}:table:kicked`, { tableId: table.id });
+          socket.leave(`${game}:${table.id}`);
+        }
+      }
+      io.to(`${game}:${table.id}`).emit(`${game}:table:update`, tableToPublicState(table));
+      res.json({ ok: true });
+    }));
+  }
+
   app.post('/api/blackjack/tables/:id/leave', requireAuth, (req, res) => {
     const table = blackjackTables.get(String(req.params.id));
     if (!table) {

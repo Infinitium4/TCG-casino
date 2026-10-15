@@ -145,3 +145,51 @@ function addHistoryEntry(entry) {
 function renderChipValue(value) {
   return `${formatChips(value)} €`;
 }
+
+function renderTableModeration(container, game, table, refresh) {
+  const user = typeof accountUser === 'undefined' ? null : accountUser;
+  if (!container || !user) return;
+  const id = `moderation-${game}-${table.id}`;
+  document.getElementById(id)?.remove();
+  if (!user.isAdmin && Number(table.hostId) !== Number(user.id)) return;
+  const panel = document.createElement('div');
+  panel.id = id;
+  panel.className = 'status-box subtle';
+  const title = document.createElement('strong');
+  title.textContent = `Gestion des joueurs · ${table.name || 'Table'}`;
+  panel.append(title);
+  const running = ['in-progress', 'running'].includes(table.status);
+  for (const player of table.players || []) {
+    if (Number(player.id) === Number(user.id)) continue;
+    const row = document.createElement('div');
+    row.className = 'history-item';
+    const name = document.createElement('span');
+    name.textContent = player.username;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary-button';
+    button.textContent = 'Expulser';
+    button.disabled = running;
+    button.title = running ? 'Disponible à la fin de la manche' : `Expulser ${player.username}`;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch(`/api/${game}/tables/${encodeURIComponent(table.id)}/kick`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId: Number(player.id) })
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Expulsion impossible.');
+        await refresh();
+      } catch (error) {
+        if (typeof showToast === 'function') showToast(error.message);
+        else window.alert(error.message);
+      } finally {
+        button.disabled = running;
+      }
+    });
+    row.append(name, button);
+    panel.append(row);
+  }
+  container.append(panel);
+}

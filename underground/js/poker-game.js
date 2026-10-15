@@ -66,6 +66,7 @@ const pokerGame = (() => {
   }
 
   function renderSeats(table) {
+    if (typeof renderTableModeration === 'function') renderTableModeration(document.getElementById('tableBanner')?.parentElement, 'poker', table, refreshTable);
     const currentUserId = getCurrentUserId();
     const seatsNode = document.getElementById('pokerTableSeats');
 
