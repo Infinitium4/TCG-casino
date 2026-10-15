@@ -61,6 +61,7 @@
         <button class="nav-item" data-view="dice" type="button">DICE</button>
         <button class="nav-item" data-view="mines" type="button">MINES</button>
         <button class="nav-item" data-view="tower" type="button">TOWER RUSH</button>
+        <button class="nav-item" data-view="fps" type="button">NEON BREACH · FPS</button>
         <button class="nav-item" data-view="leaderboard" type="button">Classement</button>
         <button class="nav-item" data-view="profile" type="button">Profil</button>
         <button id="adminNavButton" class="nav-item" data-view="admin" type="button" hidden>Administration</button>
@@ -716,6 +717,12 @@
             <div id="profileBanner" class="profile-banner"></div>
             <div class="profile-hero-identity"><div id="profileHeroAvatar" class="player-profile-avatar"></div><div><p class="eyebrow">TON ESPACE UNDERGROUND</p><h2 id="profileHeroName"></h2><p id="profileHeroBio"></p></div></div>
           </div>
+          <div class="panel" aria-label="Temps d’écran personnel">
+            <div class="section-heading"><h2>Mon temps d’écran</h2></div>
+            <div class="history-item"><span>Aujourd’hui</span><strong id="screenTimeToday">—</strong></div>
+            <div class="history-item"><span>Total depuis l’activation du compteur</span><strong id="screenTimeTotal">—</strong></div>
+            <p id="screenTimeStatus" class="admin-note" role="status">Chargement de ton temps passé…</p>
+          </div>
           <div class="panel profile-layout">
             <div class="profile-block">
               <div class="section-heading">
@@ -796,6 +803,7 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/money.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/screen-time.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/roulette.js"></script>
     <script src="js/crash.js"></script>

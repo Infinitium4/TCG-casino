@@ -18,6 +18,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   const { initializeMinesSchema, registerMinesRoutes } = require('./mines');
   const { initializeHorseRacingSchema, registerHorseRacingRoutes } = require('./horse-racing');
   const { initializeTowerSchema, registerTowerRoutes } = require('./tower');
+  const { initializeScreenTimeSchema, registerScreenTimeRoutes } = require('./screen-time');
+  const { registerFps } = require('./fps');
 
   const app = express();
   const server = http.createServer(app);
@@ -2149,6 +2151,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     await initializeMinesSchema(run);
     await initializeTowerSchema(run);
     await initializeClickerSchema(run);
+    await initializeScreenTimeSchema(run);
     await initializeRegistrationCaptcha(run, all);
     await initializeHorseRacingSchema(run);
     await run(`
@@ -3423,6 +3426,8 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   registerPlinkoRoutes({ app, io, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerClickerRoutes({ app, requireAuth, handleAsync, run, get, withDatabaseTransaction, isUserInActiveTable });
+  registerScreenTimeRoutes({ app, requireAuth, handleAsync, run, get, withDatabaseTransaction });
+  registerFps({ app, io, requireAuth, handleAsync, get, gameDir: GAME_DIR, path });
   registerDiceRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,
     getGameSettings, isBettingPaused, isUserInActiveTable, hasActiveCrashBet: hasOtherActiveBet, addGameHistory, recordBankSettlement });
   registerMinesRoutes({ app, requireAuth, handleAsync, run, get, all, withDatabaseTransaction,

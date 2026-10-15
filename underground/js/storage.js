@@ -134,6 +134,7 @@ async function loadAccountData() {
     supportMode: Boolean(accountResponseData.supportMode)
   };
   syncedAvatar = player.avatar;
+  window.screenTimeModule?.start(accountUser);
   localStorage.setItem(STORAGE_KEYS.player, JSON.stringify(player));
   saveHistory(history.map((entry) => ({
     id: entry.id,

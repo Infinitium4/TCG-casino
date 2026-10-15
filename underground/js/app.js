@@ -99,6 +99,7 @@ function bindGlobalButtons() {
 
   document.getElementById("logoutBtn").addEventListener("click", async () => {
     if (!window.confirm("Veux-tu vraiment te déconnecter ?")) return;
+    await window.screenTimeModule?.stop();
     const response = await fetch("/api/logout", { method: "POST" });
     if (response.ok) {
       window.location.replace("/");
@@ -117,6 +118,7 @@ function bindGlobalButtons() {
 }
 
 function showView(viewName) {
+  if (viewName === 'fps') { window.location.assign('/fps'); return; }
   const settings = publicGameSettings[viewName];
   if ((settings && (!settings.enabled || settings.maintenance)) ||
       (viewName === "crash" && !crashModule.isEnabled())) {
