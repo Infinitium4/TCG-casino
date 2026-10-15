@@ -15,3 +15,9 @@ instances would need a shared store.
 Logout requires browser confirmation before sending the logout request.
 
 Run node --test tests/clicker.test.js tests/clicker.integration.test.js.
+
+Registration also requires a session-bound arithmetic challenge from GET
+/api/register/captcha. Submit captchaId and captchaAnswer (a digit string)
+to /api/register. Challenges expire after five minutes and are consumed
+atomically on every attempt. Requesting a new challenge replaces the previous
+one. Challenge requests are limited to 60 per IP per 15 minutes.

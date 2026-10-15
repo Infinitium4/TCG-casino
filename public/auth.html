@@ -124,6 +124,10 @@
           Mot de passe
           <input name="password" type="password" placeholder="Minimum 4 caractères" required />
         </label>
+        <label for="captchaAnswer">Vérification : <span id="captchaQuestion" aria-live="polite">Chargement du calcul...</span>
+          <input id="captchaAnswer" name="captchaAnswer" type="text" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" autocomplete="off" placeholder="Ta réponse" required />
+        </label>
+        <button id="refreshCaptcha" type="button">Nouveau calcul</button>
         <button type="submit">Créer le compte</button>
       </form>
 
@@ -137,6 +141,25 @@
         register: document.getElementById('registerForm')
       };
       const messageEl = document.getElementById('message');
+      let captchaId = null;
+      async function refreshCaptcha() {
+        captchaId = null;
+        forms.register.querySelector('[type="submit"]').disabled = true;
+        forms.register.captchaAnswer.value = '';
+        try {
+          const response = await fetch('/api/register/captcha', { cache: 'no-store' });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Calcul indisponible.');
+          captchaId = data.id;
+          document.getElementById('captchaQuestion').textContent = data.question;
+          forms.register.querySelector('[type="submit"]').disabled = false;
+        } catch (error) {
+          document.getElementById('captchaQuestion').textContent = 'Calcul indisponible.';
+          messageEl.textContent = error.message;
+        }
+      }
+      document.getElementById('refreshCaptcha').addEventListener('click', refreshCaptcha);
+
 
       tabs.forEach((tab) => {
         tab.addEventListener('click', () => {
@@ -146,6 +169,7 @@
             form.classList.toggle('active', name === target);
           });
           messageEl.textContent = '';
+          if (target === 'register') refreshCaptcha();
         });
       });
 
@@ -172,27 +196,36 @@
         window.location.href = '/game';
       });
 
+      let registering = false;
       forms.register.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (registering || !captchaId) return;
+        registering = true;
+        forms.register.querySelector('[type="submit"]').disabled = true;
+        document.getElementById('refreshCaptcha').disabled = true;
         const payload = {
           username: forms.register.username.value,
-          password: forms.register.password.value
+          password: forms.register.password.value,
+          captchaId,
+          captchaAnswer: forms.register.captchaAnswer.value
         };
-
-        const response = await fetch('/api/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await response.json();
-        if (!response.ok) {
-          messageEl.textContent = data.error || 'Erreur lors de l’inscription.';
-          return;
+        try {
+          const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Erreur lors de l’inscription.');
+          messageEl.textContent = 'Compte créé avec succès.';
+          window.location.href = '/game';
+        } catch (error) {
+          messageEl.textContent = error.message;
+          await refreshCaptcha();
+        } finally {
+          registering = false;
+          document.getElementById('refreshCaptcha').disabled = false;
         }
-
-        messageEl.textContent = 'Compte créé avec succès.';
-        window.location.href = '/game';
       });
     </script>
   </body>

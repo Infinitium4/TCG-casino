@@ -1,4 +1,5 @@
 ﻿  const { initializeClickerSchema, registerClickerRoutes } = require('./clicker');
+  const { initializeRegistrationCaptcha, createRegistrationCaptcha } = require('./registration-captcha');
   const express = require('express');
   const { rateLimit } = require('express-rate-limit');
   const http = require('http');
@@ -2120,6 +2121,7 @@
     await initializeMinesSchema(run);
     await initializeTowerSchema(run);
     await initializeClickerSchema(run);
+    await initializeRegistrationCaptcha(run);
     await initializeHorseRacingSchema(run);
     await run(`
       INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
@@ -2520,7 +2522,21 @@
     message: { error: 'Trop de tentatives de création de compte. Réessaie dans 15 minutes.' }
   });
 
-  app.post('/api/register', registrationLimiter, async (req, res) => {
+  const registrationCaptcha = createRegistrationCaptcha({ run, get, withDatabaseTransaction });
+  const captchaLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60,
+    standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: 'Trop de demandes de calcul. Patiente quelques minutes.' } });
+  app.get('/api/register/captcha', captchaLimiter, handleAsync(async (req, res) => {
+    req.session.registrationCaptcha = true;
+    res.set('Cache-Control', 'no-store');
+    res.json(await registrationCaptcha.issue(req.sessionID));
+  }));
+
+  app.post('/api/register', registrationLimiter, handleAsync(async (req, res) => {
+    if (!await registrationCaptcha.consume(req.sessionID, req.body?.captchaId, req.body?.captchaAnswer)) {
+      return res.status(400).json({ error: 'Calcul incorrect ou expiré. Réessaie avec le nouveau calcul.' });
+    }
+
     const username = String(req.body.username || '').trim();
     const password = String(req.body.password || '');
 
@@ -2553,7 +2569,7 @@
       console.error('Erreur register:', error);
       return res.status(500).json({ error: 'Erreur lors de l’inscription.' });
     }
-  });
+  }));
 
   app.post('/api/login', async (req, res) => {
     const username = String(req.body.username || '').trim();

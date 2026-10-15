@@ -87,9 +87,12 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
   }
 
   async function register(username) {
+    const challenge = await request('/api/register/captcha');
+    const numbers = challenge.body.question.match(/\d+/g).map(Number);
     const result = await request('/api/register', {
+      cookie: challenge.cookie,
       method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password' })
+      body: JSON.stringify({ username, password: 'player-password', captchaId: challenge.body.id, captchaAnswer: String(numbers[0] + numbers[1]) })
     });
     assert.equal(result.response.status, 201, result.body.error);
     return result.cookie;
@@ -152,6 +155,15 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
   // Old receipts must also prevent replay across days.
   await execute("UPDATE clicker_gains SET day = '2000-01-01'");
   assert.equal((await click(payload)).body.balance, 9.95);
+  const challenge = await request('/api/register/captcha');
+  assert.equal(challenge.response.headers.get('cache-control'), 'no-store');
+  const numbers = challenge.body.question.match(/\d+/g).map(Number);
+  const registration = { username: 'captcha-player', password: 'player-password', captchaId: challenge.body.id, captchaAnswer: String(numbers[0] + numbers[1]) };
+  // A different session cannot use the challenge.
+  assert.equal((await request('/api/register', { method: 'POST', body: JSON.stringify(registration) })).response.status, 400);
+  // An incorrect answer consumes it, including a later correct retry.
+  assert.equal((await request('/api/register', { cookie: challenge.cookie, method: 'POST', body: JSON.stringify({ ...registration, captchaAnswer: '99' }) })).response.status, 400);
+  assert.equal((await request('/api/register', { cookie: challenge.cookie, method: 'POST', body: JSON.stringify(registration) })).response.status, 400);
   await stopServer(); await startServer();
   assert.equal((await state()).balance, 9.95);
   assert.equal((await click(payload)).body.replay, true);
