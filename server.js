@@ -27,6 +27,9 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   const DATA_DIR = path.resolve(process.env.DATA_DIR || __dirname);
   const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
   const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? '' : 'underground-local-development-secret');
+  const REGISTRATION_RATE_WINDOW_MS = Number(process.env.REGISTRATION_RATE_WINDOW_MS || 15 * 60 * 1000);
+  const REGISTRATION_RATE_LIMIT = Number(process.env.REGISTRATION_RATE_LIMIT || 30);
+  const REGISTRATION_CAPTCHA_RATE_LIMIT = Number(process.env.REGISTRATION_CAPTCHA_RATE_LIMIT || 60);
   const PRIMARY_ADMIN_USERNAME = process.env.ADMIN_USERNAME || (IS_PRODUCTION ? '' : 'admin');
   const CRASH_ENABLED = process.env.CRASH_ENABLED !== 'false';
   const CRASH_TEST_MODE = process.env.NODE_ENV === 'test';
@@ -49,6 +52,11 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
 
   if (IS_PRODUCTION && SESSION_SECRET.length < 32) {
     throw new Error('En production, SESSION_SECRET doit contenir au moins 32 caractères.');
+  }
+  if (!Number.isInteger(REGISTRATION_RATE_WINDOW_MS) || REGISTRATION_RATE_WINDOW_MS < 60_000 ||
+      !Number.isInteger(REGISTRATION_RATE_LIMIT) || REGISTRATION_RATE_LIMIT < 1 ||
+      !Number.isInteger(REGISTRATION_CAPTCHA_RATE_LIMIT) || REGISTRATION_CAPTCHA_RATE_LIMIT < 1) {
+    throw new Error('Les limites de requêtes d’inscription doivent être des entiers positifs et la fenêtre doit durer au moins une minute.');
   }
 
   async function requireCrashEnabled(req, res, next) {
@@ -2133,7 +2141,7 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
     await initializeMinesSchema(run);
     await initializeTowerSchema(run);
     await initializeClickerSchema(run);
-    await initializeRegistrationCaptcha(run);
+    await initializeRegistrationCaptcha(run, all);
     await initializeHorseRacingSchema(run);
     await run(`
       INSERT OR IGNORE INTO casino_platform_settings (setting_key, setting_value)
@@ -2527,17 +2535,17 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   });
 
   const registrationLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 5,
+    windowMs: REGISTRATION_RATE_WINDOW_MS,
+    limit: REGISTRATION_RATE_LIMIT,
     standardHeaders: 'draft-8',
     legacyHeaders: false,
-    message: { error: 'Trop de tentatives de création de compte. Réessaie dans 15 minutes.' }
+    message: { error: 'Trop de tentatives de création de compte. Réessaie plus tard.' }
   });
 
-  const registrationCaptcha = createRegistrationCaptcha({ run, get, withDatabaseTransaction });
-  const captchaLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 60,
+  const registrationCaptcha = createRegistrationCaptcha({ run, get, withDatabaseTransaction, secret: SESSION_SECRET });
+  const captchaLimiter = rateLimit({ windowMs: REGISTRATION_RATE_WINDOW_MS, limit: REGISTRATION_CAPTCHA_RATE_LIMIT,
     standardHeaders: 'draft-8', legacyHeaders: false,
-    message: { error: 'Trop de demandes de calcul. Patiente quelques minutes.' } });
+    message: { error: 'Trop de demandes d’image CAPTCHA. Réessaie plus tard.' } });
   app.get('/api/register/captcha', captchaLimiter, handleAsync(async (req, res) => {
     req.session.registrationCaptcha = true;
     res.set('Cache-Control', 'no-store');
@@ -2545,8 +2553,21 @@ const { MAX_MONEY, isMoney, toCents, roundMoney, moneyRatio } = require('./under
   }));
 
   app.post('/api/register', registrationLimiter, handleAsync(async (req, res) => {
-    if (!await registrationCaptcha.consume(req.sessionID, req.body?.captchaId, req.body?.captchaAnswer)) {
-      return res.status(400).json({ error: 'Calcul incorrect ou expiré. Réessaie avec le nouveau calcul.' });
+    const captchaResult = await registrationCaptcha.consume(req.sessionID, req.body?.captchaId, req.body?.captchaAnswer);
+    if (captchaResult.status !== 'valid') {
+      if (captchaResult.status === 'incorrect') {
+        return res.status(400).json({
+          error: `Réponse incorrecte. Il te reste ${captchaResult.attemptsRemaining} essai(s) pour cette image.`,
+          captchaStatus: captchaResult.status
+        });
+      }
+      if (captchaResult.status === 'attempts_exceeded') {
+        return res.status(429).json({ error: 'Trop de réponses incorrectes. Charge une nouvelle image.', captchaStatus: captchaResult.status });
+      }
+      if (captchaResult.status === 'expired') {
+        return res.status(400).json({ error: 'Cette image a expiré. Charge une nouvelle image.', captchaStatus: captchaResult.status });
+      }
+      return res.status(400).json({ error: 'CAPTCHA absent ou invalide. Charge une nouvelle image.', captchaStatus: 'not_found' });
     }
 
     const username = String(req.body.username || '').trim();

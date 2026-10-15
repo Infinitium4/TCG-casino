@@ -58,6 +58,21 @@
       form { display: none; }
       form.active { display: block; }
       label { display: block; margin-bottom: 12px; color: var(--muted); }
+      .captcha-tools { display: flex; align-items: center; gap: 10px; }
+      .captcha-image {
+        display: block;
+        width: min(280px, 100%);
+        aspect-ratio: 10 / 3;
+        border: 1px solid rgba(197,161,90,0.35);
+        border-radius: 8px;
+        background: #f3eee2;
+      }
+      .captcha-tools button { width: auto; flex: 0 0 auto; margin: 0; padding: 12px; }
+      .captcha-status { display: block; min-height: 20px; margin-top: 6px; color: var(--muted); font-size: 0.85rem; }
+      @media (max-width: 380px) {
+        .auth-box { padding: 20px; }
+        .captcha-tools { align-items: stretch; flex-direction: column; }
+      }
       input {
         width: 100%;
         margin-top: 6px;
@@ -124,10 +139,14 @@
           Mot de passe
           <input name="password" type="password" placeholder="Minimum 4 caractères" required />
         </label>
-        <label for="captchaAnswer">Vérification : <span id="captchaQuestion" aria-live="polite">Chargement du calcul...</span>
-          <input id="captchaAnswer" name="captchaAnswer" type="text" inputmode="numeric" pattern="[0-9]{1,2}" maxlength="2" autocomplete="off" placeholder="Ta réponse" required />
+        <label for="captchaAnswer">Recopie les 6 caractères de l’image
+          <div class="captcha-tools">
+            <img id="captchaImage" class="captcha-image" alt="CAPTCHA visuel" hidden />
+            <button id="refreshCaptcha" type="button" aria-label="Renouveler l’image CAPTCHA">Nouvelle image</button>
+          </div>
+          <span id="captchaStatus" class="captcha-status" role="status" aria-live="polite">Chargement de l’image…</span>
+          <input id="captchaAnswer" name="captchaAnswer" type="text" inputmode="text" pattern="[A-HJ-NP-Z2-9]{6}" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="6 caractères" required />
         </label>
-        <button id="refreshCaptcha" type="button">Nouveau calcul</button>
         <button type="submit">Créer le compte</button>
       </form>
 
@@ -141,21 +160,32 @@
         register: document.getElementById('registerForm')
       };
       const messageEl = document.getElementById('message');
+      const captchaImage = document.getElementById('captchaImage');
+      const captchaStatus = document.getElementById('captchaStatus');
       let captchaId = null;
       async function refreshCaptcha() {
         captchaId = null;
         forms.register.querySelector('[type="submit"]').disabled = true;
+        document.getElementById('refreshCaptcha').disabled = true;
         forms.register.captchaAnswer.value = '';
+        captchaImage.hidden = true;
+        captchaStatus.textContent = 'Chargement d’une nouvelle image…';
+        captchaStatus.setAttribute('aria-busy', 'true');
         try {
           const response = await fetch('/api/register/captcha', { cache: 'no-store' });
           const data = await response.json();
-          if (!response.ok) throw new Error(data.error || 'Calcul indisponible.');
+          if (!response.ok) throw new Error(data.error || 'Image CAPTCHA indisponible.');
           captchaId = data.id;
-          document.getElementById('captchaQuestion').textContent = data.question;
-          forms.register.querySelector('[type="submit"]').disabled = false;
+          captchaImage.src = data.image;
+          captchaImage.hidden = false;
+          captchaStatus.textContent = 'Image prête.';
         } catch (error) {
-          document.getElementById('captchaQuestion').textContent = 'Calcul indisponible.';
+          captchaStatus.textContent = 'Image indisponible.';
           messageEl.textContent = error.message;
+        } finally {
+          captchaStatus.setAttribute('aria-busy', 'false');
+          document.getElementById('refreshCaptcha').disabled = false;
+          forms.register.querySelector('[type="submit"]').disabled = false;
         }
       }
       document.getElementById('refreshCaptcha').addEventListener('click', refreshCaptcha);
@@ -199,7 +229,12 @@
       let registering = false;
       forms.register.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (registering || !captchaId) return;
+        if (registering) return;
+        if (!captchaId) {
+          messageEl.textContent = 'Charge une image CAPTCHA avant de créer le compte.';
+          await refreshCaptcha();
+          return;
+        }
         registering = true;
         forms.register.querySelector('[type="submit"]').disabled = true;
         document.getElementById('refreshCaptcha').disabled = true;
@@ -216,12 +251,20 @@
             body: JSON.stringify(payload)
           });
           const data = await response.json();
-          if (!response.ok) throw new Error(data.error || 'Erreur lors de l’inscription.');
+          if (!response.ok) {
+            messageEl.textContent = data.error || 'Erreur lors de l’inscription.';
+            if (data.captchaStatus === 'incorrect') {
+              forms.register.captchaAnswer.value = '';
+              forms.register.captchaAnswer.focus();
+            } else {
+              await refreshCaptcha();
+            }
+            return;
+          }
           messageEl.textContent = 'Compte créé avec succès.';
           window.location.href = '/game';
         } catch (error) {
           messageEl.textContent = error.message;
-          await refreshCaptcha();
         } finally {
           registering = false;
           document.getElementById('refreshCaptcha').disabled = false;

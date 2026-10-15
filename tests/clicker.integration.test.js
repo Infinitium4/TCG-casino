@@ -6,6 +6,7 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const sqlite3 = require('sqlite3');
+const { createPlayerFixture } = require('./helpers/player-fixture.cjs');
 
 async function getFreePort() {
   const probe = net.createServer();
@@ -87,15 +88,8 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
   }
 
   async function register(username) {
-    const challenge = await request('/api/register/captcha');
-    const numbers = challenge.body.question.match(/\d+/g).map(Number);
-    const result = await request('/api/register', {
-      cookie: challenge.cookie,
-      method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password', captchaId: challenge.body.id, captchaAnswer: String(numbers[0] + numbers[1]) })
-    });
-    assert.equal(result.response.status, 201, result.body.error);
-    return result.cookie;
+    const player = await createPlayerFixture(baseUrl, dataDir, { username, password: 'player-password' }, 0);
+    return player.cookie;
   }
 
   t.after(async () => {
@@ -157,13 +151,31 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
   assert.equal((await click(payload)).body.balance, 9.95);
   const challenge = await request('/api/register/captcha');
   assert.equal(challenge.response.headers.get('cache-control'), 'no-store');
-  const numbers = challenge.body.question.match(/\d+/g).map(Number);
-  const registration = { username: 'captcha-player', password: 'player-password', captchaId: challenge.body.id, captchaAnswer: String(numbers[0] + numbers[1]) };
-  // A different session cannot use the challenge.
+  assert.deepEqual(Object.keys(challenge.body).sort(), ['id', 'image']);
+  assert.match(challenge.body.id, /^[a-f0-9]{48}$/);
+  assert.match(challenge.body.image, /^data:image\/svg\+xml,/);
+  const challengeSvg = decodeURIComponent(challenge.body.image.slice(challenge.body.image.indexOf(',') + 1));
+  assert.match(challengeSvg, /<path d=/);
+  assert.doesNotMatch(challengeSvg, /<text/);
+  const registration = { username: 'captcha-player', password: 'player-password', captchaId: challenge.body.id, captchaAnswer: 'ABC234' };
+  // Direct requests without a session-bound challenge cannot create an account.
   assert.equal((await request('/api/register', { method: 'POST', body: JSON.stringify(registration) })).response.status, 400);
-  // An incorrect answer consumes it, including a later correct retry.
-  assert.equal((await request('/api/register', { cookie: challenge.cookie, method: 'POST', body: JSON.stringify({ ...registration, captchaAnswer: '99' }) })).response.status, 400);
-  assert.equal((await request('/api/register', { cookie: challenge.cookie, method: 'POST', body: JSON.stringify(registration) })).response.status, 400);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const result = await request('/api/register', {
+      cookie: challenge.cookie,
+      method: 'POST',
+      body: JSON.stringify({ ...registration, captchaAnswer: 'ZZZZZZ' })
+    });
+    assert.equal(result.response.status, attempt === 4 ? 429 : 400);
+  }
+  const oldChallenge = await request('/api/register/captcha', { cookie: challenge.cookie });
+  const newChallenge = await request('/api/register/captcha', { cookie: oldChallenge.cookie });
+  assert.notEqual(newChallenge.body.id, oldChallenge.body.id);
+  assert.equal((await request('/api/register', {
+    cookie: newChallenge.cookie,
+    method: 'POST',
+    body: JSON.stringify({ ...registration, captchaId: oldChallenge.body.id })
+  })).response.status, 400);
   await stopServer(); await startServer();
   assert.equal((await state()).balance, 9.95);
   assert.equal((await click(payload)).body.replay, true);
@@ -179,8 +191,8 @@ test('Clicker enforces balance threshold, unlimited daily reuse, atomic credits 
   assert.equal((await click(payload)).body.replay, true);
   assert.equal((await state()).balance, 0);
   assert.equal((await click({ requestId: 'clicker-after-reset-0001' })).body.balance, 0.05);
-  // After restart the in-memory limiter has a fresh window; invalid attempts must also consume the IP quota.
-  for (let i = 0; i < 5; i++) {
+  // After restart the in-memory limiter has a fresh window and remains reasonable for shared networks.
+  for (let i = 0; i < 30; i++) {
     assert.equal((await request('/api/register', { method: 'POST', body: '{}' })).response.status, 400);
   }
   const limited = await request('/api/register', { method: 'POST', body: '{}' });

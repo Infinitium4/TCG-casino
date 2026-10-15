@@ -88,18 +88,6 @@ test('games accept five-cent wagers and settle cent balances and bank entries', 
     return { response, body: await response.json(), cookie: nextCookie };
   }
 
-  async function register(username) {
-    const challenge = await request('/api/register/captcha');
-    const numbers = challenge.body.question.match(/\d+/g).map(Number);
-    const result = await request('/api/register', {
-      cookie: challenge.cookie,
-      method: 'POST',
-      body: JSON.stringify({ username, password: 'player-password', captchaId: challenge.body.id, captchaAnswer: String(numbers[0] + numbers[1]) })
-    });
-    assert.equal(result.response.status, 201, result.body.error);
-    return result.cookie;
-  }
-
   t.after(async () => {
     for (const process of processes) {
       if (process.exitCode === null) {

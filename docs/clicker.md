@@ -7,17 +7,20 @@ There is no daily cap: spending below 10 makes the clicker available again.
 Duplicate request IDs cannot credit twice, including across restarts.
 The existing session, account eligibility and active-game checks still apply.
 
-Registration allows five attempts per IP per 15 minutes, including failed
-attempts, with HTTP 429, a French error and Retry-After on rejection.
-The limiter uses process memory: restarting clears it and multiple server
-instances would need a shared store.
+Registration requests default to 30 per IP per 15 minutes; CAPTCHA refreshes
+default to 60 per IP per 15 minutes. Configure these with
+REGISTRATION_RATE_LIMIT, REGISTRATION_CAPTCHA_RATE_LIMIT and
+REGISTRATION_RATE_WINDOW_MS. The limiters use process memory, while active
+CAPTCHA challenges are stored in SQLite and shared by backend instances.
 
 Logout requires browser confirmation before sending the logout request.
 
 Run node --test tests/clicker.test.js tests/clicker.integration.test.js.
 
-Registration also requires a session-bound arithmetic challenge from GET
-/api/register/captcha. Submit captchaId and captchaAnswer (a digit string)
-to /api/register. Challenges expire after five minutes and are consumed
-atomically on every attempt. Requesting a new challenge replaces the previous
-one. Challenge requests are limited to 60 per IP per 15 minutes.
+Registration also requires a session-bound visual CAPTCHA from
+GET /api/register/captcha. It returns a random challenge id and a dynamically
+generated SVG image containing six high-contrast characters. Submit captchaId
+and captchaAnswer to /api/register. Challenges expire after two minutes, are
+stored as a keyed hash, and allow five incorrect attempts. Correct use consumes
+the challenge atomically; requesting a replacement invalidates the previous
+one. CAPTCHA requests are limited per IP by the configurable quota above.
